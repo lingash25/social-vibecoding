@@ -398,6 +398,10 @@ const Kudos = {
   Budget: {
     state: null,
     _refreshTimer: null,
+    // Screenshot deep links may pin a display-only budget while an initial
+    // refresh is already in flight. That request must not repaint the forced
+    // state when it resolves (the server remains authoritative for writes).
+    _displayOverride: false,
 
     init() {
       Kudos.Budget.refresh();
@@ -412,6 +416,7 @@ const Kudos = {
         const res = await fetch('/api/me/kudos-budget');
         if (!res.ok) return;
         const data = await res.json();
+        if (Kudos.Budget._displayOverride) return;
         Kudos.Budget.state = data;
         Kudos.Budget._render();
       } catch (err) {

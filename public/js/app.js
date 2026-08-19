@@ -791,7 +791,10 @@ const App = {
         if (spent && window.Kudos?.Budget) {
           const limit = Kudos.Budget.state?.limit || 20;
           // Pin the exhausted figure and stop the hourly poll from
-          // replacing it mid-screenshot with the real (unspent) budget.
+          // replacing it mid-screenshot with the real (unspent) budget. The
+          // flag also makes an initial refresh that is already in flight
+          // discard its response instead of winning this race later.
+          Kudos.Budget._displayOverride = true;
           Kudos.Budget.state = { given_this_week: limit, remaining: 0, limit };
           Kudos.Budget.refresh = () => Promise.resolve();
         }

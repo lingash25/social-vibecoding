@@ -33,6 +33,7 @@ const appJs = fs.readFileSync(path.join(root, 'public/js/app.js'), 'utf8');
 // own — the ?shot= deep links and the sign-in queue flush.
 const feedbackJs = fs.readFileSync(
   path.join(root, 'frontend/src/features/dialogs/feedback-controller.js'), 'utf8');
+const kudosJs = fs.readFileSync(path.join(root, 'frontend/src/features/leaderboard/kudos.js'), 'utf8');
 const lbJs = fs.readFileSync(path.join(root, 'frontend/src/features/leaderboard/leaderboard.js'), 'utf8');
 const appViewJs = fs.readFileSync(path.join(root, 'public/js/app-view.js'), 'utf8');
 const dapp = JSON.parse(fs.readFileSync(path.join(root, 'dapp.json'), 'utf8'));
@@ -159,8 +160,11 @@ test('_applyFeedbackShot handles both feedback and feedback-spent', () => {
   assert.match(shot, /shot !== 'feedback' && shot !== 'feedback-spent'/);
   assert.match(shot, /App\.openFeedbackModal\(\)/);
   // The spent variant forces a client-side zero so the disabled state is
-  // reviewable without writing kudos rows for a real user.
+  // reviewable without writing kudos rows for a real user. The display pin
+  // must also beat an initial budget request that was already in flight.
+  assert.match(shot, /Kudos\.Budget\._displayOverride = true/);
   assert.match(shot, /remaining: 0/);
+  assert.match(kudosJs, /if \(Kudos\.Budget\._displayOverride\) return/);
 });
 
 test('dapp.json checks both shot links and the unchecked/disabled states', () => {
