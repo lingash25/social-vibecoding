@@ -6784,6 +6784,14 @@ const AppView = {
       ...mineOf(buckets.inReview, (x) => x.kind === 'proposal' && meId != null
         && String(x.item.user_id) === String(meId))
         .map((x) => ({ kind: 'proposal', item: x.item })),
+      // #2227: a governance proposal you opened — "close this issue", a
+      // rename, a secret change — is your work in flight too, waiting on the
+      // same vote a pull request of yours is. It sat only in "Needs your
+      // vote" (or nowhere, once you had voted on your own), so the one pane
+      // that answers "what am I in the middle of?" left it out.
+      ...mineOf(buckets.inReview, (x) => x.kind === 'gov' && meId != null
+        && x.item.created_by != null && String(x.item.created_by) === String(meId))
+        .map((x) => ({ kind: 'gov', item: x.item })),
     ].sort((a, b) => activityOf(b.kind, b.item) - activityOf(a.kind, a.item));
     // #2182: the strip stays on screen when there is nothing in it, so the
     // pane's shape does not change with the viewer's workload. `viewer` is
@@ -6797,7 +6805,7 @@ const AppView = {
       rows: mineList.map(({ kind, item }) => {
         const card = kind === 'my-session'
           ? AppView._mySessionCardModel(item)
-          : AppView._proposalCardModel(item);
+          : (kind === 'gov' ? AppView._govCardModel(item) : AppView._proposalCardModel(item));
         if (!card) return null;
         const row = { t: 'card', key: `mine:${card.key}`, card };
         const th = AppView._feedThreadRef({

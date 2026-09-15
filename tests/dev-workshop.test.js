@@ -1589,6 +1589,26 @@ test('an item names its kind; no sentence counts what is owed', () => {
   assert.ok(!/1 proposal needs your vote</.test(html), 'the sentence that counted the debt is gone');
 });
 
+test('a governance proposal you opened is your work in flight too (#2227)', () => {
+  const AppView = makeAppView();
+  seed(AppView);
+  AppView._mySessions = [];
+  AppView._proposals = [];
+  AppView._govProposals = [
+    { id: 701, kind: 'close_issue', title: 'Close issue #12: "Stale thing"', created_by: 1,
+      created_by_username: 'me', created_at: at(1), last_message_at: at(1), my_vote: null, status: 'open' },
+    { id: 702, kind: 'close_issue', title: 'Close issue #13: "Theirs"', created_by: 9,
+      created_by_username: 'carol', created_at: at(2), last_message_at: at(2), my_vote: null, status: 'open' },
+  ];
+  const v = AppView._workshopView();
+  assert.deepEqual(plain(v.mine.rows).map((r) => r.key), ['mine:gov:701'],
+    'mine, not theirs');
+  assert.ok(!plain(v.votes.rows).some((r) => r.key.includes('gov:701')),
+    'and not also owed a vote in the pane below');
+  assert.ok(plain(v.votes.rows).some((r) => r.key.includes('gov:702')), 'theirs is still waiting on you');
+  assert.match(workshopHtml(AppView), /data-ws-lane="mine"/);
+});
+
 test('the viewer\u2019s own work in flight leads the lander', () => {
   const AppView = makeAppView();
   seed(AppView);
