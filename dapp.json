@@ -2170,6 +2170,16 @@
       "expectText": "Staging demo draft: also make the header sticky when scrolling."
     },
     {
+      "name": "Sending a saved draft leaves the composer empty (#1962)",
+      "path": "/?shot=draft-sent#app/usernode-2d5619/dev/sessions/990401",
+      "expectSelector": "#dc-form #dc-input[data-shot-sent=\"1\"]:placeholder-shown"
+    },
+    {
+      "name": "…on the same screen where the drafts list is actually painted (#1962)",
+      "path": "/?shot=draft-sent#app/usernode-2d5619/dev/sessions/990401",
+      "expectSelector": "#dc-drafts.dc-drafts-active .dc-draft-row .dc-draft-send"
+    },
+    {
       "name": "Saved-drafts header says the list follows you across devices (#940)",
       "path": "/?shot=drafts#app/usernode-2d5619/dev/sessions/990401",
       "expectSelector": "#dc-drafts.dc-drafts-active .dc-drafts-head",

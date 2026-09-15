@@ -6228,7 +6228,7 @@ const DevChat = {
   async promotePR() {
     const session = DevChat.currentSession;
     if (!session || AppView.changeSubmissionState(session).kind !== 'ready') return;
-    return AppView.runChangeAction(session.id, 'promote');
+    return AppView.runChangeAction(session.id, 'promote', session);
   },
 
   // Append a live agent-suggested platform-report card to the timeline.
@@ -9039,6 +9039,9 @@ const DevChat = {
     // turns the circle green. After the paint above, so the republish it
     // triggers is the last word on the button's shape.
     DevChat._applyTypedShot();
+    // …and `?shot=draft-sent` seeds the box and then runs the real clear, so
+    // the capture shows the composer as it looks once a draft has been sent.
+    DevChat._applyDraftSentShot();
 
     // #907: repaint from whatever the last status poll told us. The poll
     // itself runs a beat later; painting here means a re-render of an already
@@ -9137,6 +9140,28 @@ const DevChat = {
     DevChat._submitFromInput();
   },
 
+  // #1962: emptying the composer is TWO writes, not one — the field the user
+  // is looking at, and the per-session key `_restoreDraft` reads back on the
+  // next render. Anything that clears one and forgets the other looks clear
+  // until the view repaints and the stored text walks back in, which is
+  // exactly the bug reported against the drafts list's Send.
+  //
+  // Both writes are synchronous and happen here together, so there is no
+  // window for a pending restore or a queued `input` listener to refill the
+  // box from the old value: the key is already gone by the time either runs.
+  // Callers must invoke this BEFORE `sendMessage` — #370's failure paths put
+  // the text back deliberately (`_restoreComposer`), and clearing after them
+  // would throw away a message that never actually sent.
+  _clearComposerField() {
+    const input = document.getElementById('dc-input');
+    if (input) {
+      input.value = '';
+      input.style.height = 'auto';
+    }
+    if (DevChat.currentSession) DevChat._setDraft(DevChat.currentSession.id, '');
+    DevChat._syncSaveDraftBtn();
+  },
+
   _submitFromInput() {
     const input = document.getElementById('dc-input');
     const msg = input.value.trim();
@@ -9148,10 +9173,7 @@ const DevChat = {
       DevChat._setAttachError('Still uploading, one moment…');
       return;
     }
-    input.value = '';
-    input.style.height = 'auto';
-    if (DevChat.currentSession) DevChat._setDraft(DevChat.currentSession.id, '');
-    DevChat._syncSaveDraftBtn();
+    DevChat._clearComposerField();
     DevChat.sendMessage(msg, atts);
   },
 
@@ -9470,7 +9492,7 @@ const DevChat = {
   _wantsDemoDrafts() {
     try {
       const shot = new URLSearchParams(location.search).get('shot');
-      return shot === 'drafts' || shot === 'busy-drafts';
+      return shot === 'drafts' || shot === 'busy-drafts' || shot === 'draft-sent';
     } catch { return false; }
   },
 
@@ -9565,6 +9587,41 @@ const DevChat = {
     if (!input || input.value) return;
     input.value = 'Also widen the meter a little';
     DevChat._syncSaveDraftBtn();
+  },
+
+  // `?shot=draft-sent` (#1962): the state right AFTER a saved draft is sent —
+  // text was in the box, a row's Send was tapped, and the composer is empty.
+  // Like `busy-typed` it is unreachable from a URL otherwise, because the
+  // emptiness only means something once something was there to clear.
+  //
+  // Seeds the field, then runs the module's real `_sendSavedDraft` in `dry`
+  // mode: the check is asserting the shipped clear, not a blank field some
+  // capture-only branch painted. Nothing is written to the drafts list, no
+  // request is made and no turn starts.
+  //
+  // Latched so a second render cannot re-seed the box and change what the
+  // capture shows (#1071).
+  _draftSentShotApplied: false,
+  _wantsDraftSentShot() {
+    try { return new URLSearchParams(location.search).get('shot') === 'draft-sent'; }
+    catch { return false; }
+  },
+  _applyDraftSentShot() {
+    if (!DevChat._wantsDraftSentShot() || DevChat._draftSentShotApplied) return;
+    const input = document.getElementById('dc-input');
+    if (!input) return;
+    DevChat._draftSentShotApplied = true;
+    input.value = 'Also widen the meter a little';
+    DevChat._syncSaveDraftBtn();
+    const [first] = DevChat._getSavedDrafts(DevChat.currentSession ? DevChat.currentSession.id : 0);
+    if (first) DevChat._sendSavedDraft(first.id, { dry: true });
+    else DevChat._clearComposerField();
+    // Marks the field as "this route seeded me and then sent". The check
+    // asserts emptiness THROUGH it, so a shot that silently did nothing
+    // fails instead of passing on a box that was never filled. Nothing
+    // renders a `data-shot-sent` prop, so React has no attribute to diff
+    // here — the same tolerated overlap as `style.height`.
+    input.dataset.shotSent = '1';
   },
 
   // Paint-only "is a turn running" predicate. Real behaviour must keep
@@ -10057,10 +10114,7 @@ const DevChat = {
     // #940: optimistic — the list is already written and painted below; the
     // upload marks it synced when it lands, and reconcile retries if not.
     DevChat._pushDraftAdd(session.id, saved);
-    input.value = '';
-    input.style.height = 'auto';
-    DevChat._setDraft(session.id, '');
-    DevChat._syncSaveDraftBtn();
+    DevChat._clearComposerField();
     DevChat._renderSavedDrafts();
     DevChat._toast('Draft saved. Send it whenever you\'re ready');
     if (!DevChat._isCoarsePointer()) { try { input.focus(); } catch {} }
@@ -10069,7 +10123,21 @@ const DevChat = {
   // Send: always an explicit tap, never automatic. Refused mid-turn (the
   // button also renders disabled) so a draft can't join a running turn.
   // The draft leaves the list only once the send is actually issued.
-  _sendSavedDraft(id) {
+  //
+  // #1962: the composer is emptied as part of the send. It used to be left
+  // alone, which read as "sending a draft repopulates the box with another
+  // draft": Edit puts a draft's text in the field and stores it under the
+  // session's draft key, so a Send straight afterwards left that older text
+  // sitting there — and `_restoreDraft` put it back on every later render,
+  // tab switch and reopen. Whatever was typed is parked as a draft of its
+  // own first (the same rule Edit follows), so clearing the box still never
+  // throws away something the user wrote.
+  //
+  // `dry` runs everything up to and including the clear and then stops: no
+  // list write, no sync request, no turn. It exists for the `?shot=draft-sent`
+  // capture route, which has to exercise the real clear without starting a
+  // run on a screenshot.
+  _sendSavedDraft(id, { dry = false } = {}) {
     const session = DevChat.currentSession;
     if (!session) return;
     if (DevChat.isStreaming) {
@@ -10083,12 +10151,26 @@ const DevChat = {
       DevChat._toast('Still uploading a file, one moment…');
       return;
     }
-    DevChat._setSavedDrafts(session.id, drafts.filter((d) => d.id !== id));
+    const input = document.getElementById('dc-input');
+    const parked = input ? input.value.trim() : '';
+    const next = drafts.filter((d) => d.id !== id);
+    let parkedDraft = null;
+    if (parked && parked !== draft.text && next.length < DevChat.MAX_SAVED_DRAFTS) {
+      parkedDraft = { id: DevChat._newDraftId(), text: parked, savedAt: new Date().toISOString(), synced: false };
+      next.push(parkedDraft);
+    }
+    // Before sendMessage, never after: its 429 and error paths call
+    // `_restoreComposer`, which is meant to put the sent text BACK.
+    DevChat._clearComposerField();
+    if (dry) { DevChat._renderSavedDrafts(); return; }
+    DevChat._setSavedDrafts(session.id, next);
     // #940: a send removes the draft everywhere, not just here. Tombstone
     // first so an offline send still replays the delete on reconcile.
     DevChat._addDraftTombstone(session.id, id);
     DevChat._pushDraftDelete(session.id, id);
+    if (parkedDraft) DevChat._pushDraftAdd(session.id, parkedDraft);
     DevChat._renderSavedDrafts();
+    if (parked && parked !== draft.text) DevChat._toast('Kept what you had typed as another draft');
     DevChat.sendMessage(draft.text);
   },
 
@@ -10145,6 +10227,12 @@ const DevChat = {
     DevChat._toast('Draft deleted');
   },
 
+  // Which session's text the composer field is currently showing, as a
+  // string id. Read by `_restoreDraft` to tell a re-render of the same
+  // session (don't touch the field) from a switch to another one (the
+  // stored draft wins).
+  _composerFieldSession: null,
+
   // Per-session draft helpers, backed by localStorage.
   _draftKey(sessionId) {
     return `usernode:dc-draft:${sessionId}`;
@@ -10199,12 +10287,29 @@ const DevChat = {
     DevChat._syncSaveDraftBtn();
   },
 
+  // Runs on every renderChatView, and what it does depends on whether the
+  // field in front of it belongs to the session being rendered.
+  //
+  //  - SAME session, something typed: leave it alone (#1962). The stored key
+  //    is cleared synchronously by `_clearComposerField`, so after a send
+  //    there is nothing here to put back — and a re-render landing between a
+  //    keystroke and the `input` listener's write must not replace what is
+  //    being typed with the previous value. Same stance as the two
+  //    `if (!input.value)` fallbacks in public/js/app-view.js.
+  //  - DIFFERENT session: the field is authoritative-by-storage again, so an
+  //    A→B switch that reuses the textarea (openSession from a link, without
+  //    passing through the list) shows B's draft, or nothing, rather than
+  //    leaving A's text sitting in B's composer.
   _restoreDraft() {
-    if (!DevChat.currentSession) return;
+    const session = DevChat.currentSession;
+    if (!session) return;
     const textarea = document.getElementById('dc-input');
     if (!textarea) return;
-    const draft = DevChat._getDraft(DevChat.currentSession.id);
-    if (!draft) return;
+    const sameSession = DevChat._composerFieldSession === String(session.id);
+    DevChat._composerFieldSession = String(session.id);
+    if (sameSession && textarea.value) return;
+    const draft = DevChat._getDraft(session.id);
+    if (!draft && !textarea.value) return;
     textarea.value = draft;
     // Re-run the height calculation so the textarea opens at the right
     // size instead of collapsed.

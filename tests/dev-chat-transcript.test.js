@@ -478,3 +478,16 @@ test('a walkthrough or a hand-off launchpad answers "what now?" instead (#1942)'
   h.render([]);
   assert.equal(h.t.state().empty, false, 'the launchpad is already in the pane');
 });
+
+test('on a wide screen the new session’s composer comes up to meet the empty state (#1905)', () => {
+  const css = read('public', 'css', 'app.css');
+  const block = css.slice(css.indexOf('/* #1905:'), css.indexOf('}\n}', css.indexOf('/* #1905:')) + 3);
+  assert.match(block, /@media \(min-width: 768px\)/, 'tablet width and up; a phone keeps the box by the keyboard');
+  assert.match(block, /\.dc-chat-pane:has\(#dc-empty-state\) \{ justify-content: center; \}/);
+  assert.match(block, /\.dc-chat-pane:has\(#dc-empty-state\) > #dc-messages \{ flex: 0 0 auto;/,
+    'the message pane stops filling the column, so the pair can centre');
+  assert.match(block, /\.dc-chat-pane:has\(#dc-empty-state\) > #dc-composer-bar \{[^}]*max-width: 44rem;[^}]*align-self: center;/);
+  // Keyed on the empty state alone: the first message removes it, and the
+  // composer goes back to the bottom with no state of its own to clear.
+  assert.doesNotMatch(block, /data-|\.dc-new-session/);
+});

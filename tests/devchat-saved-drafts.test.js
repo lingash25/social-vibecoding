@@ -19,7 +19,11 @@
 //   6. Trash removes just that draft, and an emptied list STAYS empty.
 //   7. The composer is not disabled while streaming (that's what made
 //      typing-while-thinking impossible before).
-//   8. #810: the save ICON itself is only present while a TURN IS RUNNING —
+//   8. #1962: Send EMPTIES the composer — the visible field and the stored
+//      per-session draft both — so nothing walks back in on the next
+//      render. Anything typed at the time is parked as a draft of its own,
+//      the same way Edit does it.
+//   9. #810: the save ICON itself is only present while a TURN IS RUNNING —
 //      i.e. exactly while the send button shows Stop. When the chat is
 //      stopped the user can simply SEND, so the icon is hidden and saving
 //      is refused (not just un-clickable). The drafts list and the typed
@@ -292,6 +296,92 @@ test('send (once idle) removes the draft and sends exactly its text', () => {
 
   assert.deepEqual(sent, ['draft A'], 'exactly the draft text was sent');
   assert.deepEqual(texts(DevChat), ['draft B'], 'the sent draft left the list');
+});
+
+// #1962: reported as "sending a draft populates input with an existing saved
+// draft instead of clearing". Edit is how the box comes to hold another
+// draft's text; Send used to leave it there, and — because the per-session
+// draft key was left written too — `_restoreDraft` put it back on every
+// later render, tab switch and reopen.
+test('send clears the composer and the stored draft, and no render refills it', () => {
+  const { DevChat, document } = makeHarness();
+  open(DevChat, { streaming: true });
+  const input = document.getElementById('dc-input');
+  input.value = 'draft A';
+  DevChat._saveComposerDraft();
+  input.value = 'draft B';
+  DevChat._saveComposerDraft();
+
+  const sent = [];
+  DevChat.sendMessage = (m) => sent.push(m);
+  DevChat.isStreaming = false;
+
+  // Edit A: its text is now in the box AND under the session's draft key.
+  const [a, b] = DevChat._getSavedDrafts(SESSION_ID);
+  DevChat._editSavedDraft(a.id);
+  assert.equal(input.value, 'draft A');
+  assert.equal(DevChat._getDraft(SESSION_ID), 'draft A');
+
+  // Now send B, the draft still in the list.
+  DevChat._sendSavedDraft(b.id);
+
+  assert.deepEqual(sent, ['draft B'], 'exactly the sent draft went out');
+  assert.equal(input.value, '', 'the composer is empty after the send');
+  assert.equal(DevChat._getDraft(SESSION_ID), '',
+    'and so is the stored draft, so nothing can restore it');
+
+  // A re-render is where the old text used to come back.
+  DevChat._restoreDraft();
+  assert.equal(input.value, '', 'a render does not refill the box');
+
+  // Nothing the user had typed was thrown away: A is a draft again.
+  assert.deepEqual(texts(DevChat), ['draft A'],
+    'the text displaced from the box was parked as a draft');
+});
+
+test('send parks nothing when the box holds the same text as the draft', () => {
+  const { DevChat, document } = makeHarness();
+  open(DevChat, { streaming: true });
+  const input = document.getElementById('dc-input');
+  input.value = 'only thought';
+  DevChat._saveComposerDraft();
+
+  DevChat.sendMessage = () => {};
+  DevChat.isStreaming = false;
+
+  // The box holds a copy of the draft about to be sent (the shape Edit
+  // leaves behind). Parking it would keep a draft of a message that was
+  // just sent, which is worse than losing nothing.
+  input.value = 'only thought';
+  DevChat._setDraft(SESSION_ID, 'only thought');
+
+  const [draft] = DevChat._getSavedDrafts(SESSION_ID);
+  DevChat._sendSavedDraft(draft.id);
+
+  assert.equal(input.value, '', 'the composer is empty');
+  assert.deepEqual(texts(DevChat), [], 'no duplicate of the sent text is left behind');
+});
+
+test('a render never clobbers text typed in the session it belongs to', () => {
+  const { DevChat, document } = makeHarness();
+  open(DevChat);
+  const input = document.getElementById('dc-input');
+  DevChat._setDraft(SESSION_ID, 'stale');
+
+  DevChat._restoreDraft();
+  assert.equal(input.value, 'stale', 'first render restores the stored draft');
+
+  // Mid-keystroke: the field is ahead of storage.
+  input.value = 'stale and then some';
+  DevChat._restoreDraft();
+  assert.equal(input.value, 'stale and then some',
+    're-rendering the same session leaves the live field alone');
+
+  // …but switching sessions makes storage authoritative again, so session
+  // A's text cannot sit in session B's composer.
+  DevChat.currentSession = { id: 777, status: 'active' };
+  DevChat._restoreDraft();
+  assert.equal(input.value, '', 'the other session had no draft');
 });
 
 test('edit loads the draft back into the composer and parks the typed text', () => {

@@ -3602,6 +3602,26 @@ body:has(#platform-header.hidden) #app-frame-host {
 .dc-empty-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
 .dc-empty-text { margin: 0; max-width: 26rem; font-size: 14px; line-height: 1.5; color: var(--text-muted); }
 
+/* #1905: on a brand-new session the composer comes up to meet the empty
+   state, the way a new conversation opens in Claude or ChatGPT: title,
+   line and input box as one group in the middle of the pane. Keyed on the
+   empty state being in the pane, so the first message sends the box back
+   to the bottom with no state of its own to clear. Tablet width and up
+   only: on a phone the box stays at the bottom, where the keyboard opens and the
+   thumb already is, and a mid-screen field would jump as the keyboard
+   pushes it. Its own breakpoint, deliberately not the Workshop's 700px:
+   tests/dev-workshop.test.js reads that block as the only one of its kind. */
+@media (min-width: 768px) {
+  .dc-chat-pane:has(#dc-empty-state) { justify-content: center; }
+  .dc-chat-pane:has(#dc-empty-state) > #dc-messages { flex: 0 0 auto; overflow: visible; }
+  .dc-chat-pane:has(#dc-empty-state) #dc-empty-state { min-height: 0; padding-bottom: 16px; }
+  .dc-chat-pane:has(#dc-empty-state) > #dc-composer-bar {
+    width: 100%;
+    max-width: 44rem;
+    align-self: center;
+  }
+}
+
 .dc-msg { padding: 8px 12px; max-width: 92%; }
 
 /* ONE bubble, not two.

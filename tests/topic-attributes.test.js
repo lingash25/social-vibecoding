@@ -789,7 +789,8 @@ test('category dropdown offers a text box + the app custom block', () => {
 
   // The vocabulary is loaded once per Dev mount and refreshed from the
   // GET/POST payloads, so a just-typed category can be labelled immediately.
-  assert.match(fe, /_loadAppCategories\(\)/, 'Dev data load fetches the vocabulary');
+  assert.match(fe, /AppView\._loadAppCategories\(pager\)/,
+    'Dev data load fetches the vocabulary with the current app-visit guard');
   assert.match(fe, /topic-categories/, 'hits the vocabulary endpoint');
   assert.match(fe, /_setAppCategories\(data\.categories\)/, 'a cast adopts the refreshed vocabulary');
 
