@@ -30,6 +30,20 @@ runtime permissions. The platform owns generated apps, previews, workers and
 check Jobs. Keep each change with its owner; source commits do not themselves
 change the cluster. Review the normal release/GitOps diff before deployment.
 
+Argo notices a published chart by re-reading the registry's tag list on its
+reconcile interval, up to three minutes after the push. When the repository
+secret `ARGOCD_REFRESH_TOKEN` is set, the release job's "Ask Argo CD to pick up
+the release now" step follows a stable `helm push` with
+`GET /api/v1/applications/social-vibecoding-platform?refresh=hard`, so the
+comparison — and the automated sync behind it — starts at once. The token is
+an Argo CD project-role token that can only `get` that one Application; the
+role, the mint procedure and rotation live in the infra repository's
+`docs/22-social-vibecoding-runtime-operations.md`. The step is best effort:
+unset, it skips; a rejected or timed-out call posts a warning on the run and
+the release lands on the periodic reconcile as before. It cannot fail the run,
+because `release-watch` reads the run's conclusion and would otherwise report
+a healthy release as stalled.
+
 A merged platform PR is therefore "merged" on its card before it is running,
 and nothing in that chain reports back to the platform when a link fails. The
 platform watches the gap itself: `services/release-watch.js` compares the
@@ -44,6 +58,22 @@ a run that succeeded without a rollout, or no run at all is reported after
 or the next merge, releases the commit; the poller clears the record on the new
 build's first tick. A token without `actions:read` degrades to the time-based
 verdict rather than failing.
+
+Nothing in that chain tells open browser tabs about the new build either; the
+Pod being replaced does. The rolling update terminates the old Pod only after
+the new one has been Ready for `minReadySeconds`, and the `preStop` sleep has
+taken it out of the Service before `SIGTERM` arrives. On `SIGTERM`, `server.js`
+`cleanup()` closes the listener, then reads the Deployment's target revision
+through `services/deploy-status.js` and, if it is another build, pushes
+`platform_version` to every open `/ws/events` socket
+(`ws.pushPlatformVersion`). Every events handshake carries the same message
+with the build the socket landed on. A tab prefetches the announced build into
+its service-worker cache and turns the Settings version row into the reload
+button (`handlePlatformVersion` in `public/js/app.js`); it never reloads
+itself — the user does, from that button or a pull-to-refresh. The 10s
+`/api/version` poll paints the rollout in progress and remains the fallback. A
+`SIGTERM` for any other reason finds the target equal to the running build and
+announces nothing.
 
 When a stable release changes `KUBERNETES_WORKER_IMAGE`, an existing warm
 worker is compared with that immutable digest before its next dispatch. An

@@ -2472,12 +2472,26 @@ function sessionRoutes(config, { scheduleInteractiveRecovery = null } = {}) {
       // Insert the session with its FINAL chosen/default backend and model
       // atomically — never insert-then-patch. An explicit choice was strictly
       // validated above; an omitted choice preserves the saved-default path.
+      // #2500 / #2537: starting work on an issue IS addressing it, so the
+      // link is seeded here rather than waiting for the Mayor to declare it
+      // with `addresses_issues` — which it never does on an OpenRouter or
+      // direct-agent turn, because those emit no Mayor tool at all. Without
+      // this the proposal read "No issues linked yet" and its PR body got
+      // no `Closes #N`, even though the issue board linked back to the
+      // session the whole time (issue-proposal-ref.js unions
+      // created_from_issue_number in; the "Addresses" chips and the closing
+      // block read linked_issues alone). The Mayor's declarations and the
+      // linked-issues editor still add and remove on top of this; the
+      // seeded flag records that this row's linkage has been initialised, so
+      // an author who removes the issue keeps it removed.
       const { rows } = await pool.query(
         `INSERT INTO chat_sessions (app_id, user_id, branch_name, status, created_from_issue_number,
+            linked_issues, issue_link_seeded,
             agent_backend, agent_provider, agent_model, agent_reasoning_effort)
-         VALUES ($1, $2, NULL, 'active', $3, $4, $5, $6, $7)
+         VALUES ($1, $2, NULL, 'active', $3, $4, $5, $6, $7, $8, $9)
          RETURNING *`,
         [app.id, req.user.id, issueNumber,
+         issueNumber ? [issueNumber] : [], !!issueNumber,
          pref.backend, pref.provider, pref.model, pref.reasoningEffort]
       );
       await topicAttrs.selfAssignProposal(pool, app.id, rows[0].id, req.user);
@@ -2674,12 +2688,15 @@ function sessionRoutes(config, { scheduleInteractiveRecovery = null } = {}) {
 
       // linked_issues is seeded with the issue so a PR opened later from a
       // CLONED session carries `Closes #N` (the clone copies the linkage).
+      // #2500: and `issue_link_seeded`, so the promote-time backfill knows
+      // this row's linkage was initialised here — the interactive create
+      // path above does the same thing now.
       // plan 9 (Commit 7): carry the final default backend/model in the
       // insert — no insert-then-patch for headless sessions either.
       const { rows } = await pool.query(
-        `INSERT INTO chat_sessions (app_id, user_id, branch_name, status, is_headless, headless_status, headless_issue_number, linked_issues, session_title,
+        `INSERT INTO chat_sessions (app_id, user_id, branch_name, status, is_headless, headless_status, headless_issue_number, linked_issues, issue_link_seeded, session_title,
             agent_backend, agent_provider, agent_model, agent_reasoning_effort)
-         VALUES ($1, $2, $3, 'active', TRUE, 'generating', $4, $5, $6, $7, $8, $9, $10)
+         VALUES ($1, $2, $3, 'active', TRUE, 'generating', $4, $5, TRUE, $6, $7, $8, $9, $10)
          RETURNING *`,
         [app.id, req.user.id, branchName, issueNumber, [issueNumber], autoTitle,
          pref.backend, pref.provider, pref.model, pref.reasoningEffort]
@@ -5069,37 +5086,37 @@ function sessionRoutes(config, { scheduleInteractiveRecovery = null } = {}) {
       // opening ask. The call is scheduled at turn end (below), after the
       // main turn has settled, so its fresh billing check sees the real
       // remaining allowance instead of racing the main model call.
-      // OpenRouter sessions deliberately make no Anthropic side calls —
-      // they are named without a model call at the top of their branch
-      // below (#1949).
       const titledThisTurn = !isOpenRouterSession && !session.session_title && !session.pr_number;
       // Pre-PR turn-end refresh re-titles from the full request history +
       // latest spec draft. Once a PR exists applyPrMetadata owns the name.
       // Both title modes are fire-and-forget, but only after a fresh payer
       // decision made after the main turn's spend has been recorded.
-      const refreshTitleAtTurnEnd = () => {
-        if (isOpenRouterSession || session.pr_number) return;
-        limits.resolveBillingPath(pool, config.dataEncryptionKey, req.user.id)
-          .then((billing) => {
-            if (billing.error) {
-              log.info('sessions', 'Turn-end title refresh skipped: no payer available', {
-                sessionId: session.id, reason: billing.reason || null,
-              });
-              return null;
-            }
-            return titledThisTurn
-              ? sessionTitles.maybeTitleFirstMessage({
-                pool, session, message: messageText,
-                userId: req.user.id, apiKey: billing.apiKey, send,
-              })
-              : sessionTitles.refreshFromHistory({
-                pool, session, userId: req.user.id, apiKey: billing.apiKey, send,
-              });
-          })
-          .catch((err) => log.warn('sessions', 'Turn-end title billing resolve failed', {
-            sessionId: session.id, err: err.message,
-          }));
-      };
+      //
+      // #2500: OpenRouter sessions come here too. They are still named
+      // without a model call the moment their first ask lands (#1949, at
+      // the top of their branch below) so a refused turn still leaves a
+      // readable name, but that is now a FIRST name: the helper model gets
+      // the last word on every in-platform session, because a name that
+      // says what the change does is the whole point. Their opening trim
+      // already set session_title, so they always take the
+      // refreshFromHistory arm — maybeTitleFirstMessage would bail on the
+      // name its own eager call had just written.
+      //
+      // No payer, or a billing lookup that throws, no longer means no name:
+      // sessionTitles.titleAtTurnEnd owns that decision and falls back to
+      // the payer-free deterministic trim, which for an issue-started
+      // session is the issue title.
+      const refreshTitleAtTurnEnd = () => sessionTitles.titleAtTurnEnd({
+        pool,
+        session,
+        message: messageText,
+        userId: req.user.id,
+        firstTurn: titledThisTurn,
+        resolveBilling: () => limits.resolveBillingPath(
+          pool, config.dataEncryptionKey, req.user.id,
+        ),
+        send,
+      });
 
       try {
         // Parse repo info
@@ -5130,16 +5147,21 @@ function sessionRoutes(config, { scheduleInteractiveRecovery = null } = {}) {
         // OpenRouter is a complete, single-provider session path. The
         // selected OpenRouter model receives the user's message directly
         // and can either answer it or edit the repository; no Anthropic
-        // Mayor, wrap-up, or quick-reply generation runs around it, and
-        // the session is named without a model call (#1949, below).
+        // Mayor, wrap-up, or quick-reply generation runs around it. Its
+        // first name is minted without a model call (#1949, below); the
+        // turn-end refresh every in-platform session shares then sharpens
+        // it (#2500).
         if (isOpenRouterSession) {
-          // #1949: the Haiku titler never runs for these sessions, so they
-          // kept their branch name ("dev/evan-1789…") for life. Name the
-          // session from its opening ask instead — the same trim
-          // applyPrMetadata gives its PR title, so the name holds when the
-          // PR lands. No payer to resolve, so it fires before the busy
-          // gate: the message is already in the transcript whatever
-          // happens next. Fire-and-forget; the helper never rejects.
+          // #1949: the Haiku titler used to be skipped for these sessions
+          // entirely, so they kept their branch name ("dev/evan-1789…") for
+          // life. It runs at their turn end now (#2500); this eager,
+          // payer-free naming stays because it is the only one a refused or
+          // stopped turn ever reaches. It names the session from its
+          // opening ask — the same trim applyPrMetadata gives its PR title,
+          // so the name holds when the PR lands. No payer to resolve, so it
+          // fires before the busy gate: the message is already in the
+          // transcript whatever happens next. Fire-and-forget; the helper
+          // never rejects.
           sessionTitles.titleFromFirstMessage({ pool, session, message: messageText, send });
           const agentIdentity = codingAgentRuntimeIdentity(session, null, config);
           const directSpec = await loadSessionSpec(pool, session.id);
@@ -5318,6 +5340,10 @@ function sessionRoutes(config, { scheduleInteractiveRecovery = null } = {}) {
           // first; the route's `finally` repeating both is a no-op.
           if (releaseDispatchOperation) releaseDispatchOperation();
           stopRegistry.deleteIf(session.id, stopHandle);
+          // #2500: the opening trim gave this session a name before the
+          // turn ran; now that the turn has produced something, re-title it
+          // from everything known so far, exactly as the Claude paths do.
+          refreshTitleAtTurnEnd();
           send('done', {});
           res.end();
           setTimeout(() => sessionBus.clearSession(session.id), 30000);

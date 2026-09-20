@@ -1981,6 +1981,18 @@
       "expectText": "closed by vote"
     },
     {
+      "name": "#2603: a governance card's vote is the same picker a change's is, so the reason box opens with it",
+      "path": "/?demo=1&cards=open#app/usernode-2d5619/board",
+      "expectSelector": "[data-gov-row='9100003'] .dev-vote-btn[data-vote-btn=\"open\"][aria-haspopup=\"dialog\"]",
+      "expectText": "Vote"
+    },
+    {
+      "name": "#2603: a close proposal's page lists the votes cast on it, each in the voter's own words",
+      "path": "/?demo=1#app/usernode-2d5619/dev/governance/9100003",
+      "expectSelector": "#gc-thread-head .dev-topic-about .dev-topic-roster .dev-ledger-reason[data-vote=\"yes\"]",
+      "expectText": "Checked it myself, nothing left to fix."
+    },
+    {
       "name": "App-admins section ships in the Members modal (#788)",
       "path": "/?demo=1#app/usernode-2d5619/dev",
       "expectSelector": "#members-appadmins-section #members-appadmins-list"
@@ -3270,9 +3282,14 @@
       "expectSelector": "#leaderboard-event-bar:not(.hidden) #tc-ev-select"
     },
     {
+      "name": "Challenges: every card on the tab carries a labelled rail, block production included (#2492)",
+      "path": "/#leaderboard/challenges",
+      "expectSelector": "#challenges-root:not(.hidden) #tc-se-grid:has([role=progressbar]):not(:has([role=progressbar]:not([aria-valuetext])))"
+    },
+    {
       "name": "Challenge detail page is reachable by deep link and draws its rail (?shot=challenge-detail)",
       "path": "/?shot=challenge-detail#leaderboard/challenges",
-      "expectSelector": "#tc-se-detail-overlay:not(.hidden) #tc-se-detail-panel [role=progressbar]"
+      "expectSelector": "#tc-se-detail-overlay:not(.hidden) #tc-se-detail-panel [role=progressbar][aria-valuetext]"
     },
     {
       "name": "Imported proposal mid-build shows the Preview building pill (#866, #2585)",
@@ -3518,6 +3535,12 @@
       "path": "/#admin/model-costs",
       "expectSelector": "#admin-model-costs-profile",
       "expectText": "Estimates are per-token pricing times a typical change"
+    },
+    {
+      "name": "Model costs says what one change is and that it counts the coding agent (#2592)",
+      "path": "/#admin/model-costs",
+      "expectSelector": "#admin-model-costs-profile",
+      "expectText": "One change is one dev session"
     },
     {
       "name": "Limits offers the default per-user WEEKLY cap beside the daily one (#1788)",
@@ -4275,9 +4298,9 @@
       "expectText": "went live with 1/1 votes"
     },
     {
-      "name": "General chat: a person's message sits in a bubble under their name and stamp, the Messages screen's own bubble, with their reactions beneath it",
+      "name": "General chat: a person's message sits in a bubble under their name and stamp, the Messages screen's own bubble, with their reactions beneath it, and that bubble stays its own box inside the row a hover or tap highlights (#2464)",
       "path": "/app/usernode-2d5619/dev/chat",
-      "expectSelector": "#gc-messages > .gc-msg:not(.gc-msg-self) .gc-bubble > .gc-msg-content"
+      "expectSelector": "#gc-messages > .gc-msg:not(.gc-msg-self) .gc-bubble:not(.gc-bubble-self) > .gc-msg-content"
     },
     {
       "name": "General chat: with no message from a person on screen, the transcript ends with the quiet card, after the open proposal and above the composer",

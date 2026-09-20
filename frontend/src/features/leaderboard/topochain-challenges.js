@@ -789,20 +789,22 @@ const TopochainChallenges = {
   //             sees that is not done.
   //
   // The fill is a fraction only when the count can honestly be one: a metric
-  // with a numeric target above one that counts ledger rows. Block
-  // production counts blocks, which this read does not carry, and a target of
-  // one is a yes/no — both read "Started" with no fill rather than a bar that
-  // means nothing. The viewer's points stay in the detail overlay.
+  // with a numeric target above one whose count this read carries. A target
+  // of one is a yes/no, and so is a counted metric before personalization
+  // lands — both read "Started" with no fill rather than a bar that means
+  // nothing. The viewer's points stay in the detail overlay.
   //
-  // BLOCK PRODUCTION IS THE EXCEPTION TO "no points means not started".
-  // Block scores live in leaderboard snapshots and are never written to the
-  // points ledger (src/services/topochain/snapshot-builder.js), and the row
-  // this pane reads carries only the ledger. So a viewer producing blocks can
-  // have zero ledger points while Home's meter, which reads the snapshot,
-  // shows real progress. Rather than claim "Not started", such a card shows
-  // the bare ring with no label and no value: the rail says nothing it cannot
-  // see. Carrying the snapshot count on the row is a server change for a later
-  // slice.
+  // BLOCK PRODUCTION IS NO LONGER AN EXCEPTION (#2492). Block scores live in
+  // leaderboard snapshots and are never written to the points ledger
+  // (src/services/topochain/snapshot-builder.js), so a viewer producing
+  // blocks can have zero ledger points. This pane used to answer that by
+  // drawing the bare ring with no label and no value — the rail saying
+  // nothing it could not see — while Home, which reads the snapshot, showed
+  // the real count beside the same challenge. The public row now carries that
+  // count itself (src/routes/topochain/public.js resolves it through the same
+  // helper Home's panel uses), so the `if (p)` block below answers a block
+  // card the way it answers every other one, and the fallback under it says
+  // "Not started" rather than nothing at all.
   //
   // Every label is SHORT on purpose, and the words are the board's ("Not
   // started", "Done"). The rail is alone on its row at the card body's full
@@ -863,13 +865,16 @@ const TopochainChallenges = {
     // `metric`, which is the effective one — so a counted challenge shows its
     // count on first paint and to a signed-out visitor, with the organiser's
     // target rather than the template's. The template's `activity_type` kind
-    // is the last resort for the block guard only, keeping a block challenge
-    // from claiming "Not started" on a payload without `metric`.
+    // is the last resort.
     const src = metric || (c && c.metric) || null;
     const kind = (src && src.kind) || (at && at.metric_type) || null;
-    if (!points && kind === 'blocks_produced') {
-      return { state: 'new', stateLabel: '', fill: null, counted: false, earned: null };
-    }
+    // BLOCK PRODUCTION FALLS THROUGH TO THE ORDINARY WORDS. Everything below
+    // counts LEDGER ROWS, which a block challenge never has, so it is read as
+    // uncounted here: "Started" once something has paid the viewer points for
+    // it, "Not started" otherwise. That is the honest answer for the reads
+    // this branch serves — a signed-out visitor and the moment before the
+    // list's own `progress` arrives — and it is what Home says too. The real
+    // count comes from `progress` above.
     const target = Number(src ? src.target : NaN);
     if (kind && kind !== 'blocks_produced' && Number.isFinite(target) && target > 1) {
       // ROWS are the count, the way Home's server count works (one ledger row

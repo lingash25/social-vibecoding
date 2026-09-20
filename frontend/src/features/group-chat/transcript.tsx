@@ -671,7 +671,13 @@ export function TranscriptRows({ view, source }: { view: TranscriptView; source:
           </button>
         </div>
       ) : null}
-      {view.lead.placeholder ? (
+      {/* Derived at render from the rows, like the quiet card above, rather
+          than trusted from the lead: `appendTranscriptMessage` copies `lead`
+          through untouched, so a placeholder published for an empty thread
+          ("No messages yet…", or "Loading…" before the history returns)
+          outlived the first row that landed on it and only went away on the
+          next full publish — a remount or a refresh (#2498). */}
+      {view.lead.placeholder && !rows.length ? (
         <div className="text-xs text-zinc-500 dark:text-zinc-400 px-2 py-2">{view.lead.placeholder}</div>
       ) : null}
       {rows.map((msg, i) => renderRow(msg, `i${i}`, main, chat))}

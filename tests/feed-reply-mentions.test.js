@@ -192,7 +192,7 @@ test('Escape closes; the arrows move; Enter and Tab take the highlighted row', (
   assert.match(hook, /e\.preventDefault\(\);\s*e\.stopPropagation\(\);/);
   assert.match(hook, /if \(key === 'close'\) close\(\);/);
   // Leaving the field closes it; an IME composition never opens it.
-  assert.match(composer(), /onBlur=\{mention\.close\}/);
+  assert.match(composer(), /onBlur=\{\(\) => \{ mention\.close\(\); refs\.close\(\); \}\}/);
   assert.match(TYPEAHEAD, /if \(!el \|\| composing\.current\) return;/);
 });
 
@@ -234,9 +234,15 @@ test('the composer wires the list, and its own markup is unchanged until it open
   const src = composer();
   assert.match(src, /useMentionTypeahead\(\{ slug, inputRef, value: draft, onChange: onDraftChange \}\)/,
     'the list edits the draft through the same onChange the keyboard does');
-  assert.match(src, /onChange=\{\(e\) => \{ onDraftChange\(e\.target\.value\); mention\.sync\(\); \}\}/);
-  assert.match(src, /onSelect=\{mention\.sync\}/, 'a caret move can land on or leave a token');
-  assert.match(src, /onFocus=\{mention\.warm\}/, 'the list is loading by the first `@`');
+  // #2497 added the `#` list beside this one, so the field's handlers now fan
+  // out to both: `syncMenus` asks each, and at most one of them opens (a
+  // token under the caret is `@`-shaped or `#`-shaped, never both).
+  assert.match(src, /const syncMenus = \(\) => \{ mention\.sync\(\); refs\.sync\(\); \};/);
+  assert.match(src, /onChange=\{\(e\) => \{ onDraftChange\(e\.target\.value\); syncMenus\(\); \}\}/);
+  assert.match(src, /onSelect=\{syncMenus\}/, 'a caret move can land on or leave a token');
+  assert.match(src, /onFocus=\{\(\) => \{ mention\.warm\(\); refs\.warm\(\); \}\}/,
+    'both lists are loading by the first `@` or `#`');
+  assert.match(src, /onBlur=\{\(\) => \{ mention\.close\(\); refs\.close\(\); \}\}/);
   assert.match(src, /className="relative flex items-end gap-2 pt-0\.5"/,
     'the form is the box the list is placed against');
   assert.match(src, /<FeedMentionMenu[\s\S]*?onPick=\{mention\.accept\}/);

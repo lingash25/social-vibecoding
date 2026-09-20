@@ -122,6 +122,10 @@ const ONCHAIN_ACCOUNTS = [
 let userActivities;
 let nextActivityId;
 let nativeCredentialActiveAtWrite;
+// The viewer's newest leaderboard snapshot per season event, keyed by event
+// id (#2492). Block scores are only ever written there, never to the points
+// ledger, so this is where a `blocks_produced` challenge's count comes from.
+let eventBlocks;
 
 function resetFixtures() {
   userActivities = [
@@ -146,6 +150,8 @@ function resetFixtures() {
   ];
   nextActivityId = 100;
   nativeCredentialActiveAtWrite = true;
+  // carol has produced 4 of the 10 blocks challenge 1 asks for.
+  eventBlocks = new Map([[100, 4]]);
 }
 
 // ─── Mock pool ───────────────────────────────────────────────────────────
@@ -372,6 +378,14 @@ function handleQuery(rawSql, params = []) {
     return { rows: [{ id: row.id }] };
   }
 
+  if (sql.startsWith('/* challenge event blocks */')) {
+    const [, eventIds] = params;
+    return { rows: (eventIds || []).map((eventId) => ({
+      season_event_id: eventId,
+      blocks: eventBlocks.has(eventId) ? eventBlocks.get(eventId) : null,
+    })) };
+  }
+
   throw new Error(`Unhandled mock query: ${sql}`);
 }
 
@@ -482,6 +496,11 @@ test('GET /challenges: event scope — effective merge, category uppercase, cta_
     assert.equal(item.reward, '10', 'reward falls back to the template');
     assert.equal(item.cta_label, 'Get Started', 'no effective cta_label -> the v4-standardized fallback');
     assert.deepEqual(item.metric, { kind: 'blocks_produced', label: 'Blocks', target: 10 });
+    // #2492: a block-production challenge carries progress like any other,
+    // counted from the viewer's newest snapshot rather than from the ledger
+    // (carol's one ledger row here is an organiser completion worth 10 pts,
+    // not four blocks). Without it the card drew a ring and no words.
+    assert.deepEqual(item.progress, { done: false, current: 4, target: 10 });
     assert.equal(item.event_name, 'Sprint One');
     assert.equal(item.event_type, 'regular');
     // carol has one existing completion of challenge 1 (the idempotency fixture).

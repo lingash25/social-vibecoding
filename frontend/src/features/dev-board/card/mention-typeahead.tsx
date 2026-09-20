@@ -174,9 +174,10 @@ function viewerName(): string {
 
 /**
  * The top edge, in viewport pixels, above which `el` cannot be seen: the
- * nearest scrolling ancestor's, or the viewport's own.
+ * nearest scrolling ancestor's, or the viewport's own. Exported because the
+ * `#` list (./ref-typeahead.tsx) flips against the same measurement.
  */
-function visibleTop(el: HTMLElement): number {
+export function visibleTop(el: HTMLElement): number {
   for (let a = el.parentElement; a; a = a.parentElement) {
     const overflow = getComputedStyle(a).overflowY;
     if (overflow === 'auto' || overflow === 'scroll') {

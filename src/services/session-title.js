@@ -16,12 +16,23 @@
 //   4. Headless auto sessions get the deterministic, LLM-free
 //      "#N · issue title" at creation (headlessTitle), inherited by
 //      clones.
-//   5. OpenRouter sessions (#1949) buy no helper-model call at all —
-//      their turn is a single-provider path, and pr-metadata.js names
-//      their PR deterministically for the same reason — so
-//      titleFromFirstMessage trims the opening ask itself, with the same
-//      trim the PR title gets: the name a session shows before its PR is
-//      the name it keeps after.
+//   5. OpenRouter sessions (#1949) are named the moment their first ask
+//      arrives, without a helper-model call, by titleFromFirstMessage —
+//      the same trim pr-metadata.js gives their PR title, so the name a
+//      session shows before its PR is the name it keeps after. Since
+//      #2500 that is a FIRST name, not the final one: their turn end
+//      goes through refreshFromHistory like every other in-platform
+//      session, so the helper model gets to describe what the change
+//      actually does.
+//   6. #2500: every path above shares one scaffolding rule. A session
+//      started from an issue card opens with the seed
+//      `Please implement GitHub issue #N: "<title>".…`, and naming a
+//      change after the instruction to make it is useless. parseIssueSeed
+//      peels the wrapper off, so the deterministic name is the issue
+//      title and the model is handed that title as its issueTitle input.
+//      When no helper model is reachable at all, generateAndApply falls
+//      back to the same deterministic name rather than leaving the
+//      session showing its branch.
 //
 // Every entry point is fire-and-forget: the returned promise ALWAYS
 // resolves (with the new title, or null on failure/skip) and never
@@ -52,8 +63,47 @@ function headlessTitle(issueNumber, issueTitle) {
 // identical only while they come from the same function.
 const DETERMINISTIC_TITLE_MAX = 72;
 
+// #2500: the issue card's "Create proposal" button seeds the composer with
+// scaffolding around the issue (public/js/app-view.js createPrForIssue):
+//
+//   Please implement GitHub issue #N: "<issue title>".<issue body>
+//   Open a PR that closes this issue (include "Closes #N" so it links …).
+//
+// Left alone that wrapper IS the name: the trim below strips the `#` along
+// with the rest of the markdown punctuation and cuts at 72, which is how a
+// session came to be called `Please implement GitHub issue 2496: "Add
+// claimed issues to workshop cur…`. Peel the wrapper off wherever a title
+// is derived, so the deterministic name is the ISSUE TITLE the scaffolding
+// was wrapping, and hand that same title to the model as the issue-title
+// signal generateSessionTitle already accepts.
+const ISSUE_SEED_RE = /^\s*Please implement GitHub issue #(\d+):\s*"([\s\S]*?)"\.[ \t]*/;
+// The closing instruction the same seed appends. It is guidance for the
+// agent, never a description of the change, so it is dropped from the model
+// prompt too.
+const ISSUE_SEED_TAIL_RE = /\s*Open a PR that closes this issue \(include "Closes #\d+"[^)]*\)\.?\s*$/;
+
+// { number, title, body } for a message that is the issue-card seed, or
+// null for anything a user wrote themselves.
+function parseIssueSeed(text) {
+  const raw = String(text || '');
+  const m = ISSUE_SEED_RE.exec(raw);
+  if (!m) return null;
+  const number = parseInt(m[1], 10);
+  if (!Number.isInteger(number) || number <= 0) return null;
+  return {
+    number,
+    title: m[2].replace(/\s+/g, ' ').trim(),
+    body: raw.slice(m[0].length).replace(ISSUE_SEED_TAIL_RE, '').trim(),
+  };
+}
+
 function deterministicTitle(text) {
-  const plain = String(text || '')
+  // A seeded message names the change after its issue, not after the
+  // instruction wrapped around it. The body is the fallback for the
+  // degraded seed whose issue fetch produced an empty title.
+  const seed = parseIssueSeed(text);
+  const source = seed ? (seed.title || seed.body) : text;
+  const plain = String(source || '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/[#>*_`~\[\]()]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -61,6 +111,24 @@ function deterministicTitle(text) {
   return plain.length > DETERMINISTIC_TITLE_MAX
     ? `${plain.slice(0, DETERMINISTIC_TITLE_MAX - 1).trimEnd()}…`
     : plain;
+}
+
+// Model inputs for a request history that may open with the issue-card
+// seed: the scaffolding is replaced by the issue title + body it wrapped,
+// and the issue title is lifted out as its own signal. Unseeded histories
+// come back untouched with a null issueTitle.
+function titleInputsFromRequests(requests) {
+  let issueTitle = null;
+  const prepared = (Array.isArray(requests) ? requests : [])
+    .map((r) => String(r || ''))
+    .filter((r) => r.trim())
+    .map((text) => {
+      const seed = parseIssueSeed(text);
+      if (!seed) return text;
+      if (!issueTitle && seed.title) issueTitle = seed.title;
+      return [seed.title, seed.body].filter(Boolean).join('\n\n') || text;
+    });
+  return { requests: prepared, issueTitle };
 }
 
 // Guarded persist + broadcast shared by every title source. The
@@ -82,12 +150,19 @@ async function persistTitle({ pool, session, title, send }) {
 }
 
 // Core generate → debit → persist → broadcast path.
+//
+// #2500: the requests are prepared before they reach the model — an
+// issue-card seed becomes the issue title plus the issue body, and the
+// issue title rides along as its own input. An explicit `issueTitle` from
+// the caller still wins; the derived one only fills the gap.
 function generateAndApply({ pool, session, requests, specs, issueTitle, userId, apiKey, send }) {
+  const prepared = titleInputsFromRequests(requests);
+  const issue = issueTitle || prepared.issueTitle || null;
   return (async () => {
     const meta = await llm.generateSessionTitle({
-      requests,
+      requests: prepared.requests,
       specs,
-      issueTitle,
+      issueTitle: issue,
       apiKey,
       telemetryContext: {
         pool,
@@ -108,7 +183,16 @@ function generateAndApply({ pool, session, requests, specs, issueTitle, userId, 
     log.warn('session-title', 'Title generation failed (non-fatal)', {
       sessionId: session && session.id, err: err.message,
     });
-    return null;
+    // #2500: an unavailable helper model used to leave the session showing
+    // its branch name forever. Name it deterministically instead — for an
+    // issue-started session that is the issue title, which is the same name
+    // deterministicPrMetadataDraft will give the pull request. Only for a
+    // session that has no name yet: a refresh must never trade a generated
+    // title for a worse one just because this call failed.
+    if (!session || session.session_title) return null;
+    const fallback = deterministicTitle(issue || prepared.requests[0]);
+    if (!fallback) return null;
+    return persistTitle({ pool, session, title: fallback, send }).catch(() => null);
   });
 }
 
@@ -183,7 +267,51 @@ function refreshFromHistory({ pool, session, userId, apiKey, send }) {
   });
 }
 
+// Hook 3 (#2500) — the single turn-end entry point every in-platform
+// session now shares, Claude and OpenRouter alike. It owns the one decision
+// the route used to make inline: which of the hooks above to run, and what
+// to do when there is no payer for the helper model.
+//
+// `resolveBilling` is injected rather than imported so this stays a pure
+// decision with no opinion about how a payer is found. Its refusal — an
+// `error` on the result, or a throw — is no longer the end of the matter:
+// a session with no payer gets the payer-free deterministic name, which for
+// an issue-started session is the issue title, instead of showing its branch
+// name forever.
+//
+// `firstTurn` picks the cheaper first-message path; anything else re-titles
+// from the full history. Fire-and-forget like its siblings: the returned
+// promise always resolves.
+function titleAtTurnEnd({ pool, session, message, userId, resolveBilling, firstTurn, send }) {
+  if (!session || session.pr_number) return Promise.resolve(null);
+  const deterministic = () => titleFromFirstMessage({ pool, session, message, send });
+  return Promise.resolve()
+    .then(() => (resolveBilling ? resolveBilling() : { error: 'no_resolver' }))
+    .then((billing) => {
+      if (!billing || billing.error) {
+        log.info('session-title', 'Turn-end title: no payer, using the deterministic name', {
+          sessionId: session.id, reason: (billing && billing.reason) || null,
+        });
+        return deterministic();
+      }
+      return firstTurn
+        ? maybeTitleFirstMessage({
+          pool, session, message, userId, apiKey: billing.apiKey, send,
+        })
+        : refreshFromHistory({
+          pool, session, userId, apiKey: billing.apiKey, send,
+        });
+    })
+    .catch((err) => {
+      log.warn('session-title', 'Turn-end title billing resolve failed', {
+        sessionId: session.id, err: err.message,
+      });
+      return deterministic();
+    });
+}
+
 module.exports = {
   headlessTitle, deterministicTitle, generateAndApply,
   maybeTitleFirstMessage, titleFromFirstMessage, refreshFromHistory,
+  titleAtTurnEnd, parseIssueSeed, titleInputsFromRequests,
 };

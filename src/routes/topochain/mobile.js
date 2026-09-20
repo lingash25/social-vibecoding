@@ -43,8 +43,9 @@
 const { nativeWebSessionIsLive } = require('../../services/web-session-auth');
 
 
-const { loadOnboarding, visibleChallenges, challengeCategory, resolveProgress } =
-  require('../../services/topochain/challenge-onboarding');
+const {
+  loadOnboarding, visibleChallenges, challengeCategory, resolveProgress, loadEventBlocks,
+} = require('../../services/topochain/challenge-onboarding');
 
 const { Router } = require('express');
 const bcrypt = require('bcrypt');
@@ -1279,6 +1280,13 @@ function topochainMobileRoutes(config) {
         });
       });
 
+      // The viewer's block count, per season event — this list can span a
+      // whole season, so one event id is not enough. Loaded once, and only
+      // when the list actually holds a block-production card (#2492).
+      const blocksByEvent = items.some((it) => it.metric?.kind === 'blocks_produced')
+        ? await loadEventBlocks(pool, req.user.id, items.map((it) => it.season_event_id))
+        : new Map();
+
       for (const item of items) {
         item.category = challengeCategory(item.id, item.category, onboarding);
         if (onboarding?.progress.has(item.id)) {
@@ -1294,15 +1302,18 @@ function topochainMobileRoutes(config) {
         // nine Season 2 challenges, so the same rule now applies to all of
         // them, from the activity rows this handler has already loaded.
         //
-        // `blocks_produced` is deliberately left out: its count comes from
-        // the leaderboard snapshot rather than from ledger rows, and a bare
-        // ring is what that card is meant to show.
+        // `blocks_produced` is in this now (#2492). It was left out while its
+        // count had nowhere to come from — block scores are written to
+        // leaderboard snapshots and never to the ledger — so its card drew a
+        // ring with no words beside it while Home, reading the snapshot,
+        // showed the real number. The snapshot count is passed in here, and
+        // the done rule, the clamp and the target stay the shared ones.
         const metricKind = item.metric ? item.metric.kind : null;
-        if (metricKind === 'blocks_produced') continue;
         item.progress = resolveProgress({
           metricKind,
           metricTarget: item.metric ? item.metric.target : null,
           activityCount: (activitiesByChallenge.get(Number(item.id)) || []).length,
+          blocks: blocksByEvent.get(Number(item.season_event_id)),
         });
       }
 

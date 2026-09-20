@@ -13,9 +13,11 @@ const models = require('./models');
 //                 estimate everywhere it appears. An admin can override it
 //                 by hand from the Model costs console.
 //   the OBSERVED  what changes on that model actually cost, aggregated
-//                 from the platform's own per-turn records. It is never
-//                 shown in the picker and never rewrites the estimate on
-//                 its own: an admin reads it and decides.
+//                 from the platform's own per-turn records — one dev
+//                 session is one change, counted once, agent spend
+//                 included (#2592). It is never shown in the picker and
+//                 never rewrites the estimate on its own: an admin reads
+//                 it and decides.
 //
 // The estimate is deliberately not derived from the observed figure
 // automatically. A median over a handful of changes moves violently, and a
@@ -176,17 +178,90 @@ async function typicalChange(pool, { days = OBSERVED_DAYS } = {}) {
 
 // ── What changes actually cost ──────────────────────────────────────────
 //
-// Two per-turn cost records carry a model id, and both carry a session id,
-// which is what makes "per change" answerable:
+// ONE CHANGE IS ONE DEV SESSION. Three per-turn cost records carry a model
+// id, and all three carry a session id, which is what makes "per change"
+// answerable:
 //   chat_session_messages (model, cost_cents) — every Mayor turn and every
 //     direct OpenRouter reply.
 //   agent_turns (requested_model, estimated_cost_usd) — every OpenRouter
 //     coding turn.
-// chat_sessions.agent_cost_cents, the Claude coding agent's own per-change
-// ledger, is deliberately NOT here: it has no model dimension at all (see
-// its schema comment), so its spend cannot be attributed to a model without
-// inventing the attribution.
-async function observedPerModel(pool, { days = OBSERVED_DAYS } = {}) {
+//   chat_session_agent_model_costs (model, cost_cents) — the Claude coding
+//     agent's own spend, per model (#2592).
+//
+// #2592 — WHY THE OBSERVED FIGURES USED TO READ LOW. The third record did
+// not exist. The Claude coding agent's spend is the large majority of what
+// a change costs, and its ledger (chat_sessions.agent_cost_cents) had no
+// model column, so it had to be left out of a per-model aggregate rather
+// than attributed by guesswork: the Anthropic rows counted CHAT TURNS and
+// nothing else. A second, smaller distortion compounded it — grouping by
+// model AND session split a change that switched models into two partial
+// "changes", pulling the average and the median down again.
+//
+// Both are fixed here. A session is summed WHOLE, counted ONCE, and
+// attributed to the model that spent the most in it.
+const OBSERVED_SINCE_KEY = 'model_cost_observed_since';
+
+/**
+ * The instant the platform began recording agent spend per model, stamped
+ * once by schema.sql. Null when the stamp is missing or unreadable.
+ *
+ * Everything before it is unattributable history — a session whose agent
+ * ran on Claude then has real spend that no model can be named for — so
+ * mixing it in would keep reporting the understated figure this change
+ * exists to fix. The observed columns count only sessions created at or
+ * after this instant, and the set grows on its own from there.
+ */
+async function observedSince(pool) {
+  try {
+    const { rows } = await pool.query(
+      'SELECT value FROM platform_settings WHERE key = $1',
+      [OBSERVED_SINCE_KEY],
+    );
+    const raw = rows[0]?.value;
+    if (!raw) return null;
+    // schema.sql stamps it as `NOW()::text`, which Postgres renders as
+    // `2026-09-20 12:34:56.789+00` — a space for the `T`, and a two-digit
+    // zone offset that Date() alone refuses. Normalize both.
+    const iso = String(raw).trim()
+      .replace(' ', 'T')
+      .replace(/([+-]\d{2})$/, '$1:00');
+    const at = new Date(iso);
+    return Number.isNaN(at.getTime()) ? null : at;
+  } catch (err) {
+    log.warn('model-costs', 'observed-since read failed; the observed columns stay empty', {
+      err: err.message,
+    });
+    return null;
+  }
+}
+
+/** PERCENTILE_CONT(0.5)'s answer, for an ascending list of numbers. */
+function median(sorted) {
+  if (!sorted.length) return 0;
+  const mid = (sorted.length - 1) / 2;
+  const lo = Math.floor(mid);
+  const hi = Math.ceil(mid);
+  return lo === hi ? sorted[lo] : (sorted[lo] + sorted[hi]) / 2;
+}
+
+/**
+ * Per model: how many changes ran on it, and what they cost on average and
+ * at the median. Keyed by normalized model id.
+ *
+ * The SQL stops at one row per (session, model); the folding happens here
+ * on purpose, because a model reached by several labels (`openrouter/x`
+ * and a bare `x`) is ONE model, and normalizing after the per-session
+ * arithmetic would mean picking a dominant model between two names for the
+ * same thing. Session counts over a 30-day window are in the hundreds, so
+ * this is a small list, not a scan.
+ */
+async function observedPerModel(pool, { days = OBSERVED_DAYS, since } = {}) {
+  // `since` is accepted so the admin payload, which prints the same stamp,
+  // reads it once rather than twice.
+  const from = since === undefined ? await observedSince(pool) : since;
+  // No stamp means no session is known to be recorded cleanly yet. Report
+  // nothing rather than the understated figure.
+  if (!from) return new Map();
   const { rows } = await pool.query(
     `WITH turn_costs AS (
        SELECT session_id, model AS model, cost_cents::numeric AS cents
@@ -198,45 +273,69 @@ async function observedPerModel(pool, { days = OBSERVED_DAYS } = {}) {
          FROM agent_turns
         WHERE requested_model IS NOT NULL AND estimated_cost_usd > 0
           AND started_at >= NOW() - ($1 || ' days')::interval
-     ),
-     per_change AS (
-       SELECT model, session_id, SUM(cents) AS cents
-         FROM turn_costs
-        GROUP BY model, session_id
+       UNION ALL
+       -- One accumulated row per (session, model) rather than one per
+       -- call, so the window is applied to when that pair first spent.
+       -- A dev session lives for hours, well inside a 30-day window, so
+       -- this differs from the per-turn filters above only for a session
+       -- that straddles the boundary.
+       SELECT session_id, model AS model, cost_cents::numeric AS cents
+         FROM chat_session_agent_model_costs
+        WHERE cost_cents > 0
+          AND first_seen_at >= NOW() - ($1 || ' days')::interval
      )
-     SELECT model,
-            COUNT(*) AS changes,
-            AVG(cents) AS avg_cents,
-            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY cents) AS median_cents
-       FROM per_change
-      GROUP BY model`,
-    [String(days)],
+     SELECT t.session_id AS session_id, t.model AS model, SUM(t.cents) AS cents
+       FROM turn_costs t
+       JOIN chat_sessions s ON s.id = t.session_id
+      WHERE s.created_at >= $2::timestamptz
+      GROUP BY t.session_id, t.model`,
+    [String(days), from.toISOString()],
   );
-  // The label prefixes are stripped here rather than in SQL so one model
-  // reached two ways lands in one bucket.
-  const byId = new Map();
+  // One bucket per session, with the label prefixes stripped first so a
+  // model reached two ways is one entry in it.
+  const perSession = new Map();
   for (const row of rows) {
     const id = normalizeModelId(row.model);
     if (!id) continue;
-    const changes = Number(row.changes || 0);
-    const existing = byId.get(id);
-    if (!existing) {
-      byId.set(id, {
-        changes,
-        avgCents: Number(row.avg_cents || 0),
-        medianCents: Number(row.median_cents || 0),
-      });
-      continue;
+    const cents = Number(row.cents || 0);
+    if (!(cents > 0)) continue;
+    const key = String(row.session_id);
+    let models = perSession.get(key);
+    if (!models) {
+      models = new Map();
+      perSession.set(key, models);
     }
-    // Two labels for one model: a changes-weighted mean for the average,
-    // and the busier label's median, which is the honest thing an average
-    // of two medians is not.
-    const total = existing.changes + changes;
-    existing.avgCents = total > 0
-      ? ((existing.avgCents * existing.changes) + (Number(row.avg_cents || 0) * changes)) / total
-      : 0;
-    if (changes > existing.changes) existing.medianCents = Number(row.median_cents || 0);
-    existing.changes = total;
+    models.set(id, (models.get(id) || 0) + cents);
+  }
+  // A change costs what the whole session cost, and belongs to the model
+  // that spent the most in it. A session that switched models is still one
+  // change, not two partial ones. Ties go to the lower id so the answer is
+  // stable rather than row-order dependent.
+  const totals = new Map();
+  for (const models of perSession.values()) {
+    let dominant = '';
+    let best = -1;
+    let total = 0;
+    for (const [id, cents] of models) {
+      total += cents;
+      if (cents > best || (cents === best && id < dominant)) {
+        best = cents;
+        dominant = id;
+      }
+    }
+    if (!dominant || !(total > 0)) continue;
+    if (!totals.has(dominant)) totals.set(dominant, []);
+    totals.get(dominant).push(total);
+  }
+  const byId = new Map();
+  for (const [id, changes] of totals) {
+    changes.sort((a, b) => a - b);
+    const sum = changes.reduce((acc, n) => acc + n, 0);
+    byId.set(id, {
+      changes: changes.length,
+      avgCents: sum / changes.length,
+      medianCents: median(changes),
+    });
   }
   return byId;
 }
@@ -328,8 +427,10 @@ async function adminPayload(pool, { days = OBSERVED_DAYS } = {}) {
   ]);
   let observed = new Map();
   let observedError = null;
+  let since = null;
   try {
-    observed = await observedPerModel(pool, { days });
+    since = await observedSince(pool);
+    observed = await observedPerModel(pool, { days, since });
   } catch (err) {
     observedError = err.message;
     log.warn('model-costs', 'observed spend read failed', { err: err.message });
@@ -360,6 +461,9 @@ async function adminPayload(pool, { days = OBSERVED_DAYS } = {}) {
       source: profile.source,
       changes: profile.changes ?? 0,
     },
+    // #2592: the console says which changes it is counting, because
+    // "observed over the last 30 days" alone would read as all of them.
+    observedSince: since ? since.toISOString() : null,
     rows,
     observedError,
   };
@@ -376,6 +480,8 @@ module.exports = {
   publishedPricing,
   curatedModelIds,
   typicalChange,
+  OBSERVED_SINCE_KEY,
+  observedSince,
   observedPerModel,
   readOverrides,
   writeOverride,

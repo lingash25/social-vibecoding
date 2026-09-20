@@ -421,7 +421,10 @@ function deterministicPrMetadataDraft({ userMessage, ccSummary, requests, summar
     || ccSummary
     || `${username || 'User'}'s changes`;
   // The same trim names the session before its PR exists (#1949,
-  // session-title.js), so the display name holds when the PR lands.
+  // session-title.js), so the display name holds when the PR lands — and
+  // since #2500 that trim peels the issue card's "Please implement GitHub
+  // issue #N: …" scaffolding off first, so neither name is the instruction
+  // to make the change rather than the change.
   const title = sessionTitles.deterministicTitle(titleSource)
     || `${username || 'User'}'s changes`;
   return {

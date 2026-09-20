@@ -486,5 +486,12 @@ export interface TopicBody {
   steps?: StepsView | null;
   /** The one-line explainer under a session or governance card. */
   note?: string | null;
+  /**
+   * #2603: a GOVERNANCE proposal's vote roster — who voted which way and the
+   * line each vote carries, the same `RosterView` a change's Review row
+   * renders. A change's roster rides on `details.ledger` instead; a
+   * governance topic has no ledger, so it hangs here.
+   */
+  roster?: RosterView | null;
   transcript?: TranscriptSection | null;
 }

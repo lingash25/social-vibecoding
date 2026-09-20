@@ -135,9 +135,16 @@ function StateMark({ state }: { state: ChallengeState }): ReactNode {
 
 // The rail. Always a progressbar to assistive tech; `aria-valuenow` only
 // when the fill is a real number — an indeterminate rail says so by leaving
-// it out, which is what the ARIA pattern means by indeterminate. An empty
-// label draws the bare ring, for a challenge whose progress this screen
-// cannot see (block production; see _stateOf).
+// it out, which is what the ARIA pattern means by indeterminate.
+//
+// EVERY RAIL CARRIES A WORD. `label` is required and never empty: every
+// branch of _stateOf returns one ('Done', 'Started', 'Not started', 'N/T
+// unit'). Block production used to be the exception — an empty label drew
+// the ring alone, for a challenge whose count this screen could not see —
+// and the result was a dot with nothing beside it (#2492). Its count now
+// rides on the challenge row, so the exception is gone and the label span
+// and `aria-valuetext` are unconditional; a dapp.json check on the tab
+// holds them that way.
 //
 // `counted` is what draws the bar: a challenge with a target above one,
 // from 0 of N (the stub) up to one short of done. A finished rail is the
@@ -160,13 +167,13 @@ export function ProgressRail({ state, label, fill, name, counted = false, size =
       aria-valuenow={pct == null ? undefined : pct}
       // The spoken value is the visible one: a rounded percent says 0% at
       // 1/500 and 100% at 499/500.
-      aria-valuetext={label || undefined}
-      aria-label={label ? (name ? `${name}: ${label}` : label) : name}
+      aria-valuetext={label}
+      aria-label={name ? `${name}: ${label}` : label}
       className={`${RAIL} ${RAIL_SIZE[size]} ${RAIL_TONE[state]}`}
     >
       {bar ? <span className={RAIL_FILL} style={{ width: pct ? `max(${RAIL_STUB}, ${pct}%)` : RAIL_STUB }} /> : null}
       <StateMark state={state} />
-      {label ? <span className={RAIL_LABEL}>{label}</span> : null}
+      <span className={RAIL_LABEL}>{label}</span>
     </div>
   );
 }

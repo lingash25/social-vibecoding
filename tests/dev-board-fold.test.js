@@ -869,7 +869,37 @@ test('the declared checks that read a board card’s anatomy run with the cards 
   // attribution, and those now sit on two different pages, so the body
   // needs a check of its own. 27 slots left against MAX_DECLARED_TESTS
   // (730), clear of the 20-slot floor.
-  assert.equal(DAPP.tests.length, 703);
+  //
+  // 703 → 704: #2592 taught the Model costs console to count the coding
+  // agent's own spend, which is most of what a change costs and had been
+  // left out of the observed average and median entirely. The figure is
+  // only trustworthy if the screen states what it counted, so the
+  // paragraph under the heading now defines a change, and ONE check was
+  // added beside the existing "says where its estimates come from" to pin
+  // that sentence. 26 slots left against MAX_DECLARED_TESTS (730), clear
+  // of the 20-slot floor.
+  //
+  // 703 → 705: independently on main, #2603 put a line on a governance
+  // vote, and nothing in the manifest pinned either half of it. TWO checks,
+  // because they are two facts on two screens and no selector spans both:
+  // one that a governance card's vote is the picker button (the box opens
+  // with it, which is what makes a line possible at all), one that a close
+  // proposal's own page lists the votes cast on it with each voter's words.
+  //
+  // 703 → 704: also independently on main, #2492 added one check on the
+  // Challenges tab — every card's progress rail carries a spoken value.
+  // Block production used to reach the rail with an empty label and draw a
+  // ring with nothing beside it, and nothing declared caught it; the Home
+  // rail has had the same `[aria-valuetext]` check since Iteration 03.
+  //
+  // 704 → 707: the tallies above were computed on either side of this merge
+  // and cannot be read as one sequence. This branch took 703 → 704 alone,
+  // with the #2592 check above; main independently took the same 703 to
+  // 706, with the #2603 pair and the #2492 check above (703 + 2 + 1 = 706).
+  // Neither set overlaps the other, so the merged manifest holds every one
+  // of them: 703 + 1 + 2 + 1 = 707, which leaves 23 slots against
+  // MAX_DECLARED_TESTS (730), clear of the 20-slot floor.
+  assert.equal(DAPP.tests.length, 707);
 });
 
 test('a tap on the merge-requirements checklist opens the checklist, not the fold (#2128)', () => {

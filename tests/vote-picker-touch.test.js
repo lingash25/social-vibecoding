@@ -71,12 +71,32 @@ test('the box is there from the start and its words follow the switch; Vote no i
   assert.match(blank, /dev-vote-reason-send-no" disabled=""/, 'whitespace is not a line');
 });
 
-test('a governance vote has no line: the switch and the button only', () => {
+test('withLine false: the switch and the button only, and the send is never off', () => {
+  // #2603 left no caller passing false — every vote the group casts carries
+  // a line now — but the panel still draws without the box for anything
+  // demoted into this button that is not a vote.
   const html = picker({ withLine: false });
   assert.doesNotMatch(html, /dev-vote-reason-box|dev-vote-reason-label/);
   assert.match(html, /class="dev-vote-reason-send dev-vote-reason-send-yes">Vote yes<\/button>/);
   const noSide = picker({ withLine: false, side: 'no' });
   assert.match(noSide, /class="dev-vote-reason-send dev-vote-reason-send-no">Vote no<\/button>/, 'never off without a line to wait for');
+});
+
+test('#2603: a governance vote takes the same panel, and its line lands in castIssueVote\'s third slot', () => {
+  const fn = SRC.slice(SRC.indexOf('export function VoteButton('), SRC.indexOf('export function VotePicker('));
+  assert.match(fn, /const isVote = yes\.act\?\.fn === 'castVote' \|\| yes\.act\?\.fn === 'castIssueVote';/,
+    'the box is drawn for a governance vote too');
+  // castVote(sessionId, vote, expectedEpoch, opts) vs
+  // castIssueVote(issueId, vote, opts): padding both to three would put the
+  // options bag where castIssueVote has no parameter at all.
+  assert.match(SRC, /const VOTE_ARITY: Record<string, number> = \{ castVote: 3, castIssueVote: 2 \};/);
+  assert.match(fn, /const positional = VOTE_ARITY\[a\.act\.fn\] \?\? 3;\s*while \(args\.length < positional\) args\.push\(null\);/,
+    'the slots are padded per function, so the bag always lands last');
+  const gov = { key: 'yes', cls: 'gc-vote-btn gc-vote-btn-yes', title: 'Yes', label: 'Yes (1/2)', act: { fn: 'castIssueVote', args: [11, 'up'] } };
+  const html = picker({ yes: gov, reasonId: 'dev-vote-reason-11' });
+  assert.match(html, /<textarea id="dev-vote-reason-11" class="dev-vote-reason-box"/,
+    'the same box, keyed by the issue id');
+  assert.match(html, /data-act="castIssueVote"/);
 });
 
 // ── 2. The two homes ──────────────────────────────────────────────────
@@ -94,7 +114,7 @@ test('VoteButton draws the panel once for both homes, opens on Yes, and sends on
   assert.match(fn, /if \(open \|\| sheetRef\.current\) \{ shut\(\); return; \}\s*setSide\(startSide\(\)\);\s*setLine\(''\);/, 'reset on every open');
   assert.match(fn, /const canSend = !isVote \|\| side === 'yes' \|\| !!trimmed;/);
   assert.match(fn, /send\(spec, isVote \? \(trimmed \|\| null\) : null\);/, 'one call: the side\'s spec with the line, null for none');
-  assert.match(fn, /if \(!isVote\) \{ call\(a\.act\); return; \}/, 'a governance vote is the spec\'s own call');
+  assert.match(fn, /if \(!isVote\) \{ call\(a\.act\); return; \}/, 'anything that is not a vote is the spec\'s own call');
   assert.doesNotMatch(fn, /dev-vote-reason-box|dev-vote-opt|data-asking|setAsking/, 'the rows and the two-step are gone');
 });
 

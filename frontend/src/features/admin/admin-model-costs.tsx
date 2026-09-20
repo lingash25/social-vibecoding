@@ -18,6 +18,13 @@ import { mountLegacyPortal, unmountLegacyPortal } from '../../lib/legacy-portals
 // that jumps because two people ran long sessions yesterday is worse than a
 // stable one somebody chose. services/model-costs.js has the full reasoning.
 //
+// #2592: "what changes actually cost" now means the WHOLE change. The
+// observed columns used to count chat turns only, because the coding
+// agent's own spend (the large majority of a change) was recorded with no
+// model against it, and a change that switched models was split in two.
+// The paragraph under the heading says so, because a figure this screen
+// exists to be trusted on has to state what it counted.
+//
 // PERMISSIONS: visible to any admin; the override field and its Save are
 // gated on AdminConsole.canWrite(), and the server enforces the same with
 // requireAdminWrite on PUT /api/admin/model-costs.
@@ -42,6 +49,10 @@ interface CostPayload {
     changes: number;
   };
   rows: CostRow[];
+  // #2592: ISO instant the platform began recording coding-agent spend per
+  // model. Null while no boot has stamped it, which is also the state in
+  // which the observed columns are empty rather than understated.
+  observedSince: string | null;
   observedError: string | null;
 }
 
@@ -61,6 +72,14 @@ function tokens(n: number): string {
   if (n >= 1_000_000) return `${String(Number((n / 1_000_000).toFixed(1)))}M`;
   if (n >= 1000) return `${Math.round(n / 1000)}k`;
   return String(Math.round(n));
+}
+
+/** An ISO instant as a plain day, for the sentence that names the cutoff. */
+function day(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  return at.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function ModelCostsSection() {
@@ -131,6 +150,7 @@ function ModelCostsSection() {
 
   const rows = payload?.rows || [];
   const profile = payload?.typicalChange;
+  const cleanSince = day(payload?.observedSince);
 
   return (
     <div className={`${AdminUI.card} p-4`}>
@@ -148,7 +168,19 @@ function ModelCostsSection() {
               : 'a documented constant, because there is not enough recorded usage yet'}). `
             + 'They assume a session running at the platform default reasoning effort; a session set to a '
             + 'different effort reads and writes a different number of tokens, so it costs more or less than this. '
-            + 'The observed columns are what changes actually cost; they never rewrite an estimate on their own. '
+            // #2592: say what a change IS. The observed figures used to read
+            // low because the coding agent's own spend had no model recorded
+            // against it and was left out, and because a session that
+            // switched models was split into two partial changes.
+            + 'The observed columns are what changes actually cost, the coding agent’s own spend included. '
+            + 'One change is one dev session: all of its model calls counted once, and put against the '
+            + 'model that spent the most in it. '
+            + (cleanSince
+              ? `Only changes started on or after ${cleanSince} are counted, because before then the `
+                + 'agent’s spend had no model recorded against it. '
+              : 'No change is counted yet: the platform records the agent’s spend per model from its next '
+                + 'restart onward. ')
+            + 'The observed columns never rewrite an estimate on their own. '
             + 'Type an override when the two have drifted apart, or clear it to go back to the derived figure.'
           : 'Reading the platform’s per-model spend…'}
       </p>

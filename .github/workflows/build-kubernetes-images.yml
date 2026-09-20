@@ -243,6 +243,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # An Argo CD project-role token that may `get` (and so refresh) the
+      # platform Application — provisioned by the infra repository, see
+      # "Ask Argo CD to pick up the release now" below. Unset, it is the empty
+      # string and that step skips. It lives here rather than on the step
+      # because a step-level `if:` cannot read `secrets`; it can read `env`.
+      ARGOCD_REFRESH_TOKEN: ${{ secrets.ARGOCD_REFRESH_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
@@ -375,6 +382,43 @@ jobs:
         run: |
           helm push "${{ steps.chart.outputs.package_path }}" \
             "oci://ghcr.io/${{ steps.chart.outputs.registry_owner }}/charts"
+
+      # Argo CD learns of a new chart by re-reading the registry's tag list on
+      # its reconcile interval — up to three minutes after the push, and the
+      # single largest piece of the merge-to-running gap. A hard refresh makes
+      # it re-read the registry now; automated sync takes it from there.
+      #
+      # Best effort, and that is load-bearing: services/release-watch.js reads
+      # this run's conclusion, so a step that could fail the run would report a
+      # release as stalled while the rollout proceeds on the periodic reconcile
+      # exactly as before. An unconfigured token skips; a bad token, an Argo
+      # outage or a timeout warn on the run and fall back to that reconcile.
+      #
+      # `refresh=hard` rather than `normal`: the repo-server caches the
+      # resolved tag for the `0.1.*` range, and only a hard refresh bypasses it.
+      # The request returns once Argo has compared the fresh manifests, so a
+      # 200 means the sync is already underway. Only stable releases: Argo
+      # tracks `0.1.*`, so a `feat-k8s` candidate has nothing to refresh.
+      - name: Ask Argo CD to pick up the release now
+        if: steps.chart.outputs.release_channel == 'stable' && env.ARGOCD_REFRESH_TOKEN != ''
+        continue-on-error: true
+        env:
+          ARGOCD_SERVER: argocd.platform.beta.usernodelabs.org
+          ARGOCD_APPLICATION: social-vibecoding-platform
+        run: |
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --max-time 120 \
+            --header "Authorization: Bearer ${ARGOCD_REFRESH_TOKEN}" \
+            "https://${ARGOCD_SERVER}/api/v1/applications/${ARGOCD_APPLICATION}?refresh=hard")" \
+            || status="curl exit $?"
+          if [ "$status" = "200" ]; then
+            echo "Argo CD re-read the chart registry and compared ${ARGOCD_APPLICATION}."
+            echo '- Argo CD: refreshed `'"${ARGOCD_APPLICATION}"'` on publish; no reconcile wait' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "::warning title=Argo CD refresh not confirmed::${ARGOCD_APPLICATION} refresh returned '${status}'. The release still lands on Argo CD's periodic reconcile (up to three minutes). 401 means ARGOCD_REFRESH_TOKEN expired or was revoked; 403 means the project role changed — see the infra runbook."
+          echo '- Argo CD: refresh not confirmed (`'"${status}"'`); landing on the periodic reconcile' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Record atomic release
         run: |

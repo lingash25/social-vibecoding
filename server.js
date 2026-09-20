@@ -1466,6 +1466,7 @@ module.exports = {
   // the temporal dead zone and crash the whole require.
   get DRAIN_TIMEOUT_MS() { return DRAIN_TIMEOUT_MS; },
   get POOL_CLOSE_TIMEOUT_MS() { return POOL_CLOSE_TIMEOUT_MS; },
+  get SUCCESSOR_ANNOUNCE_TIMEOUT_MS() { return SUCCESSOR_ANNOUNCE_TIMEOUT_MS; },
   __setShutdownTargets: ({ server, pool } = {}) => {
     httpServer = server ?? null;
     shutdownPool = pool ?? null;
@@ -5341,6 +5342,53 @@ const DRAIN_TIMEOUT_MS = 5000;
 // tests/caddy-deploy-grace.test.js pins DRAIN + POOL_CLOSE <= grace — so a
 // pool that refuses to settle can never push the exit past the SIGKILL.
 const POOL_CLOSE_TIMEOUT_MS = 1000;
+
+// ── The process being replaced tells its tabs where traffic went (#2545) ─
+//
+// Nothing in the release chain — the build workflow, the chart, Argo CD, the
+// Deployment controller — reports back to the platform, and nothing in it
+// knows the moment traffic moves as exactly as the process being replaced:
+// Kubernetes terminates the old color only after the new one has been Ready
+// for minReadySeconds, and by the time SIGTERM arrives the preStop sleep has
+// already taken this Pod out of the Service. The Docker rollout writes the
+// same fact to deploy-status.json before it stops the old container.
+//
+// So once the listener has closed — no new request can reach this process,
+// so nothing a tab fetches next can be answered by the build being retired —
+// read the build this deployment is moving to (deploy-status already reads
+// it for the version row's spinner) and, if it is not this one, tell every
+// open events socket. Tabs prefetch it and put up the reload button
+// (public/js/app.js handlePlatformVersion) — they do not reload themselves —
+// seconds before their next poll would have noticed and without waiting for
+// the Deployment to call itself complete. A SIGTERM for any other reason — a
+// node drain, an eviction, a crash restart — finds the target equal to this
+// build and says nothing. Bounded, and run alongside the handler drain rather
+// than before it, so it adds nothing to the shutdown budget the grace test
+// pins.
+const SUCCESSOR_ANNOUNCE_TIMEOUT_MS = 1500;
+
+async function announceSuccessorBuild() {
+  const own = process.env.GIT_SHA;
+  if (!own || own === 'dev') return;
+  let timer = null;
+  try {
+    const status = await Promise.race([
+      deployStatus.read(config),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(null), SUCCESSOR_ANNOUNCE_TIMEOUT_MS);
+      }),
+    ]);
+    const target = status && typeof status.sha === 'string' ? status.sha : null;
+    if (!target || target === own) return;
+    const sockets = ws.pushPlatformVersion({ sha: target, reason: 'rollout' });
+    log.info('server', 'Announced successor build to open sockets', { sha: target, sockets });
+  } catch (err) {
+    log.warn('server', 'Successor build announcement failed', { err: err.message });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 let cleanupStarted = false;
 // Set by start() once the listener is up. cleanup() runs at module scope,
 // so both need to be reachable from here.
@@ -5382,6 +5430,9 @@ async function cleanup() {
       log.warn('server', 'Listener close failed', { err: err.message });
     }
   }
+  // Behind the listener close, deliberately: what the tabs fetch on hearing
+  // this must not be able to land here. Awaited with the drain below.
+  const announced = announceSuccessorBuild();
   if (sweeperHandle) {
     clearInterval(sweeperHandle);
     sweeperHandle = null;
@@ -5420,9 +5471,12 @@ async function cleanup() {
     activeWorkers: startingCount, timeoutMs: DRAIN_TIMEOUT_MS,
   });
 
-  const drained = await lifecycle.waitFor(() => getActiveWorkerCount() === 0, {
-    timeoutMs: DRAIN_TIMEOUT_MS, intervalMs: 500,
-  });
+  const [drained] = await Promise.all([
+    lifecycle.waitFor(() => getActiveWorkerCount() === 0, {
+      timeoutMs: DRAIN_TIMEOUT_MS, intervalMs: 500,
+    }),
+    announced,
+  ]);
 
   if (!drained) {
     log.warn('server', 'Drain timeout — exiting; workers keep running and will be adopted on restart', {

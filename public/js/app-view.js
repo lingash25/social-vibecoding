@@ -3562,6 +3562,9 @@ const AppView = {
     AppView._fillKudosHosts(head);
     if (t.kind === 'issue') AppView._loadIssueComments(item);
     if (t.kind === 'proposal' && ['promoted', 'merging'].includes(item.status)) AppView._loadVoteRoster(item.id);
+    // #2603: the governance twin — loaded for settled rows too, because a
+    // close proposal's page is read after the fact as much as before it.
+    if (t.kind === 'gov') AppView._loadGovVoteRoster(item.id);
     // An auto-expanded transcript (arrived via "Read chat") loads straight
     // away; every other one loads when it is opened.
     if (!changePage && body.transcript && body.transcript.expanded) {
@@ -3653,6 +3656,10 @@ const AppView = {
       body = {
         actions: null,
         note: item.description || (item.payload && item.payload.reason) || null,
+        // #2603: the votes cast on it, in the voters' own words — the same
+        // roster a proposal's page shows. Its own fetch, so the head paints
+        // 'loading' and `_loadGovVoteRoster` republishes when it answers.
+        roster: AppView._govVoteRoster[item.id] || { phase: 'loading' },
       };
     }
 
@@ -13555,6 +13562,60 @@ const AppView = {
     }
   },
 
+  // #2603: the same roster for a GOVERNANCE proposal — who voted which way
+  // and the line each vote carries. Same shape, same cache discipline and
+  // same re-entry guard as `_loadVoteRoster` above (the head calls this on
+  // every paint, and publishing repaints), keyed by issue id. The tally
+  // headline and the countdown stay the card's; this is the names and the
+  // sentences, which no list endpoint carries.
+  _govVoteRoster: Object.create(null),
+  _govVoteRosterInFlight: new Set(),
+  _govVoteRosterStale: new Set(),
+
+  _invalidateGovVoteRoster(issueId) {
+    if (issueId == null) return;
+    const id = Number(issueId);
+    if (AppView._govVoteRoster[issueId]) AppView._govVoteRosterStale.add(id);
+    else delete AppView._govVoteRoster[issueId];
+  },
+
+  async _loadGovVoteRoster(issueId) {
+    if (issueId == null || !AppView.appData) return;
+    if (AppView._govVoteRosterInFlight.has(issueId)) return;
+    const stale = AppView._govVoteRosterStale.has(Number(issueId));
+    if (AppView._govVoteRoster[issueId] && !stale) return;
+    AppView._govVoteRosterStale.delete(Number(issueId));
+    AppView._govVoteRosterInFlight.add(issueId);
+    const publish = (view) => {
+      AppView._govVoteRosterInFlight.delete(issueId);
+      AppView._govVoteRoster[issueId] = view;
+      AppView._renderTopicHead();
+    };
+    try {
+      const slug = AppView.appData.slug;
+      const res = await fetch(`/api/apps/${slug}/governance/${issueId}/votes${AppView._demoQS()}`);
+      if (!res.ok) { publish({ phase: 'hidden' }); return; }
+      const data = await res.json();
+      // A non-breaking space is not needed here (no approver ticks on a
+      // governance roster), but the em dash placeholder is the same.
+      const fmt = (arr) => (arr && arr.length ? arr.map((u) => '@' + u).join(', ') : '—');
+      const yes = Array.isArray(data.yes) ? data.yes : [];
+      const no = Array.isArray(data.no) ? data.no : [];
+      const reasons = (Array.isArray(data.reasons) ? data.reasons : [])
+        .filter((q) => q && q.username && q.reason)
+        .map((q) => ({ who: '@' + q.username, vote: q.vote === 'no' ? 'no' : 'yes', text: String(q.reason) }));
+      if (!yes.length && !no.length) { publish({ phase: 'hidden' }); return; }
+      publish({
+        phase: 'ready',
+        yes: { label: `Yes (${yes.length})`, names: fmt(yes) },
+        no: { label: `No (${no.length})`, names: fmt(no) },
+        reasons,
+      });
+    } catch {
+      publish({ phase: 'hidden' });
+    }
+  },
+
   // "Create proposal" — proposals are PRs, and PRs come from dev
   // sessions, so this opens a fresh session on the Sessions sub-tab
   // with a one-line hint that promoting the session's PR creates the
@@ -18219,10 +18280,28 @@ const AppView = {
   //   - the outcome must be reported. This swallowed every non-ok response
   //     (including the 409 you get when someone else decided it first) and
   //     every exception, so a failed vote looked exactly like a successful one.
-  async castIssueVote(issueId, vote) {
+  //
+  // #2603: it carries the same line a PR vote does. `opts.reason` follows
+  // castVote's contract exactly — a string is the line, null sends none
+  // without asking, an absent key asks first — and the issue vocabulary
+  // ('up'/'down') is mapped to the roster's ('yes'/'no') for the wording.
+  async castIssueVote(issueId, vote, opts = null) {
     const key = `issue:${issueId}`;
     if (AppView._voteInFlight.has(key)) return;
     AppView._voteInFlight.add(key);
+
+    // Asked BEFORE anything is painted, so a cancelled No leaves the card
+    // exactly as it was — the same ordering castVote uses.
+    let reason = null;
+    try {
+      reason = await AppView._resolveVoteReason(vote === 'down' ? 'no' : 'yes', opts);
+    } catch {
+      reason = null;
+    }
+    if (reason === false) {
+      AppView._voteInFlight.delete(key);
+      return;
+    }
 
     const issue = (AppView._govProposals || []).find((g) => g.id === issueId);
     const kind = issue ? issue.kind : null;
@@ -18243,7 +18322,7 @@ const AppView = {
       const res = await fetch(`/api/issues/${issueId}/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vote }),
+        body: JSON.stringify({ vote, ...(reason ? { reason } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
 
@@ -18251,10 +18330,16 @@ const AppView = {
         // 409 "Issue is not open" is the common one: someone else's vote
         // decided it between this card rendering and the click landing.
         finish();
-        PlatformUI.toast(data.error || `Vote failed (HTTP ${res.status}).`);
+        // #2603: a No the server would not take without its line says so in
+        // the server's own words rather than as an opaque failure.
+        PlatformUI.toast((data.error === 'reason_required' && data.message)
+          || data.error || `Vote failed (HTTP ${res.status}).`);
         AppView.refreshDevData('vote');
         return;
       }
+
+      // The roster under the card is now a version behind.
+      AppView._invalidateGovVoteRoster(issueId);
 
       // If a rename proposal just crossed the threshold, the WS app_update
       // event will refresh state for everyone; we just reload the panel.

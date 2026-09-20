@@ -198,7 +198,20 @@ test('the bubble is the Messages screen\'s shape on the raised surface, and the 
   // and the dark-mode Messages bubble already use.
   assert.match(bubble[1], /background: var\(--dc-raised\);/);
   assert.match(bubble[1], /max-width: min\(78%, 640px\);/);
-  assert.match(css, /\.gc-bubble-self \{ background: var\(--accent-tint\); \}/, 'yours in the tint the dev chat and the Messages screen give your turns');
+  // Yours in the tint the dev chat and the Messages screen give your turns —
+  // but composited over the same raised surface the other bubbles sit on,
+  // rather than standing alone. `--accent-tint` is translucent, so a tint-only
+  // bubble rendered whatever the ROW was painted, and the row's hover/tap
+  // highlight arrived inside the message box with it (#2464). Pinned in full,
+  // colour resolution and all, by tests/group-chat-row-highlight.test.js.
+  const self = css.match(/\.gc-bubble-self \{([\s\S]*?)\}/);
+  assert.ok(self, 'the self-bubble rule');
+  assert.match(self[1], /background-color: var\(--dc-raised\);/, 'yours sits on the same surface as everyone else\'s');
+  assert.match(
+    self[1],
+    /background-image: linear-gradient\(var\(--accent-tint\), var\(--accent-tint\)\);/,
+    'yours in the tint the dev chat and the Messages screen give your turns'
+  );
   assert.match(css, /#gc-messages \.gc-msg-self \.gc-react-add \{ right: auto; left: 6px; \}/);
   assert.match(css, /\.messages-message-self \.messages-bubble \{ background: var\(--accent-tint\); \}/, 'the same tint the Messages screen uses');
   assert.match(css, /#dev-topic-thread \.gc-msg-self > \.min-w-0 \{ background: var\(--accent-tint\); \}/, 'and the thread keeps its own in-place tint');

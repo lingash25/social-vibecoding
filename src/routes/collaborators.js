@@ -18,6 +18,7 @@ const notifications = require('../services/notifications');
 const userDirectory = require('../services/user-directory');
 const events = require('../services/events');
 const { drainGuard } = require('../services/lifecycle');
+const { userDirectoryLimiter } = require('../middleware/rate-limits');
 
 // Hydrate one freshly-inserted notification row into the serialize()
 // wire shape (same column set listForUser produces) and push it live.
@@ -58,7 +59,27 @@ function collaboratorRoutes(config) {
   // resolves handles lands on every surface at once. The wire shape here
   // is unchanged: { users: [...] }, no has_more. Messages uses the same
   // matching helpers but adds its access-specific self/block exclusions.
-  router.get('/api/users/search', async (req, res) => {
+  //
+  // `excludeApp` IS AN ACCESS-GATED FILTER (#2521). It answers a
+  // membership question — "is this handle already on that app?" — so it
+  // must be resolved through appAccess.getAppForUser at the same 'collab'
+  // level every other route in this file uses, not with a bare slug
+  // lookup. snait's handler-level reproduction on the issue showed why:
+  // with the bare lookup, a caller who is not a member of a private app
+  // could diff the same search with and without `excludeApp=<private
+  // slug>` and read off exactly which returned handles collaborate on
+  // that app. A slug the caller cannot reach is SILENTLY IGNORED — the
+  // search runs unfiltered rather than 403ing or 404ing, because either
+  // refusal would itself answer "that app exists and you are not on it",
+  // and because the only real caller (the Members dialog typeahead in
+  // features/dialogs/members-controller.js) always passes an app it
+  // already holds collab access to, so an honest request never notices.
+  //
+  // The limiter is the same `userDirectoryLimiter` (120/min/user) the
+  // sibling app-directory search carries, for the same reason: this is a
+  // per-keystroke typeahead over the whole user table, and it was the
+  // one directory search surface with no bucket at all.
+  router.get('/api/users/search', userDirectoryLimiter, async (req, res) => {
     const messageScope = req.query.scope === 'messages';
     const q = typeof req.query.q === 'string'
       ? req.query.q.trim().slice(0, messageScope ? 255 : 32)
@@ -67,10 +88,11 @@ function collaboratorRoutes(config) {
     try {
       let excludeAppId = null;
       if (req.query.excludeApp) {
-        const { rows } = await pool.query(
-          'SELECT id FROM apps WHERE slug = $1', [String(req.query.excludeApp)]
+        const app = await appAccess.getAppForUser(
+          pool, String(req.query.excludeApp), req.user, 'collab', appAccess.ACCESS_COLUMNS
         );
-        excludeAppId = rows[0]?.id || null;
+        // No access (or no such slug) → no exclusion, no signal.
+        excludeAppId = app?.id || null;
       }
       if (!messageScope) {
         const { users } = await userDirectory.searchPrefix(pool, q, 10, { excludeAppId });

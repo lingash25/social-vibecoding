@@ -99,6 +99,35 @@ test('Kubernetes workflow resolves all three images before publishing a release'
   assert.match(workerDockerfile, /@anthropic-ai\/claude-code@\$\{CLAUDE_CODE_VERSION\}/);
 });
 
+test('Kubernetes workflow asks Argo CD to refresh on publish, and can never fail the release doing so', () => {
+  // The step exists to remove Argo's up-to-three-minute reconcile wait from
+  // the merge-to-running gap (#2545). Its safety properties matter more than
+  // its effect: services/release-watch.js reads this run's conclusion, so a
+  // refresh that could fail the run would report a healthy release as
+  // stalled. Every guard below is one of those properties.
+  const workflow = read('.github/workflows/build-kubernetes-images.yml');
+  const release = workflow.slice(workflow.indexOf('\n  release:\n'));
+  const step = release.slice(release.indexOf('- name: Ask Argo CD to pick up the release now'));
+  assert.ok(step.length > 0, 'the release job asks Argo CD to refresh');
+  assert.ok(release.indexOf('- name: Publish OCI Helm release') < release.indexOf('- name: Ask Argo CD to pick up the release now'),
+    'the refresh follows the push: a refresh before the tag exists re-reads the old registry');
+
+  const body = step.slice(0, step.indexOf('- name: Record atomic release'));
+  assert.match(body, /continue-on-error: true/,
+    'a failed refresh must not turn a published release red — release-watch would call it a stall');
+  assert.match(body, /if: steps\.chart\.outputs\.release_channel == 'stable' && env\.ARGOCD_REFRESH_TOKEN != ''/,
+    'inert until the infra side provisions the token, and only for the releases Argo tracks');
+  assert.match(release, /^    env:\n(?:      #.*\n)*      ARGOCD_REFRESH_TOKEN: \$\{\{ secrets\.ARGOCD_REFRESH_TOKEN \}\}/m,
+    'the secret is mapped through job env because a step `if:` cannot read `secrets`');
+  assert.match(body, /\?refresh=hard/, 'a normal refresh can be served the cached tag list for the 0.1.* range');
+  assert.match(body, /--max-time \d+/, 'bounded: the request blocks until Argo has compared');
+  assert.match(body, /\/api\/v1\/applications\/\$\{ARGOCD_APPLICATION\}/);
+  assert.match(body, /ARGOCD_APPLICATION: social-vibecoding-platform/);
+  assert.match(body, /::warning title=Argo CD refresh not confirmed::/,
+    'a token that expired or was revoked is visible on the run, not silent');
+  assert.doesNotMatch(body, /\/sync\b/, 'the workflow only refreshes; automated sync owns the rollout');
+});
+
 test('migration command validates the target database identifier', () => {
   const { databaseName } = require('../scripts/migrate-kubernetes');
   assert.equal(databaseName('postgres://user:pass@db:5432/app_usernode_2d5619'), 'app_usernode_2d5619');
