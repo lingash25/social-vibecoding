@@ -62,8 +62,9 @@ const {
   ok, fail, iso, num, paginate, meta, ValidationError,
 } = require('./helpers');
 const { TEMPLATE_JOIN_COLUMNS_SQL, buildChallengeListItem } = require('./challenge-view');
-const { loadOnboarding, visibleChallenges, challengeCategory, resolveProgress } =
-  require('../../services/topochain/challenge-onboarding');
+const {
+  loadOnboarding, visibleChallenges, challengeCategory, resolveProgress, loadEventBlocks,
+} = require('../../services/topochain/challenge-onboarding');
 const events = require('../../services/events');
 
 // Fire-and-forget tally behind POST /app-version/check, so the admin screen
@@ -694,6 +695,18 @@ function topochainPublicRoutes(config) {
         for (const row of countRows) counts.set(Number(row.challenge_id), Number(row.credits));
       }
 
+      // And the viewer's block count, for the same reason (#2492). It cannot
+      // come from the ledger — block scores are only ever written to
+      // leaderboard snapshots — so the row used to carry no progress at all
+      // for a `blocks_produced` challenge and its card drew a ring with no
+      // words beside it, while Home, which reads the snapshot, showed the
+      // real count. One query for the whole list, and only when the list
+      // actually holds such a card.
+      const wantsBlocks = visible.some((r) => metricOf(r)?.kind === 'blocks_produced');
+      const blocksByEvent = wantsBlocks && req.user?.id
+        ? await loadEventBlocks(pool, req.user.id, [id])
+        : new Map();
+
       const data = visible
         .map((r) => {
           const item = buildChallengeListItem(r);
@@ -703,14 +716,17 @@ function topochainPublicRoutes(config) {
           item.card_preview.label = (category || '').toUpperCase();
           if (onboarding?.progress.has(item.id)) {
             item.progress = onboarding.progress.get(item.id);
-          } else if (req.user?.id && item.metric?.kind !== 'blocks_produced') {
-            // `blocks_produced` is left out on purpose: its count comes from
-            // the leaderboard snapshot rather than from ledger rows, and a
-            // bare ring is what that card is meant to show.
+          } else if (req.user?.id) {
+            // `blocks_produced` is in this now (#2492). Its count is the
+            // viewer's newest snapshot rather than a ledger row count, which
+            // is the one thing resolveProgress needs told; everything else —
+            // the done rule, the clamp, the target — is the rule every other
+            // metric goes through, so the tab and Home print one number.
             item.progress = resolveProgress({
               metricKind: item.metric ? item.metric.kind : null,
               metricTarget: item.metric ? item.metric.target : null,
               activityCount: counts.get(Number(item.id)) || 0,
+              blocks: blocksByEvent.get(Number(item.season_event_id)),
             });
           }
           return item;

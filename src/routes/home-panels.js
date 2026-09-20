@@ -66,8 +66,9 @@ const { parseRewardPoints } = require('../services/topochain/challenge-rules');
 // The count-the-rows rule UNDER-counts where an admin credits a batch in a
 // single row. It is the most honest signal available today; when a real
 // per-user progress feed lands, THIS is the one function to replace.
-const { resolveProgress, loadOnboarding, challengeCategory } =
-  require('../services/topochain/challenge-onboarding');
+const {
+  resolveProgress, loadOnboarding, challengeCategory, NEWEST_EVENT_BLOCKS_SQL,
+} = require('../services/topochain/challenge-onboarding');
 
 // resolveProgress's done rule, in SQL. It has to exist in both languages:
 // SQL needs it to sort not-done rows first and to pick WHICH rows survive
@@ -97,9 +98,11 @@ const DONE_SQL = `
 // so they're substituted in rather than named).
 const MY_COUNT_SQL = `(SELECT COUNT(*) FROM user_activities ua
               WHERE ua.user_id = $1 AND ua.challenge_id = c.id)`;
-const MY_BLOCKS_SQL = `(SELECT ls.event_total_produced_blocks FROM leaderboard_snapshots ls
-              WHERE ls.user_id = $1 AND ls.season_event_id = c.season_event_id
-              ORDER BY ls.snapshot_at DESC, ls.id DESC LIMIT 1)`;
+// The snapshot read now lives beside resolveProgress, because the challenge
+// LISTS need the same number and a second copy of it is how the tab and Home
+// came to disagree (#2492). This name is kept: profile.js imports it from
+// here, and so does the test that pins the two to one rule.
+const MY_BLOCKS_SQL = NEWEST_EVENT_BLOCKS_SQL;
 
 const DONE_EXPR = DONE_SQL
   .replace(/%COUNT%/g, MY_COUNT_SQL)

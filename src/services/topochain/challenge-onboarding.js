@@ -2,6 +2,21 @@
 
 const ONBOARDING_LIMIT = 3;
 
+// THE VIEWER'S BLOCK COUNT, AND THE ONLY PLACE IT LIVES. Block scores are
+// written to leaderboard snapshots and never to the points ledger
+// (services/topochain/snapshot-builder.js), so a `blocks_produced` challenge
+// cannot be counted from `user_activities` the way every other metric is.
+// This correlated subquery reads the viewer's newest snapshot for the event
+// the challenge belongs to, and it is the ONE copy of that SQL: a query that
+// already has a `c` row to correlate against embeds it (home-panels.js
+// re-exports it as MY_BLOCKS_SQL for its own row query and profile.js's, and
+// loadOnboarding below selects it as `blocks`), and the challenge lists,
+// whose query carries no user parameter, run it through loadEventBlocks.
+// $1 is the viewer's id.
+const NEWEST_EVENT_BLOCKS_SQL = `(SELECT ls.event_total_produced_blocks FROM leaderboard_snapshots ls
+              WHERE ls.user_id = $1 AND ls.season_event_id = c.season_event_id
+              ORDER BY ls.snapshot_at DESC, ls.id DESC LIMIT 1)`;
+
 // Match the home panel's existing ledger-based progress rule. Numeric
 // challenges require the target number of credits, not merely some points.
 function resolveProgress({ metricKind, metricTarget, activityCount, blocks, completionRecorded = false }) {
@@ -76,9 +91,7 @@ async function loadOnboarding(pool, userId, { seasonId, eventId } = {}) {
               WHERE ua.user_id = $1
                 AND credited.challenge_template_id = c.challenge_template_id
                 AND ua.metadata->>'kind' = 'challenge_completion') AS completion_recorded,
-            (SELECT ls.event_total_produced_blocks FROM leaderboard_snapshots ls
-              WHERE ls.user_id = $1 AND ls.season_event_id = c.season_event_id
-              ORDER BY ls.snapshot_at DESC, ls.id DESC LIMIT 1) AS blocks
+            ${NEWEST_EVENT_BLOCKS_SQL} AS blocks
        FROM challenges c
        JOIN season_events se ON se.id = c.season_event_id
        JOIN challenge_templates ct ON ct.id = c.challenge_template_id
@@ -88,6 +101,27 @@ async function loadOnboarding(pool, userId, { seasonId, eventId } = {}) {
     [userId ?? null, seasonId ?? eventId]
   );
   return buildOnboarding(rows);
+}
+
+// The same value, for the callers that cannot correlate it: the challenge
+// LISTS (routes/topochain/public.js and mobile.js) select their rows without
+// a user parameter, and mobile's list can span a whole season, so the answer
+// is per season event rather than per row. UNNEST gives the shared subquery
+// exactly the one-column `c` it expects, so there is still one copy of it.
+// Returns a Map of season_event_id -> blocks (null where the viewer has no
+// snapshot on that event), and asks Postgres nothing for a signed-out viewer
+// or a list with no block-production card on it.
+async function loadEventBlocks(pool, userId, eventIds) {
+  const ids = [...new Set((eventIds || []).map(Number).filter(Number.isFinite))];
+  if (userId == null || !ids.length) return new Map();
+  const { rows } = await pool.query(
+    `/* challenge event blocks */
+     SELECT c.season_event_id, ${NEWEST_EVENT_BLOCKS_SQL} AS blocks
+       FROM UNNEST($2::bigint[]) AS c(season_event_id)`,
+    [userId, ids]
+  );
+  return new Map(rows.map((r) => [Number(r.season_event_id),
+    r.blocks == null ? null : Number(r.blocks)]));
 }
 
 function visibleChallenges(items, onboarding, idKey = 'id') {
@@ -104,6 +138,6 @@ function challengeCategory(id, category, onboarding) {
 }
 
 module.exports = {
-  ONBOARDING_LIMIT, resolveProgress, buildOnboarding, loadOnboarding,
-  visibleChallenges, challengeCategory,
+  ONBOARDING_LIMIT, NEWEST_EVENT_BLOCKS_SQL, resolveProgress, buildOnboarding,
+  loadOnboarding, loadEventBlocks, visibleChallenges, challengeCategory,
 };

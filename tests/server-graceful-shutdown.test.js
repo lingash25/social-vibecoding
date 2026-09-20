@@ -227,3 +227,129 @@ test('SIGTERM and SIGINT are both wired to cleanup', () => {
     restore();
   }
 });
+
+// ── #2545: the process being replaced tells its tabs where traffic went ──
+//
+// At SIGTERM during a rollout, the build this deployment is moving to is
+// already on record (deploy-status reads it for the version row), and the
+// listener has just closed — so nothing a tab fetches on hearing this can be
+// answered by the build being retired. cleanup() reads the target and, if it
+// is another build, pushes `platform_version` to every open events socket.
+// Modelled through the same seam as the rest of this file: deploy-status
+// and ws are the shared module instances server.js holds, stubbed in place.
+
+const deployStatus = require('../src/services/deploy-status');
+const wsService = require('../src/services/ws');
+const OWN = 'a'.repeat(40);
+const NEXT = 'b'.repeat(40);
+
+/** `gitSha: null` runs with GIT_SHA unset. */
+function withRollout({ gitSha = OWN, read } = {}, run) {
+  const savedSha = process.env.GIT_SHA;
+  const savedRead = deployStatus.read;
+  const savedPush = wsService.pushPlatformVersion;
+  const pushes = [];
+  if (gitSha === null) delete process.env.GIT_SHA;
+  else process.env.GIT_SHA = gitSha;
+  deployStatus.read = read;
+  wsService.pushPlatformVersion = (payload) => { pushes.push(payload); return 2; };
+  return Promise.resolve()
+    .then(() => run(pushes))
+    .finally(() => {
+      if (savedSha === undefined) delete process.env.GIT_SHA;
+      else process.env.GIT_SHA = savedSha;
+      deployStatus.read = savedRead;
+      wsService.pushPlatformVersion = savedPush;
+    });
+}
+
+test('a rollout SIGTERM announces the successor build to open sockets, after the listener closes', async () => {
+  const { server, logs, restore } = loadServer();
+  try {
+    const seq = [];
+    const listener = {
+      close(cb) { seq.push('listenerClose'); if (cb) cb(); },
+      closeIdleConnections() {},
+      closeAllConnections() {},
+    };
+    await withRollout({ read: async () => ({ deploying: true, sha: NEXT }) }, async (pushes) => {
+      wsService.pushPlatformVersion = (payload) => { seq.push('push'); pushes.push(payload); return 2; };
+      const order = await runCleanup(server, { listener, pool: fakePool() });
+      assert.deepEqual(order, ['exit:0']);
+      assert.deepEqual(pushes, [{ sha: NEXT, reason: 'rollout' }],
+        'the tabs are told the build their requests land on now');
+      assert.deepEqual(seq, ['listenerClose', 'push'],
+        'told only once nothing they fetch next can reach this process');
+      assert.ok(logs.some((l) => l.msg === 'Announced successor build to open sockets'
+        && l.data.sha === NEXT && l.data.sockets === 2));
+    });
+  } finally {
+    restore();
+  }
+});
+
+test('a SIGTERM that is not a rollout says nothing', async () => {
+  // Node drain, eviction, crash restart: the deployment still targets the
+  // build this process is. Announcing it would only make every tab re-ask
+  // for a build it already has.
+  const { server, restore } = loadServer();
+  try {
+    await withRollout({ read: async () => ({ deploying: false, sha: OWN }) }, async (pushes) => {
+      await runCleanup(server, { listener: fakeListener(), pool: fakePool() });
+      assert.deepEqual(pushes, []);
+    });
+  } finally {
+    restore();
+  }
+});
+
+test('a process with no build of its own does not look', async () => {
+  // Local dev, and the staging previews: GIT_SHA unset or `dev`. There is
+  // no successor to name, and nothing must be read on the way out.
+  const { server, restore } = loadServer();
+  try {
+    for (const gitSha of [null, 'dev']) {
+      let reads = 0;
+      await withRollout({ gitSha, read: async () => { reads += 1; return { sha: NEXT }; } }, async (pushes) => {
+        await runCleanup(server, { listener: fakeListener(), pool: fakePool() });
+        assert.deepEqual(pushes, []);
+        assert.equal(reads, 0);
+      });
+    }
+  } finally {
+    restore();
+  }
+});
+
+test('a target that cannot be read — unreachable, hung or failed — costs nothing but a log line', async () => {
+  const { server, logs, restore } = loadServer();
+  try {
+    // No answer: the docker path with no marker, or a staging preview.
+    await withRollout({ read: async () => null }, async (pushes) => {
+      await runCleanup(server, { listener: fakeListener(), pool: fakePool() });
+      assert.deepEqual(pushes, []);
+    });
+    // A rejection.
+    await withRollout({ read: async () => { throw new Error('apiserver away'); } }, async (pushes) => {
+      const order = await runCleanup(server, { listener: fakeListener(), pool: fakePool() });
+      assert.deepEqual(order, ['exit:0']);
+      assert.deepEqual(pushes, []);
+      assert.ok(logs.some((l) => l.msg === 'Successor build announcement failed' && /apiserver away/.test(l.data.err)));
+    });
+    // A read that never settles is raced against SUCCESSOR_ANNOUNCE_TIMEOUT_MS,
+    // which sits inside the drain window: the announcement is awaited
+    // alongside the drain, so it can never push exit past the budget the
+    // grace test pins.
+    assert.ok(server.SUCCESSOR_ANNOUNCE_TIMEOUT_MS <= server.DRAIN_TIMEOUT_MS);
+    await withRollout({ read: () => new Promise(() => {}) }, async (pushes) => {
+      const startedAt = Date.now();
+      const order = await runCleanup(server, { listener: fakeListener(), pool: fakePool() });
+      assert.deepEqual(order, ['exit:0']);
+      assert.deepEqual(pushes, []);
+      assert.ok(Date.now() - startedAt < server.DRAIN_TIMEOUT_MS,
+        'a hung read is abandoned inside the drain window, not waited on');
+    });
+  } finally {
+    restore();
+  }
+});

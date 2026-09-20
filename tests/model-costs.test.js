@@ -9,9 +9,12 @@
 //   2. the token profile comes from the platform's own recorded usage when
 //      there is enough of it, and from ONE documented constant otherwise —
 //      and says which;
-//   3. the OBSERVED figures are per CHANGE, not per turn, and the two
+//   3. the OBSERVED figures are per CHANGE, not per turn: all THREE
 //      per-turn records that carry a model id are folded into one bucket
-//      per model whichever label they used;
+//      per model whichever label they used, a session is counted once and
+//      attributed to the model that spent the most in it, and only
+//      sessions recorded since the agent's spend gained a model dimension
+//      count at all (#2592);
 //   4. an admin override replaces the shown estimate and clears back to the
 //      derived one, and nothing rewrites an estimate automatically.
 //
@@ -145,28 +148,144 @@ test('the token profile is measured when there is enough history, and named eith
 
 // ── 3. Observed spend is per CHANGE ─────────────────────────────────────
 
-test('the observed aggregate reads both per-turn records, per change, over the window', async () => {
-  const pool = poolFor([[/turn_costs/, [
-    { model: 'z-ai/glm-5.3-flash', changes: '4', avg_cents: '12', median_cents: '10' },
-    { model: 'openrouter/z-ai/glm-5.3-flash', changes: '1', avg_cents: '22', median_cents: '22' },
-    { model: 'claude-opus-5', changes: '2', avg_cents: '150', median_cents: '140' },
-  ]]]);
+// A pool that answers the observed aggregate with `rows` and the
+// observed-since stamp with `since`. `since: null` is a platform that has
+// not stamped it yet.
+function observedPool(rows, since = '2026-01-01 00:00:00+00') {
+  const calls = [];
+  return {
+    calls,
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/SELECT value FROM platform_settings/.test(sql)) {
+        return { rows: since == null ? [] : [{ value: since }] };
+      }
+      if (/turn_costs/.test(sql)) return { rows };
+      return { rows: [] };
+    },
+  };
+}
+
+test('the observed aggregate reads all three per-turn records, per change, over the window', async () => {
+  const pool = observedPool([
+    { session_id: 1, model: 'z-ai/glm-5.3-flash', cents: '10' },
+    { session_id: 2, model: 'openrouter/z-ai/glm-5.3-flash', cents: '22' },
+    { session_id: 3, model: 'claude-opus-5', cents: '140' },
+  ]);
   const observed = await modelCosts.observedPerModel(pool, { days: 30 });
-  const sql = pool.calls[0].sql;
+  const sql = pool.calls[1].sql;
   assert.match(sql, /FROM chat_session_messages/, 'the Mayor and direct-reply record');
   assert.match(sql, /FROM agent_turns/, 'the OpenRouter coding-turn record');
-  assert.match(sql, /GROUP BY model, session_id/, 'per CHANGE, not per turn');
-  assert.match(sql, /PERCENTILE_CONT\(0\.5\)/, 'a median, because a mean is the long session');
-  assert.doesNotMatch(sql, /agent_cost_cents/,
-    'the Claude coding ledger has no model dimension and must not be guessed at');
-  assert.deepEqual(pool.calls[0].params, ['30']);
+  assert.match(sql, /FROM chat_session_agent_model_costs/,
+    '#2592: the Claude coding agent’s own spend, which is most of what a change costs');
+  assert.match(sql, /GROUP BY t\.session_id, t\.model/, 'per CHANGE, not per turn');
+  assert.deepEqual(pool.calls[1].params, ['30', new Date('2026-01-01T00:00:00Z').toISOString()]);
 
-  // The two labels for GLM are one bucket, with a changes-weighted average.
-  const glm = observed.get('z-ai/glm-5.3-flash');
-  assert.equal(glm.changes, 5);
-  assert.equal(Math.round(glm.avgCents * 100) / 100, 14);
-  assert.equal(glm.medianCents, 10, 'the busier label’s median, not an average of two');
-  assert.equal(observed.get('claude-opus-5').changes, 2);
+  // The two labels for GLM are one model, so those are two changes on it.
+  assert.equal(observed.get('z-ai/glm-5.3-flash').changes, 2);
+  assert.equal(observed.get('z-ai/glm-5.3-flash').avgCents, 16);
+  assert.equal(observed.get('z-ai/glm-5.3-flash').medianCents, 16);
+  assert.equal(observed.get('claude-opus-5').changes, 1);
+});
+
+test('#2592: the coding agent’s spend is counted, not left out', async () => {
+  // One change: a $0.15 chat turn and a $9.00 coding-agent bill. The old
+  // aggregate saw only the chat turn, which is exactly why the observed
+  // figures read far below what a change costs.
+  const pool = observedPool([
+    { session_id: 11, model: 'claude-opus-5', cents: '15' },
+    { session_id: 11, model: 'claude-opus-5', cents: '900' },
+  ]);
+  const observed = await modelCosts.observedPerModel(pool, { days: 30 });
+  const opus = observed.get('claude-opus-5');
+  assert.equal(opus.changes, 1, 'one session is one change');
+  assert.equal(opus.avgCents, 915, 'the whole session, agent spend included');
+  assert.equal(opus.medianCents, 915);
+});
+
+test('#2592: a session that switched models is ONE change, on its dominant model', async () => {
+  const pool = observedPool([
+    // Most of this change ran on Opus; a little of it on Sonnet.
+    { session_id: 21, model: 'claude-opus-5', cents: '800' },
+    { session_id: 21, model: 'claude-sonnet-5', cents: '200' },
+    // A second change, wholly on Opus.
+    { session_id: 22, model: 'claude-opus-5', cents: '600' },
+  ]);
+  const observed = await modelCosts.observedPerModel(pool, { days: 30 });
+  const opus = observed.get('claude-opus-5');
+  assert.equal(opus.changes, 2, 'two sessions, not three partial ones');
+  assert.equal(opus.avgCents, 800, 'each change costs what the WHOLE session cost');
+  assert.equal(opus.medianCents, 800);
+  assert.equal(observed.get('claude-sonnet-5'), undefined,
+    'the minority model does not collect a partial change of its own');
+});
+
+test('#2592: the median is PERCENTILE_CONT’s answer, including on even counts', async () => {
+  const pool = observedPool([
+    { session_id: 1, model: 'claude-opus-5', cents: '100' },
+    { session_id: 2, model: 'claude-opus-5', cents: '200' },
+    { session_id: 3, model: 'claude-opus-5', cents: '300' },
+    { session_id: 4, model: 'claude-opus-5', cents: '1000' },
+  ]);
+  const opus = (await modelCosts.observedPerModel(pool, { days: 30 })).get('claude-opus-5');
+  assert.equal(opus.changes, 4);
+  assert.equal(opus.medianCents, 250, 'the mean of the two middle changes');
+  assert.equal(opus.avgCents, 400, 'and the mean is dragged by the long one, as a mean is');
+});
+
+test('#2592: only sessions recorded since the stamp are counted at all', async () => {
+  // The cutoff is passed to the query rather than applied afterwards, so
+  // history with no model against the agent's spend cannot reach the
+  // aggregate and keep understating it.
+  const stamped = observedPool([{ session_id: 1, model: 'claude-opus-5', cents: '500' }]);
+  await modelCosts.observedPerModel(stamped, { days: 30 });
+  assert.match(stamped.calls[1].sql, /s\.created_at >= \$2::timestamptz/);
+
+  // No stamp: nothing is known to be clean, so nothing is reported and the
+  // aggregate is never even run.
+  const unstamped = observedPool([{ session_id: 1, model: 'claude-opus-5', cents: '500' }], null);
+  assert.equal((await modelCosts.observedPerModel(unstamped, { days: 30 })).size, 0);
+  assert.equal(unstamped.calls.length, 1, 'only the stamp read');
+
+  // Garbage in the stamp is the same answer, not a throw.
+  const bad = observedPool([], 'not a date');
+  assert.equal(await modelCosts.observedSince(bad), null);
+});
+
+test('#2592: the console states what one change is, and what it counts', () => {
+  // The figure this screen exists to be trusted on is only trustworthy if
+  // the screen says what it counted. Three things have to be on the page:
+  // that a change is one dev session, that the coding agent's own spend is
+  // in, and which model a mixed session is attributed to.
+  const admin = read('frontend/src/features/admin/admin-model-costs.tsx');
+  assert.match(admin, /One change is one dev session/);
+  assert.match(admin, /the coding agent\u2019s own spend included/);
+  assert.match(admin, /model that spent the most in it/);
+  // And the cutoff, because "observed over the last 30 days" alone would
+  // read as all of them.
+  assert.match(admin, /Only changes started on or after \$\{cleanSince\} are counted/);
+  assert.match(admin, /observedSince/, 'the payload carries the stamp the sentence names');
+
+  // The declared check pins that sentence on the real screen.
+  const dapp = JSON.parse(read('dapp.json'));
+  assert.ok(
+    dapp.tests.some((t) => t.path === '/#admin/model-costs'
+      && t.expectSelector === '#admin-model-costs-profile'
+      && /One change is one dev session/.test(t.expectText || '')),
+    'the new sentence carries a declared check like the paragraph it joins',
+  );
+});
+
+test('#2592: the admin payload names the day the clean count starts', async () => {
+  const pool = observedPool([{ session_id: 1, model: 'claude-opus-5', cents: '500' }]);
+  const payload = await modelCosts.adminPayload(pool, { days: 30 });
+  assert.equal(payload.observedSince, new Date('2026-01-01T00:00:00Z').toISOString());
+  const opus = payload.rows.find((r) => r.modelId === 'claude-opus-5');
+  assert.equal(opus.observedChanges, 1);
+  assert.equal(opus.observedAvgCents, 500);
+
+  const unstamped = observedPool([], null);
+  assert.equal((await modelCosts.adminPayload(unstamped, { days: 30 })).observedSince, null);
 });
 
 // ── 4. Overrides ────────────────────────────────────────────────────────

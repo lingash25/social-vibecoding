@@ -438,3 +438,261 @@ test('mergeCredits: the author, the counted Yes voters, then the objectors with 
     restore();
   }
 });
+
+// ── 6. The issue side (#2603) ─────────────────────────────────────────
+//
+// A governance proposal is a proposal, so its votes carry the same line:
+// required on a No, optional on a Yes, the same 280-character cap and the
+// same normaliser — reused from routes/votes.js rather than restated in
+// routes/issues.js. What differs is the toggle: an issue vote re-cast on the
+// same side RETRACTS, so there is no same-side upsert to carry a line
+// across, and the line must not be demanded of somebody taking a vote back.
+
+function makeIssuePool(handlers) {
+  const calls = [];
+  const query = async (sql, params) => {
+    calls.push({ sql: String(sql), params });
+    for (const [re, rows] of handlers) {
+      if (re.test(String(sql))) {
+        const out = typeof rows === 'function' ? rows(params) : rows;
+        return { rows: out, rowCount: out.length };
+      }
+    }
+    return { rows: [], rowCount: 0 };
+  };
+  return {
+    calls,
+    query,
+    async connect() { return { query, release() {} }; },
+    issued(re) { return calls.find((c) => re.test(c.sql)); },
+  };
+}
+
+const GOV_ROW = (over) => ({
+  id: 61, app_id: 9, app_slug: 'cool-app', kind: 'close_issue', status: 'open',
+  created_by: 42, title: 'Close issue: "Dark mode resets"',
+  // No issueNumber: the apply helper returns before touching GitHub, which
+  // keeps these tests about the VOTE rather than about the close.
+  payload: { issueTitle: 'Dark mode resets' },
+  ...over,
+});
+
+function loadIssueVotes(pool) {
+  const realActiveUsers = require('../src/services/active-users');
+  const realWs = require('../src/services/ws');
+  const ids = {
+    pool: require.resolve('../src/db/pool'),
+    ws: require.resolve('../src/services/ws'),
+    appAccess: require.resolve('../src/services/app-access'),
+    activeUsers: require.resolve('../src/services/active-users'),
+    adminApproval: require.resolve('../src/services/admin-approval'),
+    subject: require.resolve('../src/routes/issues'),
+  };
+  const orig = {};
+  for (const [k, id] of Object.entries(ids)) orig[k] = require.cache[id];
+
+  const systemMessages = [];
+  stub(ids.pool, { getPool: () => pool });
+  stub(ids.ws, {
+    ...realWs,
+    sendSystemMessage: async (_pool, appId, content, msgType, metadata, thread) => {
+      systemMessages.push({ appId, content, msgType, metadata, thread });
+    },
+    pushIssueUpdate() {},
+    pushAppUpdate() {},
+  });
+  stub(ids.appAccess, {
+    ACCESS_COLUMNS: '*',
+    issueCollabGuard: () => (_req, _res, next) => next(),
+    getAppForUser: async () => ({ id: 9, slug: 'cool-app' }),
+  });
+  stub(ids.activeUsers, {
+    ...realActiveUsers,
+    getActiveUserStats: async () => ({ active: 3, majority: 2 }),
+  });
+  stub(ids.adminApproval, { isAppLocked: async () => false, hasAdminUpVote: async () => true });
+
+  delete require.cache[ids.subject];
+  const router = require(ids.subject).issueRoutes({ databaseUrl: 'postgres://test', jwtSecret: 's' });
+  const restore = () => {
+    for (const [k, id] of Object.entries(ids)) {
+      if (orig[k]) require.cache[id] = orig[k]; else delete require.cache[id];
+    }
+    delete require.cache[ids.subject];
+  };
+  return { router, systemMessages, restore };
+}
+
+function issueRouteHandler(router, routePath, method = 'post') {
+  for (const layer of router.stack) {
+    if (layer.route && layer.route.path === routePath && layer.route.methods[method]) {
+      return layer.route.stack[layer.route.stack.length - 1].handle;
+    }
+  }
+  throw new Error(`${method} ${routePath} not found`);
+}
+
+function issueRes() {
+  return {
+    statusCode: 200,
+    body: undefined,
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+  };
+}
+
+// `existing` is the voter's current row, if any.
+async function castIssueVote(body, { existing = [], row } = {}) {
+  const pool = makeIssuePool([
+    [/FROM issues i JOIN apps a ON a\.id = i\.app_id/, [GOV_ROW(row)]],
+    [/SELECT vote FROM issue_votes WHERE issue_id/, existing],
+    [/INSERT INTO issue_votes/, []],
+    [/DELETE FROM issue_votes/, []],
+  ]);
+  const ctx = loadIssueVotes(pool);
+  try {
+    const res = issueRes();
+    await issueRouteHandler(ctx.router, '/api/issues/:id/vote')(
+      { params: { id: '61' }, user: { id: 3, username: 'evan' }, body }, res
+    );
+    return { ...ctx, pool, res };
+  } finally {
+    ctx.restore();
+  }
+}
+
+test('issue vote: a No without a line is refused, in votes.js\'s own words, before anything is written', async () => {
+  const { res, pool } = await castIssueVote({ vote: 'down' });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'reason_required');
+  assert.equal(res.body.message, 'A No comes with a line: what is not working for you?');
+  assert.equal(res.body.maxLength, 280);
+  assert.equal(pool.issued(/INSERT INTO issue_votes/), undefined, 'no row written');
+});
+
+test('issue vote: a No with a line is recorded, and the proposal\'s thread quotes it', async () => {
+  const { res, pool, systemMessages } = await castIssueVote({
+    vote: 'down', reason: '  This  one\n is still broken. ',
+  });
+  assert.equal(res.statusCode, 200);
+  const insert = pool.issued(/INSERT INTO issue_votes/);
+  assert.match(insert.sql, /INSERT INTO issue_votes \(issue_id, user_id, vote, reason\)/);
+  assert.match(insert.sql, /SET vote = EXCLUDED\.vote, reason = EXCLUDED\.reason/,
+    'a flip replaces the line: the old sentence argued for the other side');
+  assert.deepEqual(insert.params, [61, 3, 'down', 'This one is still broken.'],
+    'normalised by votes.js\'s normaliser, whitespace and all');
+  assert.equal(systemMessages[0].content,
+    'evan voted down on close proposal for issue #?: “This one is still broken.”');
+  assert.deepEqual(systemMessages[0].thread, { type: 'governance', ref: 61 });
+});
+
+test('issue vote: a Yes needs no line, and without one the thread line reads exactly as before', async () => {
+  const { res, pool, systemMessages } = await castIssueVote({ vote: 'up' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(pool.issued(/INSERT INTO issue_votes/).params, [61, 3, 'up', null],
+    'no line: null, never the empty string');
+  assert.equal(systemMessages[0].content, 'evan voted up on close proposal for issue #?');
+});
+
+test('issue vote: a Yes may carry a line, and then the thread quotes that too', async () => {
+  const { systemMessages, pool } = await castIssueVote({ vote: 'up', reason: 'Fixed weeks ago.' });
+  assert.deepEqual(pool.issued(/INSERT INTO issue_votes/).params, [61, 3, 'up', 'Fixed weeks ago.']);
+  assert.match(systemMessages[0].content, /“Fixed weeks ago\.”$/);
+});
+
+test('issue vote: a paragraph is refused by the shared cap, and nothing is written', async () => {
+  const { res, pool } = await castIssueVote({ vote: 'up', reason: 'x'.repeat(281) });
+  assert.equal(res.statusCode, 400);
+  assert.equal(res.body.error, 'Reason must be 280 characters or fewer');
+  assert.equal(pool.issued(/INSERT INTO issue_votes/), undefined);
+  const { res: wrongType } = await castIssueVote({ vote: 'up', reason: 5 });
+  assert.equal(wrongType.statusCode, 400);
+  assert.equal(wrongType.body.error, 'Reason must be a string');
+});
+
+test('issue vote: re-casting the same side still RETRACTS, and is never asked for a line', async () => {
+  const { res, pool } = await castIssueVote({ vote: 'down' }, { existing: [{ vote: 'down' }] });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { ok: true, toggled: true });
+  assert.ok(pool.issued(/DELETE FROM issue_votes/), 'the vote is taken back');
+  assert.equal(pool.issued(/INSERT INTO issue_votes/), undefined);
+});
+
+test('governance roster: up/down become yes/no, and every line is listed with its voter', async () => {
+  const pool = makeIssuePool([
+    [/FROM issue_votes iv/, [
+      { vote: 'up', reason: null, username: 'alice' },
+      { vote: 'down', reason: 'It still happens on my phone.', username: 'carol' },
+      { vote: 'up', reason: 'Fixed weeks ago.', username: 'bob' },
+    ]],
+  ]);
+  const ctx = loadIssueVotes(pool);
+  try {
+    const res = issueRes();
+    await issueRouteHandler(ctx.router, '/api/apps/:slug/governance/:id/votes', 'get')(
+      { params: { slug: 'cool-app', id: '61' }, user: { id: 3, username: 'evan' }, query: {} }, res
+    );
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.yes, ['alice', 'bob']);
+    assert.deepEqual(res.body.no, ['carol']);
+    assert.deepEqual(res.body.reasons, [
+      { username: 'carol', vote: 'no', reason: 'It still happens on my phone.' },
+      { username: 'bob', vote: 'yes', reason: 'Fixed weeks ago.' },
+    ], 'in vote order, and only the votes that left a line');
+    const q = pool.issued(/FROM issue_votes iv/);
+    assert.match(q.sql, /JOIN issues i ON i\.id = iv\.issue_id/);
+    assert.match(q.sql, /WHERE iv\.issue_id = \$1 AND i\.app_id = \$2/, 'scoped to the app the slug gated');
+    assert.deepEqual(q.params, [61, 9]);
+  } finally {
+    ctx.restore();
+  }
+});
+
+// ── 7. The line on screen (#2603) ─────────────────────────────────────
+
+test('a governance topic renders the roster under its words, and nothing when there is none', () => {
+  const { renderComponent } = require('./lib/render-tsx');
+  const HEAD_TSX = 'frontend/src/features/dev-board/topic/topic-head.tsx';
+  const body = (roster) => ({ note: 'Obsolete since the theme rework.', roster });
+  const html = renderComponent(HEAD_TSX, 'TopicBodySections', {
+    body: body({
+      phase: 'ready',
+      yes: { label: 'Yes (1)', names: '@alice' },
+      no: { label: 'No (1)', names: '@carol' },
+      reasons: [{ who: '@carol', vote: 'no', text: 'It still happens on my phone.' }],
+    }),
+  });
+  assert.match(html, /class="dev-ledger-review-line dev-topic-roster"/, 'the review line, outside the ledger');
+  assert.match(html, /class="dev-ledger-yes">Yes \(1\):<\/span> @alice /);
+  assert.match(html, /class="dev-ledger-reason" data-vote="no">@carol: “It still happens on my phone\.”<\/span>/,
+    'the same markup a change\'s Review row draws — the reasons are not a second design');
+
+  // Nobody has voted (or the fetch failed): the roster stands down, and it
+  // must not be what holds the About sheet open.
+  const hidden = renderComponent(HEAD_TSX, 'TopicBodySections', { body: body({ phase: 'hidden' }) });
+  assert.doesNotMatch(hidden, /dev-topic-roster/);
+  assert.match(hidden, /Obsolete since the theme rework\./, 'the words are still there');
+  const empty = renderComponent(HEAD_TSX, 'TopicBodySections', { body: { note: null, roster: { phase: 'hidden' } } });
+  assert.doesNotMatch(empty, /dev-topic-sheet dev-topic-about/, 'no sheet with nothing to put in it');
+});
+
+test('the browser sends the line, and re-reads the roster once the vote lands', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const view = fs.readFileSync(path.join(__dirname, '..', 'public/js/app-view.js'), 'utf8');
+  const at = view.indexOf('  async castIssueVote(issueId, vote, opts = null) {');
+  assert.ok(at > -1, 'castIssueVote takes an options bag');
+  const fn = view.slice(at, view.indexOf('\n  },\n', at));
+  assert.match(fn, /reason = await AppView\._resolveVoteReason\(vote === 'down' \? 'no' : 'yes', opts\);/,
+    'castVote\'s own resolver: a string is the line, null asks nothing, an absent key prompts');
+  assert.match(fn, /body: JSON\.stringify\(\{ vote, \.\.\.\(reason \? \{ reason \} : \{\}\) \}\)/);
+  assert.match(fn, /data\.error === 'reason_required' && data\.message/,
+    'a refused No says so in the server\'s words');
+  assert.match(fn, /AppView\._invalidateGovVoteRoster\(issueId\);/);
+  // The roster is the governance twin of _loadVoteRoster, with the same
+  // re-entry guard — publishing repaints, and a paint calls the loader.
+  assert.match(view, /if \(AppView\._govVoteRosterInFlight\.has\(issueId\)\) return;/);
+  assert.match(view, /`\/api\/apps\/\$\{slug\}\/governance\/\$\{issueId\}\/votes\$\{AppView\._demoQS\(\)\}`/);
+  assert.match(view, /if \(t\.kind === 'gov'\) AppView\._loadGovVoteRoster\(item\.id\);/);
+  assert.match(view, /roster: AppView\._govVoteRoster\[item\.id\] \|\| \{ phase: 'loading' \},/);
+});

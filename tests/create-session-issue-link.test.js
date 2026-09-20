@@ -5,6 +5,15 @@
 // "Open Session" for that viewer. The generic "+ New chat" path sends no
 // body and must store NULL.
 //
+// #2500 / #2537: the same INSERT now also SEEDS that number into
+// chat_sessions.linked_issues and marks the row issue_link_seeded. Those
+// are the columns the proposal's "Addresses" chips and the pull request's
+// `Closes #N` block read — created_from_issue_number reaches neither — so
+// an issue-started proposal used to read "No issues linked yet" unless the
+// Mayor happened to declare the link itself, which it never does on an
+// OpenRouter or direct-agent turn. The two extra bound parameters are why
+// the agent-preference assertions below read from index 5, not 3.
+//
 // Same harness shape as tests/me-active-sessions.test.js: override getPool
 // BEFORE requiring the route module, capture every query, and assert the
 // INSERT's column list + params directly (the persistence is the contract).
@@ -112,6 +121,46 @@ test('no body → created_from_issue_number is NULL', async () => {
   }
 });
 
+test('#2500: issueNumber also seeds linked_issues and marks the row seeded', async () => {
+  const getInsert = installInsertCapture();
+  const server = await startServer();
+  try {
+    const port = server.address().port;
+    const res = await fetch(`http://127.0.0.1:${port}/api/apps/demo/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issueNumber: 2496 }),
+    });
+    assert.strictEqual(res.status, 201);
+
+    const insert = getInsert();
+    assert.match(insert.sql, /linked_issues/);
+    assert.match(insert.sql, /issue_link_seeded/);
+    assert.deepStrictEqual(insert.params[3], [2496], 'the issue is linked at creation');
+    assert.strictEqual(insert.params[4], true, 'and the row is marked seeded');
+  } finally {
+    poolQueryHandler = async () => ({ rows: [] });
+    server.close();
+  }
+});
+
+test('#2500: a session started from no issue links nothing and is not marked seeded', async () => {
+  const getInsert = installInsertCapture();
+  const server = await startServer();
+  try {
+    const port = server.address().port;
+    const res = await fetch(`http://127.0.0.1:${port}/api/apps/demo/sessions`, { method: 'POST' });
+    assert.strictEqual(res.status, 201);
+
+    const insert = getInsert();
+    assert.deepStrictEqual(insert.params[3], []);
+    assert.strictEqual(insert.params[4], false);
+  } finally {
+    poolQueryHandler = async () => ({ rows: [] });
+    server.close();
+  }
+});
+
 test('an explicit Claude choice is persisted instead of consulting a global provider choice', async () => {
   const getInsert = installInsertCapture();
   const server = await startServer({ codexOpenrouterEnabled: false });
@@ -126,7 +175,7 @@ test('an explicit Claude choice is persisted instead of consulting a global prov
     });
     assert.strictEqual(res.status, 201);
     const insert = getInsert();
-    assert.deepStrictEqual(insert.params.slice(3, 7), [
+    assert.deepStrictEqual(insert.params.slice(5, 9), [
       'claude_code', 'anthropic', null, null,
     ]);
   } finally {
@@ -229,7 +278,7 @@ test('an explicit validated Codex choice is persisted exactly', async (t) => {
     }),
   });
   assert.strictEqual(res.status, 201);
-  assert.deepStrictEqual(getInsert().params.slice(3, 7), [
+  assert.deepStrictEqual(getInsert().params.slice(5, 9), [
     'codex_openrouter', 'openrouter', 'openai/gpt-5.3-codex', 'medium',
   ]);
 });

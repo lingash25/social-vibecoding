@@ -907,7 +907,10 @@ const App = {
     // row flips to its "deploying" state within seconds of a deploy
     // signaling start, and to "stale" (a tappable reload) once a new
     // build is live and this tab is behind it. Cheap endpoint — just
-    // reads one tiny file off disk on the server.
+    // reads one tiny file off disk on the server. The live SHA also
+    // arrives pushed on /ws/events (`platform_version`, #2545), which is
+    // what usually gets there first; this poll is what carries a tab whose
+    // socket is down, and everything the message does not say.
     setInterval(App.loadVersion, 10_000);
   },
 
@@ -1649,7 +1652,10 @@ const App = {
 
   // ── The update the reload button is offering ──────────────────────────
   //
-  // `{ sha, state }`, where state is 'fetching' | 'ready' | 'failed'.
+  // `{ sha, state }`, where state is 'fetching' | 'ready' | 'failed' —
+  // or 'retry', a fetch answered by the build being replaced (the seconds of
+  // a rollout in which both serve), which the next poll or push asks again
+  // rather than treats as the update having failed.
   //
   // The button used to appear the instant /api/version reported a new SHA,
   // and clicking it ran `location.reload()` — an ordinary navigation, which
@@ -1761,24 +1767,35 @@ const App = {
    */
   _ensureShellPrefetch(sha) {
     if (!sha) return Promise.resolve('failed');
-    if (App.shellUpdate && App.shellUpdate.sha === sha) {
+    if (App.shellUpdate && App.shellUpdate.sha === sha && App.shellUpdate.state !== 'retry') {
       // Already asked for this build. Hand back the in-flight promise so a
       // second caller waits on the same download rather than starting one.
       return App._shellPrefetchSettled && App._shellPrefetchSettled.sha === sha
         ? App._shellPrefetchSettled.promise
         : Promise.resolve(App.shellUpdate.state);
     }
-    App.shellUpdate = { sha, state: 'fetching' };
+    // This attempt, by identity: a settle belongs to the ask that made it, and
+    // is one-way because settling replaces the object. Two asks for one build
+    // can be alive at once — a 'retry' re-ask under the previous attempt's
+    // still-pending bail-out timer — and that timer must not fail the new
+    // download when it fires.
+    const attempt = { sha, state: 'fetching' };
+    App.shellUpdate = attempt;
 
     let resolveSettled;
     const promise = new Promise((resolve) => { resolveSettled = resolve; });
     App._shellPrefetchSettled = { sha, promise };
 
     const settle = (state) => {
-      if (!App.shellUpdate || App.shellUpdate.sha !== sha) return;
-      if (App.shellUpdate.state !== 'fetching') return;
+      if (App.shellUpdate !== attempt) return;
       App.shellUpdate = { sha, state };
-      resolveSettled(state);
+      // 'retry' is 'failed' to anyone awaiting this download — a pull reloads
+      // either way — and an open question only to the next poll or push,
+      // which asks again. That cadence bounds the retries; nothing here does:
+      // the row already says "updating…", and repainting it would run the
+      // stale branch, which re-asks, which is the loop this must not be.
+      resolveSettled(state === 'retry' ? 'failed' : state);
+      if (state === 'retry') return;
       // Repaint from the last answer rather than re-polling: the pill is the
       // only thing this changes, and /api/version is already on a 10s timer.
       if (App._lastVersionInfo) App.renderPlatformVersionPill(App._lastVersionInfo);
@@ -1800,7 +1817,15 @@ const App = {
     try {
       const channel = new MessageChannel();
       channel.port1.onmessage = (event) => {
-        settle(event.data && event.data.ok && event.data.sha === sha ? 'ready' : 'failed');
+        const reply = event.data || {};
+        if (reply.sha !== sha) return settle('failed');
+        if (reply.ok) return settle('ready');
+        // Answered by the build being replaced, not the one asked for: the
+        // request landed on the old pod in the seconds a rollout has both
+        // serving (the worker gives up on the document, one request, before
+        // touching an asset). The update has not failed; it has not arrived
+        // where this request went. Ask again on the next cue.
+        settle(reply.mismatch ? 'retry' : 'failed');
       };
       controller.postMessage({ type: 'prefetch-shell', sha }, [channel.port2]);
     } catch {
@@ -1846,6 +1871,34 @@ const App = {
       // answer can produce on demand; a poll landing on top would erase it.
       if (!App._platformUpdateShot) App.renderPlatformVersionPill(info);
     } catch {}
+  },
+
+  /**
+   * The server said which build is live — `platform_version` on /ws/events,
+   * sent on connect and pushed by a pod leaving a rollout (#2545). Same
+   * conclusion the 10s poll reaches, up to 10s sooner: start the download
+   * now, so the reload button is up — with the build already cached behind
+   * it — by the time the user goes looking for it. Nothing here reloads;
+   * the button is the only way forward, as it is for the poll.
+   *
+   * A word, not an answer: /api/version is trusted for everything else
+   * (env, deployProgress, the boot latch). Before the first poll there is
+   * nothing to compare against, so the message is left to the poll; a SHA
+   * that is not news, or is 'dev', is nothing to do.
+   */
+  handlePlatformVersion(data) {
+    const sha = data && data.sha;
+    if (!sha || sha === 'dev') return;
+    if (!App.loadedPlatformSha || !App._lastVersionInfo) return;
+    if (sha === App.loadedPlatformSha) return;
+    if (App._lastVersionInfo.sha === sha) return;
+    // The poll's shape, with the pushed SHA: a pod announcing its successor
+    // knows it as live, whatever /api/version last said about a rollout in
+    // progress (the row shows "updating…" for a deploying answer without
+    // asking for the build, and this is the one moment that deferral is
+    // wrong: the download is exactly what should start).
+    App._lastVersionInfo = { ...App._lastVersionInfo, sha, deployProgress: null };
+    if (!App._platformUpdateShot) App.renderPlatformVersionPill(App._lastVersionInfo);
   },
 
   // The SHA /api/version reports when it differs from the one this document
@@ -2098,12 +2151,13 @@ const App = {
       const oldShort = App.loadedPlatformSha.slice(0, 7);
       const newShort = runningSha.slice(0, 7);
       // Pull the new build down before offering to switch to it. Idempotent
-      // per SHA, and this branch runs on every 10s poll while the tab is
-      // behind — see _ensureShellPrefetch for why the reload was a lie
-      // without it.
+      // per SHA (a 'retry' excepted: this is the re-ask), and this branch
+      // runs on every 10s poll and every push while the tab is behind — see
+      // _ensureShellPrefetch for why the reload was a lie without it.
       App._ensureShellPrefetch(runningSha);
       const update = App.shellUpdate;
-      if (update && update.sha === runningSha && update.state === 'fetching') {
+      if (update && update.sha === runningSha
+          && (update.state === 'fetching' || update.state === 'retry')) {
         // Downloading. NOT a button: a reload right now is the exact thing
         // that used to serve the old document back. The row still says the
         // platform has moved on, and still lights the Improve dot (the
@@ -2245,6 +2299,11 @@ const App = {
           // rather than a second one that could drift from it.
           case 'resync_hint':
             App.resyncCurrentView();
+            break;
+          // Which platform build is live, from the server rather than the
+          // next /api/version poll (#2545) — see handlePlatformVersion.
+          case 'platform_version':
+            App.handlePlatformVersion(data);
             break;
           case 'app_status':
             window.UsernodeReact?.appAllowance?.invalidate?.();

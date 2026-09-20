@@ -13,6 +13,13 @@
 //    LLM-free trim; titleFromFirstMessage names an untitled, PR-less
 //    session from its first user message with no model call and no
 //    spend, and an OpenRouter PR title equals that session name.
+//  - #2500 the issue-card scaffolding: parseIssueSeed peels
+//    `Please implement GitHub issue #N: "…"` off, so the deterministic
+//    name (session AND pull request) is the issue title and the helper
+//    model is handed that title as its issueTitle input; titleAtTurnEnd is
+//    the shared turn-end hook, which now falls back to that deterministic
+//    name when no payer resolves instead of leaving the branch name; and a
+//    hand-chosen title outranks every generated one.
 //
 // Run with: node --test tests/session-title.test.js
 
@@ -173,7 +180,11 @@ test('maybeTitleFirstMessage skips when the session already has a title or a PR'
   }
 });
 
-test('a failed generation resolves null and touches nothing (never throws)', async () => {
+// #2500: an unreachable helper model used to leave the session showing its
+// branch name forever, which is exactly the case the issue-title fallback
+// exists for. The failure is still non-fatal and still never throws — it
+// just leaves a readable name behind now.
+test('a failed generation falls back to the deterministic name (never throws)', async () => {
   const { subject, restore } = loadServiceWithStubs({
     onGenerate: async () => { throw new Error('LLM down'); },
   });
@@ -184,10 +195,58 @@ test('a failed generation resolves null and touches nothing (never throws)', asy
     const title = await subject.maybeTitleFirstMessage({
       pool, session, message: 'do the thing', userId: 1, send: (t, d) => events.push(t),
     });
+    assert.equal(title, 'do the thing');
+    assert.equal(session.session_title, 'do the thing');
+    assert.deepEqual(events, ['session_titled']);
+    assert.equal(pool.queries.length, 1, 'one guarded UPDATE, no model call');
+  } finally {
+    restore();
+  }
+});
+
+test('a failed generation on an issue-started session falls back to the ISSUE TITLE', async () => {
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async () => { throw new Error('LLM down'); },
+  });
+  try {
+    const pool = mockPool();
+    const session = { id: 9, session_title: null, pr_number: null };
+    const title = await subject.maybeTitleFirstMessage({
+      pool,
+      session,
+      message: 'Please implement GitHub issue #2496: "Add claimed issues to workshop current work".'
+        + '\n\nThe workshop only lists proposals today.\n\n'
+        + 'Open a PR that closes this issue (include "Closes #2496" so it links and closes the issue on merge).',
+      userId: 1,
+      send: () => {},
+    });
+    assert.equal(title, 'Add claimed issues to workshop current work');
+  } finally {
+    restore();
+  }
+});
+
+// A refresh must never trade a name the model already produced for the
+// deterministic trim just because THIS call failed.
+test('a failed refresh leaves an already-named session alone', async () => {
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async () => { throw new Error('LLM down'); },
+  });
+  try {
+    const pool = mockPool({ userRows: [{ content: 'do the thing' }] });
+    const session = { id: 9, session_title: 'Paginated leaderboard rows', pr_number: null };
+    const events = [];
+    const title = await subject.refreshFromHistory({
+      pool, session, userId: 1, send: (t) => events.push(t),
+    });
     assert.equal(title, null);
-    assert.equal(session.session_title, null, 'session left untouched');
+    assert.equal(session.session_title, 'Paginated leaderboard rows', 'session left untouched');
     assert.equal(events.length, 0, 'no event emitted');
-    assert.equal(pool.queries.length, 0, 'no UPDATE attempted');
+    assert.equal(
+      pool.queries.filter((q) => /UPDATE chat_sessions SET session_title/.test(q.sql)).length,
+      0,
+      'no UPDATE attempted',
+    );
   } finally {
     restore();
   }
@@ -233,6 +292,198 @@ test('refreshFromHistory feeds the full request history + live spec to the LLM',
     assert.deepEqual(captured[0].specs, ['# Spec: session naming']);
     assert.equal(session.session_title, 'Fix session naming defaults');
     assert.deepEqual(events, [{ type: 'session_titled', data: { sessionTitle: 'Fix session naming defaults' } }]);
+  } finally {
+    restore();
+  }
+});
+
+// ---- #2500: the issue card's kickoff scaffolding ----
+
+const ISSUE_SEED = 'Please implement GitHub issue #2496: "Add claimed issues to workshop current work".'
+  + '\n\nThe workshop lists proposals but not the issues people have claimed.\n\n'
+  + 'Open a PR that closes this issue (include "Closes #2496" so it links and closes the issue on merge).';
+
+test('parseIssueSeed splits the issue card seed and ignores anything else', () => {
+  const { subject, restore } = loadServiceWithStubs({ onGenerate: async () => ({}) });
+  try {
+    const seed = subject.parseIssueSeed(ISSUE_SEED);
+    assert.equal(seed.number, 2496);
+    assert.equal(seed.title, 'Add claimed issues to workshop current work');
+    assert.equal(seed.body, 'The workshop lists proposals but not the issues people have claimed.');
+    // An issue with no title still parses; the body carries the meaning.
+    assert.equal(subject.parseIssueSeed('Please implement GitHub issue #7: "".\n\nbody').title, '');
+    // Anything a person wrote themselves is left alone.
+    assert.equal(subject.parseIssueSeed('Please implement the login fix'), null);
+    assert.equal(subject.parseIssueSeed(''), null);
+    assert.equal(subject.parseIssueSeed(null), null);
+  } finally {
+    restore();
+  }
+});
+
+test('deterministicTitle names an issue-started session after its ISSUE, not the instruction', () => {
+  const { subject, restore } = loadServiceWithStubs({ onGenerate: async () => ({}) });
+  try {
+    // The reported #2500 title, before: `Please implement GitHub issue 2496:
+    // "Add claimed issues to workshop cur…` — the `#` eaten by the markdown
+    // class, the whole thing cut at 72.
+    assert.equal(
+      subject.deterministicTitle(ISSUE_SEED),
+      'Add claimed issues to workshop current work',
+    );
+    assert.doesNotMatch(subject.deterministicTitle(ISSUE_SEED), /Please implement/);
+    // A degraded seed (the issue fetch produced no title) falls through to
+    // the body rather than to an empty name.
+    assert.equal(
+      subject.deterministicTitle('Please implement GitHub issue #7: "".\n\nThe avatar upload 500s.'),
+      'The avatar upload 500s.',
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('titleInputsFromRequests hands the model the issue title and drops the wrapper', () => {
+  const { subject, restore } = loadServiceWithStubs({ onGenerate: async () => ({}) });
+  try {
+    const prepared = subject.titleInputsFromRequests([ISSUE_SEED, 'also sort them by date']);
+    assert.equal(prepared.issueTitle, 'Add claimed issues to workshop current work');
+    assert.deepEqual(prepared.requests, [
+      'Add claimed issues to workshop current work'
+        + '\n\nThe workshop lists proposals but not the issues people have claimed.',
+      'also sort them by date',
+    ]);
+    // Nothing to peel: requests pass through and there is no issue signal.
+    const plain = subject.titleInputsFromRequests(['make the leaderboard paginate']);
+    assert.equal(plain.issueTitle, null);
+    assert.deepEqual(plain.requests, ['make the leaderboard paginate']);
+  } finally {
+    restore();
+  }
+});
+
+test('refreshFromHistory passes the issue title through to generateSessionTitle', async () => {
+  const captured = [];
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async (args) => {
+      captured.push(args);
+      return { title: 'Claimed issues on the workshop board', usage: undefined, model: 'claude-haiku-4-5' };
+    },
+  });
+  try {
+    const pool = mockPool({ userRows: [{ content: ISSUE_SEED }, { content: 'group them by owner' }] });
+    const session = { id: 11, session_title: 'dev/tester-1789', pr_number: null };
+    const title = await subject.refreshFromHistory({ pool, session, userId: 3, send: () => {} });
+    assert.equal(title, 'Claimed issues on the workshop board');
+    assert.equal(captured[0].issueTitle, 'Add claimed issues to workshop current work');
+    assert.doesNotMatch(captured[0].requests[0], /Please implement GitHub issue/);
+    assert.match(captured[0].requests[0], /^Add claimed issues to workshop current work/);
+  } finally {
+    restore();
+  }
+});
+
+// The guarded UPDATE is the whole defence against clobbering a name its
+// author chose: `proposed_pr_title` is set by PATCH /api/sessions/:id/title
+// (#2327) and by submit_work's title, so a manual rename outranks every
+// generated one without needing a flag of its own.
+test('every generated title loses to a hand-chosen one', async () => {
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async () => ({ title: 'Generated name', usage: undefined, model: 'claude-haiku-4-5' }),
+  });
+  try {
+    const pool = mockPool();
+    const session = { id: 12, session_title: null, pr_number: null };
+    await subject.maybeTitleFirstMessage({ pool, session, message: 'do the thing', send: () => {} });
+    const update = pool.queries.find((q) => /UPDATE chat_sessions SET session_title/.test(q.sql));
+    assert.match(update.sql, /pr_number IS NULL/);
+    assert.match(update.sql, /proposed_pr_title IS NULL/);
+  } finally {
+    restore();
+  }
+});
+
+// ---- #2500: the shared turn-end hook ----
+
+test('titleAtTurnEnd re-titles from history, and names a first turn from its ask', async () => {
+  const captured = [];
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async (args) => {
+      captured.push(args);
+      return { title: 'Claimed issues on the board', usage: undefined, model: 'claude-haiku-4-5' };
+    },
+  });
+  try {
+    // firstTurn: the cheap path, titled straight from the turn's message.
+    const firstPool = mockPool();
+    const fresh = { id: 21, session_title: null, pr_number: null };
+    assert.equal(await subject.titleAtTurnEnd({
+      pool: firstPool, session: fresh, message: 'make the board show claims',
+      userId: 3, firstTurn: true, resolveBilling: async () => ({ apiKey: 'sk-x' }), send: () => {},
+    }), 'Claimed issues on the board');
+    assert.deepEqual(captured[0].requests, ['make the board show claims']);
+
+    // Every later turn, and every OpenRouter turn (their eager trim already
+    // named them), re-reads the whole history instead.
+    const laterPool = mockPool({ userRows: [{ content: 'make the board show claims' }, { content: 'and sort by date' }] });
+    const named = { id: 22, session_title: 'make the board show claims', pr_number: null };
+    assert.equal(await subject.titleAtTurnEnd({
+      pool: laterPool, session: named, message: 'and sort by date',
+      userId: 3, firstTurn: false, resolveBilling: async () => ({ apiKey: 'sk-x' }), send: () => {},
+    }), 'Claimed issues on the board');
+    assert.deepEqual(captured[1].requests, ['make the board show claims', 'and sort by date']);
+  } finally {
+    restore();
+  }
+});
+
+// The whole point of the hook: no payer used to mean no name at all, which
+// is how an OpenRouter or over-budget session kept its branch name.
+test('titleAtTurnEnd falls back to the deterministic name when no payer resolves', async () => {
+  let generateCalls = 0;
+  const { subject, restore } = loadServiceWithStubs({
+    onGenerate: async () => { generateCalls += 1; return { title: 'never' }; },
+  });
+  try {
+    const seeded = 'Please implement GitHub issue #2496: "Add claimed issues to workshop current work".'
+      + '\n\nThe workshop lists proposals but not the issues people have claimed.';
+    for (const resolveBilling of [
+      async () => ({ error: 'over_budget', reason: 'daily cap' }),
+      async () => { throw new Error('billing lookup exploded'); },
+    ]) {
+      const pool = mockPool({ userRows: [{ content: seeded }] });
+      const session = { id: 23, session_title: null, pr_number: null };
+      const events = [];
+      const title = await subject.titleAtTurnEnd({
+        pool, session, message: seeded, userId: 3, firstTurn: true,
+        resolveBilling, send: (t) => events.push(t),
+      });
+      assert.equal(title, 'Add claimed issues to workshop current work');
+      assert.deepEqual(events, ['session_titled']);
+    }
+    assert.equal(generateCalls, 0, 'no helper-model call was bought');
+  } finally {
+    restore();
+  }
+});
+
+test('titleAtTurnEnd leaves a session that already has a PR to applyPrMetadata', async () => {
+  let billingCalls = 0;
+  const { subject, restore } = loadServiceWithStubs({ onGenerate: async () => ({ title: 'never' }) });
+  try {
+    const pool = mockPool();
+    const title = await subject.titleAtTurnEnd({
+      pool,
+      session: { id: 24, session_title: 'Mirrored PR title', pr_number: 2151 },
+      message: 'another turn',
+      userId: 3,
+      firstTurn: false,
+      resolveBilling: async () => { billingCalls += 1; return { apiKey: 'sk-x' }; },
+      send: () => {},
+    });
+    assert.equal(title, null);
+    assert.equal(billingCalls, 0, 'no payer is even resolved');
+    assert.equal(pool.queries.length, 0);
   } finally {
     restore();
   }
@@ -480,6 +731,46 @@ test('an OpenRouter PR title is the session name titleFromFirstMessage gave it (
     assert.equal(githubCalls[0].type, 'create');
     assert.equal(githubCalls[0].opts.title, expected, 'PR title == pre-PR session name');
     assert.equal(session.session_title, expected, 'the mirrored name is unchanged');
+  } finally {
+    restore();
+  }
+});
+
+// #2500: the deterministic draft is what named the pull request that started
+// this — "Please implement GitHub issue 2496: …" on the PR as well as on the
+// session. Both come off deterministicTitle, so peeling the scaffolding
+// there fixes the pull request too.
+test('a deterministic PR title never carries the issue-card scaffolding (#2500)', async () => {
+  const githubCalls = [];
+  const { subject, restore } = loadPrMetadataWithStubs({ githubCalls });
+  try {
+    const ask = 'Please implement GitHub issue #2496: "Add claimed issues to workshop current work".'
+      + '\n\nThe workshop lists proposals but not the issues people have claimed.\n\n'
+      + 'Open a PR that closes this issue (include "Closes #2496" so it links and closes the issue on merge).';
+
+    const pool = prMetadataMockPool();
+    pool.query = async function query(sql, params) {
+      this.queries.push({ sql, params });
+      if (/FROM chat_session_messages/i.test(sql)) return { rows: [{ role: 'user', content: ask, metadata: {} }] };
+      if (/FROM chat_session_specs/i.test(sql)) return { rows: [] };
+      if (/FROM chat_sessions\b/i.test(sql)) {
+        return { rows: [{ spec_md: '', linked_issues: [2496], pr_linked_issues_applied: [], testing_md: null, testing_path: null, pr_testing_applied: null }] };
+      }
+      return { rows: [] };
+    };
+    const session = {
+      id: 13, branch_name: 'dev/evan-17890406', pr_number: null,
+      agent_backend: 'codex_openrouter', session_title: null,
+    };
+    await subject.applyPrMetadata({
+      pool, session, repoOwner: 'acme', repoName: 'app',
+      userMessage: ask, ccSummary: '', username: 'evan',
+    });
+    assert.equal(githubCalls[0].type, 'create');
+    assert.equal(githubCalls[0].opts.title, 'Add claimed issues to workshop current work');
+    assert.doesNotMatch(githubCalls[0].opts.title, /Please implement GitHub issue/);
+    // The seeded linkage is what puts `Closes #N` in the body (#2537).
+    assert.match(githubCalls[0].opts.body, /^Closes #2496$/m);
   } finally {
     restore();
   }

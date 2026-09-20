@@ -1338,7 +1338,11 @@ export function TopicBodySections({ body }: { body: TopicBody }): ReactNode {
   const issueHtml = summaryHtml ? null : (body.issueBodyHtml || null);
   const issueEditor = summaryHtml ? null : (body.issueBodyEditor || null);
   const tiles = a && a.visuals ? a.visuals : null;
-  const hasAbout = !!(summaryHtml || issueHtml || issueEditor?.canEdit || tiles || body.proposalBody || body.note);
+  // #2603: a governance proposal's roster, under the words. `hidden` (the
+  // fetch failed, or nobody has voted) must not be what keeps the About
+  // sheet open, so it is resolved to null before the test below.
+  const roster = body.roster && body.roster.phase !== 'hidden' ? body.roster : null;
+  const hasAbout = !!(summaryHtml || issueHtml || issueEditor?.canEdit || tiles || body.proposalBody || body.note || roster);
   return (
     <>
       {hasAbout ? (
@@ -1367,6 +1371,14 @@ export function TopicBodySections({ body }: { body: TopicBody }): ReactNode {
               : <p className="dev-topic-note">{body.testing.path ? `Testing instructions are recorded in ${body.testing.path}.` : 'No testing instructions have been added yet.'}</p>}
           </details> : null}
           {body.note ? <div className="dev-topic-note">{body.note}</div> : null}
+          {/* #2603: the votes, in the voters' own words — the same roster
+              a change's Review row draws, wearing the review line's box so
+              the reasons under it lay out as they do there. */}
+          {roster ? (
+            <div className="dev-ledger-review-line dev-topic-roster">
+              <Roster r={roster} />
+            </div>
+          ) : null}
         </section>
       ) : null}
       {body.transcript ? (

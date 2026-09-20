@@ -1458,6 +1458,20 @@ ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS pr_linked_issues_applied  INT
 -- closing keywords aren't re-fetched from GitHub on every boot.
 ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS linked_issues_backfilled  BOOLEAN NOT NULL DEFAULT false;
 
+-- #2500 / #2537. TRUE once the originating issue of a session started from
+-- an issue card has been seeded into `linked_issues` — at creation for
+-- every session made since, and at promote time for the rows that predate
+-- it. Before this, an interactive session recorded its issue only in
+-- `created_from_issue_number`: the issue board linked back to the session
+-- (issue-proposal-ref.js unions both columns) while the proposal itself
+-- read "No issues linked yet" and its pull request body carried no
+-- `Closes #N`, because both of those read `linked_issues` alone.
+-- The flag is what keeps the promote-time backfill from undoing an author:
+-- an empty `linked_issues` on a seeded row is a deliberate removal (the
+-- Mayor's `removes_issues`, or the linked-issues editor), not a gap to
+-- fill.
+ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS issue_link_seeded         BOOLEAN NOT NULL DEFAULT false;
+
 -- Bot-generated testing guidance for PR previews (#127). The coding agent
 -- may end a build turn with a "==== TESTING ====" block (parsed by
 -- src/services/testing-notes.js):
@@ -1549,6 +1563,42 @@ CREATE INDEX IF NOT EXISTS chat_sessions_merged_at_idx ON chat_sessions(merged_a
 -- source of truth for spend against allowances). Covered by the
 -- table-level staging:private comment.
 ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS agent_cost_cents NUMERIC(12,4) NOT NULL DEFAULT 0;
+
+-- #2592: the MODEL dimension the ledger above does not have.
+--
+-- `chat_sessions.agent_cost_cents` answers "what did this change cost in
+-- coding-agent time?" but not "on which model?", and that gap was showing
+-- up as a WRONG NUMBER on the Model costs console: the observed average
+-- and median per change read far too low, because the agent's spend — the
+-- large majority of what a change costs — had to be left out of a
+-- per-model aggregate entirely rather than attributed by guesswork.
+--
+-- One row per (session, model), accumulated by the same best-effort
+-- anthropic-proxy settle path that writes the ledger, in the SAME
+-- statement (a CTE) so the two can never disagree: a session's breakdown
+-- sums to its ledger, or neither was written. The proxy knows the model
+-- of every call it settles (anthropic-stream returns it), so nothing here
+-- is inferred.
+--
+-- A session that switched models mid-change has several rows, which is
+-- the point: the reader attributes the whole change to the model that
+-- spent the most in it rather than splitting one change into partial
+-- ones.
+--
+-- Same three exclusions as the ledger (sync turns, zero-cost calls,
+-- sessions with no id) and the same list-price, not-a-billing-record
+-- posture. Tagged staging:private because it hangs off chat_sessions,
+-- which is private: a public table must never carry a foreign key into
+-- a private one.
+CREATE TABLE IF NOT EXISTS chat_session_agent_model_costs (
+  session_id    INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  model         VARCHAR(128) NOT NULL,
+  cost_cents    NUMERIC(12,4) NOT NULL DEFAULT 0,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (session_id, model)
+);
+COMMENT ON TABLE chat_session_agent_model_costs IS 'staging:private';
 
 -- #58: snapshot the vote threshold that was in effect at the moment a PR
 -- merged. The "majority" needed to merge is computed live from the active-
@@ -5906,6 +5956,28 @@ INSERT INTO platform_settings (key, value, description) VALUES
     'Marker: the one-time platform-access grandfather + waitlist backfill has run. Do not delete — deleting re-grants access to every account on next boot.')
 ON CONFLICT (key) DO NOTHING;
 
+-- #2592: the moment the platform began recording coding-agent spend
+-- per model (the chat_session_agent_model_costs table, far above).
+--
+-- Stamped on the first boot that carries this table, in the same marker
+-- style as `onboarding_gate_grandfathered` above: ON CONFLICT DO NOTHING,
+-- so every later boot is a no-op and the stamp never moves.
+--
+-- WHY A CUTOFF: every session that predates this row spent its
+-- coding-agent money with no model attached, and that history cannot be
+-- backfilled (llm_usage is per user per day, with no session or model).
+-- An aggregate that mixed those sessions in would keep reporting the
+-- understated figure this change exists to fix, so services/model-costs.js
+-- counts only sessions CREATED at or after this instant. The set grows on
+-- its own as history accumulates, exactly like the `agent_cost_cents > 0`
+-- filter it replaces. Deleting this row does not "reset" anything useful:
+-- the next boot re-stamps it at NOW() and throws away every clean change
+-- recorded so far.
+INSERT INTO platform_settings (key, value, description) VALUES
+  ('model_cost_observed_since', NOW()::text,
+    'Marker: the instant the platform began recording coding-agent spend per model (#2592). The Model costs console counts only changes created at or after it. Do not delete — deleting re-stamps it at the next boot and discards every clean change recorded so far.')
+ON CONFLICT (key) DO NOTHING;
+
 -- ── Hosted MCP connector: OAuth 2.1 authorization server ────────────────
 --
 -- Claude.ai and ChatGPT connect to the platform's remote MCP endpoint
@@ -8476,6 +8548,13 @@ ALTER TABLE apps ADD COLUMN IF NOT EXISTS demo_prev_approvals INTEGER;
 -- keeps an earlier line when the same person re-casts the same side without
 -- a new one, which is what carries a Yes onto a proposal's next version.
 ALTER TABLE pr_votes ADD COLUMN IF NOT EXISTS reason TEXT;
+-- #2603: the same line, on a governance vote. routes/issues.js requires one on
+-- a No (`down`) and accepts one on a Yes (`up`), with the identical 280-char
+-- cap; a row written before this column is NULL and reads exactly as it did.
+-- An issue vote toggles OFF when it is re-cast on the same side, so there is
+-- no same-side upsert to carry a line across: a flip simply replaces it, the
+-- old sentence having argued for the other side.
+ALTER TABLE issue_votes ADD COLUMN IF NOT EXISTS reason TEXT;
 -- chat_sessions.conversation_prompted_epoch — the approval epoch for which
 -- the "needs a conversation" prompt was posted into the proposal's thread.
 -- Contested is derived from the active-user count, which moves without a

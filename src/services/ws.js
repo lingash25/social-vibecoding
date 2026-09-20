@@ -116,6 +116,10 @@ function attach(server, config) {
         const client = { ws, user };
         globalClients.add(client);
         log.debug('ws', 'Global events client connected', { userId: user.id });
+        // Which build this socket landed on — see sendPlatformVersion. A tab
+        // whose socket comes back after a rollout learns the new build from
+        // the handshake, not from its next poll.
+        sendPlatformVersion(ws, 'connected');
 
         ws.on('close', () => {
           globalClients.delete(client);
@@ -329,11 +333,44 @@ function deliverGlobal(data) {
   if (data.event === 'cc_progress' && sent === 0 && globalClients.size === 0) {
     log.debug('ws', 'broadcastGlobal: no clients connected');
   }
+  return sent;
 }
 
 function broadcastGlobal(data) {
   deliverGlobal(data);
   wsBus.publish('global', null, data);
+}
+
+// ── The build this process is, told over the socket (#2545) ───────────
+//
+// `platform_version` carries the one fact /api/version exists for — which
+// build is being served — at the moment it is true rather than on the next
+// poll. `sha` is a build a request from that tab will now land on: this
+// process's own, sent on every /ws/events handshake (`reason: 'connected'`),
+// or its successor's, pushed by the process being replaced once its listener
+// has closed (`reason: 'rollout'`, see announceSuccessorBuild in server.js).
+// The client treats both the same way: public/js/app.js handlePlatformVersion.
+//
+// Local sockets only, deliberately — no bus. The pod being replaced is telling
+// the tabs IT holds that their traffic has moved; the new pod's own sockets
+// learned its build from their handshake. Fanning out would reach only tabs
+// whose answer is already in hand, and in a multi-replica rollout would tell
+// a tab still served by an older pod about a build its requests may not reach
+// yet.
+function platformVersionPayload(sha, reason) {
+  return { type: 'platform_version', sha: sha || 'dev', reason };
+}
+
+function sendPlatformVersion(socket, reason) {
+  try {
+    socket.send(JSON.stringify(platformVersionPayload(process.env.GIT_SHA, reason)));
+  } catch { /* closed between the handshake and this send */ }
+}
+
+/** Returns the number of open events sockets told. */
+function pushPlatformVersion({ sha, reason = 'rollout' } = {}) {
+  if (!sha) return 0;
+  return deliverGlobal(platformVersionPayload(sha, reason));
 }
 
 // #194: validate an inbound thread reference { type, ref } for an app.
@@ -1247,4 +1284,4 @@ function pushConversationEvent(memberUserIds, payload, { excludeUserId = null } 
 
 const pushNotificationToUser = pushToUser;
 
-module.exports = { attach, broadcast, _onBusMessage, broadcastGlobal, broadcastGlobalScoped, broadcastToAdmins, sendSystemMessage, getOnlineUsers, pushAppStatusUpdate, pushAppCreationPhase, pushSessionUpdate, pushSessionState, sessionStateAudience, pushVoteUpdate, pushKudosUpdate, pushAppUpdate, pushIssueUpdate, pushBoardOrderUpdate, pushWorkshopUpdate, onBoardChange, pushToUser, pushConversationEvent, pushNotificationToUser, getReactionsForMessages, validateThread, handleMessage, MAX_CHAT_LEN };
+module.exports = { attach, broadcast, _onBusMessage, broadcastGlobal, broadcastGlobalScoped, broadcastToAdmins, sendSystemMessage, getOnlineUsers, pushAppStatusUpdate, pushAppCreationPhase, pushSessionUpdate, pushSessionState, sessionStateAudience, pushVoteUpdate, pushKudosUpdate, pushAppUpdate, pushIssueUpdate, pushBoardOrderUpdate, pushWorkshopUpdate, onBoardChange, pushToUser, pushConversationEvent, pushNotificationToUser, pushPlatformVersion, getReactionsForMessages, validateThread, handleMessage, MAX_CHAT_LEN };

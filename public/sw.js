@@ -1450,6 +1450,18 @@ if (typeof module !== 'undefined' && module.exports) {
   // promotes /index.html only AFTER every asset it names was stored. A failed
   // or rollout-crossed prefetch therefore leaves the previous complete shell
   // active instead of advertising a partially downloaded new one.
+  //
+  // The rollout-crossed case is named (`code: 'build-mismatch'`), because it
+  // is the one failure that is not a failure of the update: the request landed
+  // on the build being retired in the seconds a rollout has both serving. The
+  // page asks again on its next cue instead of giving up on the build — see
+  // _ensureShellPrefetch in public/js/app.js.
+  function buildMismatch(message) {
+    const err = new Error(message);
+    err.code = 'build-mismatch';
+    return err;
+  }
+
   async function precacheShell(cache, {
     reload = false, expectedBuild = null, documentLast = false,
   } = {}) {
@@ -1463,7 +1475,7 @@ if (typeof module !== 'undefined' && module.exports) {
       if (!doc || !doc.ok) throw new Error(`HTTP ${doc && doc.status}`);
       build = buildIdOf(doc);
       if (expectedBuild && build !== expectedBuild) {
-        throw new Error(`expected build ${expectedBuild}, served ${build || 'unstamped'}`);
+        throw buildMismatch(`expected build ${expectedBuild}, served ${build || 'unstamped'}`);
       }
       document = doc.clone();
       // '/index.html' is stored under exactly the key networkFirstNavigate
@@ -1488,7 +1500,7 @@ if (typeof module !== 'undefined' && module.exports) {
       if (!res || !res.ok) throw new Error(`HTTP ${res && res.status}`);
       // A scoped URL is stored only as the build it names — the rule
       // networkFirstShell applies, for the same rollout reason.
-      if (url !== path && buildIdOf(res) !== build) throw new Error('served by a different build');
+      if (url !== path && buildIdOf(res) !== build) throw buildMismatch('served by a different build');
       await cache.put(url, res.clone());
       return url;
     }));
@@ -1611,8 +1623,14 @@ if (typeof module !== 'undefined' && module.exports) {
   // would report success having stored nothing new.
   const shellPrefetches = new Map();
 
+  // Resolves `{ ok, mismatch }`: `ok` when the whole build is in the cache,
+  // `mismatch` when it is not because a response came from a different build
+  // — the rollout-crossed case precacheShell names, which the page retries
+  // rather than settles.
   async function prefetchShellAssets(expectedBuild) {
-    if (!/^[0-9a-f]{7,40}$/.test(String(expectedBuild || ''))) return false;
+    if (!/^[0-9a-f]{7,40}$/.test(String(expectedBuild || ''))) {
+      return { ok: false, mismatch: false };
+    }
     const cache = await caches.open(SHELL_CACHE);
     // The new document first, then its assets at the URLs IT loads them
     // from: a new build's scripts live under a new /b/<sha>/ prefix, so
@@ -1626,7 +1644,11 @@ if (typeof module !== 'undefined' && module.exports) {
     // ALL of them, deliberately. A partial refresh is the split-build state
     // shellFromCacheThisLoad exists to prevent, and reporting success for one
     // would put the page's reload button on top of it.
-    return results.every((r) => r.status === 'fulfilled');
+    return {
+      ok: results.every((r) => r.status === 'fulfilled'),
+      mismatch: results.some((r) => r.status === 'rejected'
+        && r.reason && r.reason.code === 'build-mismatch'),
+    };
   }
 
   self.addEventListener('message', (event) => {
@@ -1661,9 +1683,12 @@ if (typeof module !== 'undefined' && module.exports) {
           shellPrefetches.set(expectedBuild, run);
         }
         let ok = false;
-        try { ok = await shellPrefetches.get(expectedBuild); } catch { ok = false; }
+        let mismatch = false;
+        try {
+          ({ ok, mismatch } = await shellPrefetches.get(expectedBuild));
+        } catch { ok = false; mismatch = false; }
         const port = event.ports && event.ports[0];
-        if (port) port.postMessage({ ok, sha: expectedBuild || null });
+        if (port) port.postMessage({ ok, sha: expectedBuild || null, mismatch });
       })());
     }
   });

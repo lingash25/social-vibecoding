@@ -467,6 +467,15 @@ export const BADGE_MAX = 4;
  * only as the fallback where no sheet can be presented (the kit missing),
  * and desktop is untouched.
  */
+/**
+ * How many POSITIONAL arguments sit before the options bag, per vote call.
+ * `castVote(sessionId, vote, expectedEpoch, opts)` takes three;
+ * `castIssueVote(issueId, vote, opts)` takes two. The card models leave
+ * trailing slots out, so `send` pads to this count and appends the bag —
+ * a single constant here would put the line in the epoch's place.
+ */
+const VOTE_ARITY: Record<string, number> = { castVote: 3, castIssueVote: 2 };
+
 export function VoteButton({ yes, no }: { yes: ActionSpec; no: ActionSpec }): ReactNode {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState<{ top: number; bottom: number; right: number } | null>(null);
@@ -495,9 +504,10 @@ export function VoteButton({ yes, no }: { yes: ActionSpec; no: ActionSpec }): Re
     return m ? m[1] : '';
   };
   const reasonId = `dev-vote-reason-${String(yes.act?.args?.[0] ?? 'x')}`;
-  // A governance vote carries no line: the panel is the switch and the
-  // button, and the call is the spec's own.
-  const isVote = yes.act?.fn === 'castVote';
+  // #2603: a governance vote carries a line too — every proposal the group
+  // votes on does. Anything else demoted into this button (there is nothing
+  // today) keeps the plain panel and the spec's own call.
+  const isVote = yes.act?.fn === 'castVote' || yes.act?.fn === 'castIssueVote';
   const startSide = (): 'yes' | 'no' => (mine === 'no' ? 'no' : 'yes');
   const shut = () => {
     setOpen(false);
@@ -511,15 +521,18 @@ export function VoteButton({ yes, no }: { yes: ActionSpec; no: ActionSpec }): Re
       sheet.dismiss();
     }
   };
-  // castVote(sessionId, vote, expectedEpoch, { reason }): a string is the
-  // line to send, null sends none without asking. The epoch slot is filled
-  // in when the model left it out, so the options always land fourth.
+  // castVote(sessionId, vote, expectedEpoch, { reason }) and
+  // castIssueVote(issueId, vote, { reason }): a string is the line to send,
+  // null sends none without asking. Slots the model left out are filled in
+  // so the options bag always lands LAST — which is why the count is read
+  // per function (VOTE_ARITY) rather than fixed at castVote's three.
   const send = (a: ActionSpec, reason: string | null) => {
     shut();
     if (!a.act) return;
     if (!isVote) { call(a.act); return; }
     const args = [...(a.act.args || [])];
-    while (args.length < 3) args.push(null);
+    const positional = VOTE_ARITY[a.act.fn] ?? 3;
+    while (args.length < positional) args.push(null);
     call({ fn: a.act.fn, args: [...args, { reason }] });
   };
   // The fallback's rows are the native action sheet's, and the line is then

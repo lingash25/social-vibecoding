@@ -57,10 +57,15 @@ test('the rail is a progressbar; indeterminate rails omit aria-valuenow', () => 
   assert.match(yesNo, /aria-valuenow="0"/);
   assert.doesNotMatch(yesNo, /style="width/, 'a yes-or-no rail is words alone');
 
-  const bare = rail({ state: 'new', label: '', fill: null, name: 'Produce your first block' });
-  assert.doesNotMatch(bare, /aria-valuenow/, 'a rail that cannot see progress announces no value');
-  assert.doesNotMatch(bare, /truncate/, 'and draws no label span');
-  assert.match(bare, /aria-label="Produce your first block"/, 'but is still named');
+  // #2492: block production used to reach the rail with an empty label and
+  // draw the ring alone — a dot with nothing beside it. Its count rides on
+  // the challenge row now, so the card asks for the same words as any other
+  // uncounted challenge and the rail speaks them.
+  const block = rail({ state: 'new', label: 'Not started', fill: 0, name: 'Produce your first block' });
+  assert.match(block, /<span class="relative min-w-0 truncate">Not started<\/span>/, 'the label is drawn');
+  assert.match(block, /aria-valuetext="Not started"/, 'and spoken');
+  assert.match(block, /aria-label="Produce your first block: Not started"/, 'beside the challenge name');
+  assert.doesNotMatch(block, /style="width/, 'an uncounted rail is words alone, with no bar');
   const done = rail({ state: 'done', label: 'Done', fill: 1, name: 'x', counted: true });
   assert.match(done, /aria-valuenow="100"/);
   assert.doesNotMatch(done, /style="width/, 'a finished rail is the green tone, not a full bar');

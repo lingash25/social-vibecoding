@@ -7153,7 +7153,16 @@ span.gc-vote-btn-icon { cursor: default; }
    read as a highlighted state rather than as ordinary transcript. The deck's
    group transcript tints neither — a message is identified by its author's
    name and avatar, which is the whole point of a named-row transcript. */
-.gc-msg:hover { background: var(--bg-secondary); }
+/* ONE STEP OFF THE BUBBLE'S OWN SURFACE, and which step that is depends on
+   the mode: `--bg-secondary` IS `--dc-raised` in light mode, so a hovered or
+   tapped row used to be painted the bubble's exact colour and the message box
+   vanished into the highlight — outer row and inner bubble reading as one
+   flat slab (#2464). `--bg-tertiary` is the step the light palette has room
+   for; in dark mode it is the bubble's surface instead, so dark keeps the
+   secondary ground it already had. The highlight belongs to the row, so it
+   has to be a colour the message box is not made of. */
+.gc-msg:hover { background: var(--bg-tertiary); }
+.dark .gc-msg:hover { background: var(--bg-secondary); }
 .gc-msg-self { background: transparent; }
 
 .gc-msg-header {
@@ -7455,7 +7464,19 @@ a.gc-event-box:focus-visible { outline: 2px solid var(--accent); outline-offset:
   color: var(--text-primary);
 }
 .gc-bubble > .gc-msg-content { color: var(--text-primary); }
-.gc-bubble-self { background: var(--accent-tint); }
+/* Opaque, and the same surface as every other bubble with the accent tint
+   composited on top of it as a second background layer — not the tint on its
+   own. `--accent-tint` is translucent, so a tint-only bubble rendered
+   whatever was painted behind the row, and the row's hover/tap highlight
+   therefore arrived INSIDE the message box along with it: the other half of
+   the doubled highlight in #2464. Layering keeps the tint tracking
+   `--accent-tint` in both themes with no second copy of its alpha, and makes
+   the two bubble kinds one surface in two tints, which is what the note above
+   already says they are. */
+.gc-bubble-self {
+  background-color: var(--dc-raised);
+  background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
+}
 /* Your own row runs right to left, so the hover react disc — absolute at the
    row's top-right for every other row — would land on your name there. It
    crosses to the side your row leaves empty. */
@@ -13334,6 +13355,10 @@ div.dev-card-topic [data-work-note] { font-size: 12.5px; line-height: 1.45; marg
 }
 .dev-topic-note { font-size: 13px; line-height: 1.5; color: var(--text-muted); }
 .dev-topic-about-body + .dev-topic-note { margin-top: 8px; }
+/* #2603: a governance proposal's vote roster, under the About sheet's
+   words. The ledger's review line rendered outside the ledger, so it takes
+   the note's size and its own top margin rather than the row grid's. */
+.dev-topic-roster { margin-top: 10px; font-size: 13px; line-height: 1.5; }
 .dev-topic-transcript .st-section { margin: 0; }
 
 /* ── Discussion ──

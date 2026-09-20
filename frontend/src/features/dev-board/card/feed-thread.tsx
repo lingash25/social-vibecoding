@@ -46,6 +46,7 @@ import {
   type FeedThreadMessage,
 } from './feed-thread-store';
 import { FeedMentionMenu, useMentionTypeahead } from './mention-typeahead';
+import { FeedRefMenu, useRefTypeahead } from './ref-typeahead';
 
 /** Two, matching the GitHub preview's FEED_COMMENT_PREVIEW above it. */
 const PREVIEW = 2;
@@ -152,10 +153,13 @@ export function MessageLine({ m }: { m: FeedThreadMessage }): ReactNode {
  * since #2145, to ⌘/Ctrl+Enter, the chord the dev chat, Close issue and Send
  * feedback already answer to.
  *
- * Typing `@` opens the people list (./mention-typeahead.tsx): the group
- * chat's candidates and rows, as a sibling of the field inside this form.
- * While it is open the arrows, Enter, Tab and Escape are its; otherwise every
- * key is the textarea's.
+ * Typing `@` opens the people list (./mention-typeahead.tsx), and `PR#` or a
+ * bare `#` the pull-request and issue list (./ref-typeahead.tsx): the group
+ * chat's candidates and rows in both cases, as a sibling of the field inside
+ * this form. A token under the caret is `@`-shaped or `#`-shaped and never
+ * both, so both lists are asked on every event and at most one opens. While
+ * one is open the arrows, Enter, Tab and Escape are its; otherwise every key
+ * is the textarea's.
  */
 export function FeedReplyComposer({
   slug, draft, posting, onDraftChange, onSubmit,
@@ -169,6 +173,10 @@ export function FeedReplyComposer({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useAutoGrow(inputRef, draft);
   const mention = useMentionTypeahead({ slug, inputRef, value: draft, onChange: onDraftChange });
+  const refs = useRefTypeahead({ slug, inputRef, value: draft, onChange: onDraftChange });
+  // Fanned out rather than chosen between: which list a keystroke concerns is
+  // the token's business, and each closes itself when the token is not its.
+  const syncMenus = () => { mention.sync(); refs.sync(); };
 
   return (
     <form
@@ -192,18 +200,19 @@ export function FeedReplyComposer({
         aria-label="Reply to this item"
         value={draft}
         disabled={posting}
-        onChange={(e) => { onDraftChange(e.target.value); mention.sync(); }}
+        onChange={(e) => { onDraftChange(e.target.value); syncMenus(); }}
         // The caret moving without the text changing (a click, an arrow) can
-        // land on or leave an `@token` just the same.
-        onSelect={mention.sync}
-        onFocus={mention.warm}
-        onBlur={mention.close}
-        onCompositionStart={mention.onCompositionStart}
-        onCompositionEnd={mention.onCompositionEnd}
+        // land on or leave a token just the same.
+        onSelect={syncMenus}
+        onFocus={() => { mention.warm(); refs.warm(); }}
+        onBlur={() => { mention.close(); refs.close(); }}
+        onCompositionStart={() => { mention.onCompositionStart(); refs.onCompositionStart(); }}
+        onCompositionEnd={() => { mention.onCompositionEnd(); refs.onCompositionEnd(); }}
         onKeyDown={(e) => {
           if (e.nativeEvent.isComposing) return;
           // An open suggestion list owns the arrows, Enter, Tab and Escape.
           if (mention.onKeyDown(e)) return;
+          if (refs.onKeyDown(e)) return;
           if (!isSendChord(e)) return;
           // preventDefault is unconditional for the chord, including the
           // nothing-to-do case (#920): the keystroke must never leave a stray
@@ -234,6 +243,13 @@ export function FeedReplyComposer({
         below={mention.below}
         menuRef={mention.menuRef}
         onPick={mention.accept}
+      />
+      <FeedRefMenu
+        items={refs.items}
+        active={refs.active}
+        below={refs.below}
+        menuRef={refs.menuRef}
+        onPick={refs.accept}
       />
     </form>
   );

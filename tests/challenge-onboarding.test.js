@@ -107,7 +107,10 @@ test('event-scoped reads resolve onboarding across the season and reuse prior te
 // suites; inject an authenticated identity here and exercise the same handler
 // registered for web sessions and native tokens against one catalog/ledger.
 function makeApp(counts = [0, 0, 0], credits = {}) {
-  const state = { counts, credits };
+  // `blocks` is the viewer's newest leaderboard snapshot for the event — the
+  // only place a block score is ever written, and what challenge 9 below is
+  // counted from.
+  const state = { counts, credits, blocks: 0 };
   const rows = Array.from({ length: 9 }, (_, i) => {
     const id = i + 1;
     return {
@@ -115,14 +118,21 @@ function makeApp(counts = [0, 0, 0], credits = {}) {
       t_goal: ['Try Three Apps', 'Propose a Change', 'Join Network Operation',
         'Identity Level 1', 'Identity Level 2'][i] || `Weekly ${id}`,
       t_task: 'Existing task', t_reward: '500 pts',
-      metric_type: id === 1 ? 'count' : null,
-      metric_target: id === 1 ? 3 : null,
+      // Challenge 9 is the block-production card (#2492): its metric counts
+      // blocks, which never reach `user_activities`, so its progress can only
+      // come from the snapshot read.
+      metric_type: id === 1 ? 'count' : (id === 9 ? 'blocks_produced' : null),
+      metric_target: id === 1 ? 3 : (id === 9 ? 500 : null),
+      metric_label: id === 9 ? 'blocks' : null,
       event_type: 'season', event_name: 'Current season',
     };
   });
   const done = (id) => (state.counts[id - 1] || 0) >= (id === 1 ? 3 : 1);
   const pool = { query: async (raw, params = []) => {
     const sql = raw.replace(/\s+/g, ' ').trim();
+    if (sql.startsWith('/* challenge event blocks */')) {
+      return { rows: (params[1] || []).map((eventId) => ({ season_event_id: eventId, blocks: state.blocks })) };
+    }
     if (sql.startsWith('/* challenge onboarding */')) {
       return { rows: intro(params[0] === 7 ? state.counts : [0, 0, 0]) };
     }
@@ -316,4 +326,58 @@ test('a finished challenge outside the gate reports done, not merely started', (
     assert.equal(body.data.find((c) => c.id === 1).progress.current, 3);
     assert.equal(state.credits[6], 1);
   });
+});
+
+test('a block-production card carries the snapshot count, as Home always has (#2492)', () => {
+  // The bug: block scores live in leaderboard snapshots and never in the
+  // points ledger, so these lists attached no progress at all to a
+  // `blocks_produced` challenge and its card drew a ring with nothing beside
+  // it — while Home, reading the same snapshot, showed "180/500 blocks" for
+  // the very same challenge. The row now carries the count itself.
+  const { app, state } = makeApp([3, 1, 1]);
+  state.blocks = 180;
+  return withServer(app, async (get) => {
+    for (const path of ['/api/v4/season-events/10/challenges',
+      '/challenges-api/challenges?season_id=2', '/api/v4/mobile/challenges?season_id=2']) {
+      const block = (await get(path)).data.find((c) => c.id === 9);
+      assert.deepEqual(block.progress, { done: false, current: 180, target: 500 },
+        `${path}: counted from the snapshot, not from ledger rows`);
+    }
+    // Nothing produced yet is still a FACT, which is what lets the card say
+    // "Not started" rather than nothing at all.
+    state.blocks = 0;
+    const none = (await get('/api/v4/season-events/10/challenges')).data.find((c) => c.id === 9);
+    assert.deepEqual(none.progress, { done: false, current: 0, target: 500 });
+    // And a viewer at or past the target has finished it.
+    state.blocks = 500;
+    const done = (await get('/api/v4/mobile/challenges?season_id=2')).data.find((c) => c.id === 9);
+    assert.deepEqual(done.progress, { done: true, current: 500, target: 500 });
+  });
+});
+
+test('the snapshot read is one query, and the lists and Home share its SQL (#2492)', async () => {
+  const onboarding = require('../src/services/topochain/challenge-onboarding');
+  const panels = require('../src/routes/home-panels');
+  assert.equal(panels.MY_BLOCKS_SQL, onboarding.NEWEST_EVENT_BLOCKS_SQL,
+    'home-panels re-exports the shared subquery rather than keeping a second copy');
+
+  let calls = 0;
+  let query = null;
+  const pool = { query: async (sql, params) => {
+    calls += 1;
+    query = { sql: sql.replace(/\s+/g, ' ').trim(), params };
+    return { rows: [{ season_event_id: 10, blocks: '42' }, { season_event_id: 11, blocks: null }] };
+  } };
+  const blocks = await onboarding.loadEventBlocks(pool, 7, [10, 11, 10]);
+  assert.equal(calls, 1, 'one query for the whole list, however many events it spans');
+  assert.deepEqual(query.params, [7, [10, 11]], 'deduplicated, viewer first');
+  assert.ok(query.sql.includes(onboarding.NEWEST_EVENT_BLOCKS_SQL.replace(/\s+/g, ' ')),
+    'and it runs the same subquery Home embeds');
+  assert.deepEqual([...blocks], [[10, 42], [11, null]]);
+
+  // A signed-out viewer, or a list with no block card on it, asks nothing.
+  calls = 0;
+  assert.equal((await onboarding.loadEventBlocks(pool, null, [10])).size, 0);
+  assert.equal((await onboarding.loadEventBlocks(pool, 7, [])).size, 0);
+  assert.equal(calls, 0);
 });

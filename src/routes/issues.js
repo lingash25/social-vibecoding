@@ -454,6 +454,35 @@ function stagingMockGovernance() {
 // The generic thread is deterministic in the issue number, so a preview and
 // a declared check see the same two rows on every run; only the ages are
 // clock-relative, which is the thing those rows exist to exercise.
+
+// #2603: the voters behind a mock governance row's tally, so a ?demo=1 deep
+// link into a close proposal shows the same roster — names and lines — a real
+// one does. Obviously synthetic names; the counts are the row's own, so the
+// roster can never disagree with the tally the card drew.
+function stagingMockGovernanceVotes(id) {
+  const row = stagingMockGovernance().find((m) => m.id === id);
+  if (!row) return [];
+  const LINES = {
+    up: ['Checked it myself, nothing left to fix.', 'Happy for this one to go.'],
+    down: ['It still happens on my phone.', 'I would rather leave this one open a while.'],
+  };
+  const out = [];
+  const add = (vote, n) => {
+    for (let i = 0; i < n; i += 1) {
+      out.push({
+        vote,
+        username: `staging-voter-${vote}-${i + 1}`,
+        // A No always carries its line; a Yes may go without one, and the
+        // later mock voters do, so both readings are reviewable.
+        reason: (vote === 'down' || i === 0) ? LINES[vote][i % LINES[vote].length] : null,
+      });
+    }
+  };
+  add('up', parseInt(row.up_count, 10) || 0);
+  add('down', parseInt(row.down_count, 10) || 0);
+  return out;
+}
+
 // Is `number` one of stagingMockIssues' own rows? The repo URL only shapes
 // each row's htmlUrl, so any base answers the membership question.
 function isStagingMockIssueNumber(number) {
@@ -874,6 +903,54 @@ function issueRoutes(config) {
     }
   });
 
+  // #2603: who voted which way on a governance proposal, and the line each
+  // vote carries — the issue-side mirror of GET /api/sessions/:id/votes, and
+  // the source the close-issue card's roster reads. View-level like the by-id
+  // handler above it, and keyed by slug for the same reason: a ?demo=1 mock
+  // id is not a row, so it never reaches the id-addressed collab guard.
+  router.get('/api/apps/:slug/governance/:id/votes', async (req, res) => {
+    try {
+      const gatedApp = await appAccess.getAppForUser(
+        pool, req.params.slug, req.user, 'view', appAccess.ACCESS_COLUMNS
+      );
+      if (!gatedApp) return res.status(404).json({ error: 'App not found' });
+
+      const id = parseInt(req.params.id, 10);
+      if (!Number.isFinite(id)) return res.status(404).json({ error: 'Proposal not found' });
+
+      const { rows } = await pool.query(
+        `SELECT iv.vote, iv.reason, u.username
+           FROM issue_votes iv
+           JOIN users u ON u.id = iv.user_id
+           JOIN issues i ON i.id = iv.issue_id
+          WHERE iv.issue_id = $1 AND i.app_id = $2
+          ORDER BY iv.created_at ASC, iv.id ASC`,
+        [id, gatedApp.id]
+      );
+
+      // The mock governance rows aren't in the DB, so a ?demo=1 deep link
+      // reads its roster from the same generators the card came from.
+      const votes = (!rows.length && IS_STAGING && req.query.demo === '1')
+        ? stagingMockGovernanceVotes(id)
+        : rows;
+
+      // 'up'/'down' is the issue vocabulary; 'yes'/'no' is what a roster
+      // says, and what the shared roster component renders.
+      res.json({
+        yes: votes.filter((r) => r.vote === 'up').map((r) => r.username),
+        no: votes.filter((r) => r.vote === 'down').map((r) => r.username),
+        reasons: votes.filter((r) => r.reason).map((r) => ({
+          username: r.username,
+          vote: r.vote === 'down' ? 'no' : 'yes',
+          reason: r.reason,
+        })),
+      });
+    } catch (err) {
+      log.error('issues', 'Failed to list governance votes', { message: err.message });
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   // Create an issue / proposal — kinds per VALID_KINDS above (general is
   // the default). Rate-limited per kind: close_issue proposals draw from
   // their own bucket, everything else from issue-create.
@@ -1217,11 +1294,21 @@ function issueRoutes(config) {
   });
 
   // Vote on an issue — for rename proposals, a passing up-vote auto-applies.
+  //
+  // #2603: a governance vote carries the same one line a proposal vote does.
+  // The rules are votes.js's, reused rather than restated: the same
+  // normaliser, the same 280-character cap, required on a No and optional on
+  // a Yes. Lazily required, matching the direction this module already uses
+  // for './votes' (see the demo close rows in the by-id handler above).
   router.post('/api/issues/:id/vote', async (req, res) => {
     const { vote } = req.body;
     if (!['up', 'down'].includes(vote)) {
       return res.status(400).json({ error: 'Vote must be "up" or "down"' });
     }
+    const votesModule = require('./votes');
+    const normalized = votesModule.normalizeVoteReason(req.body?.reason);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
+    const reason = normalized.reason;
 
     try {
       // Join to apps so we have the slug for the WS broadcast below;
@@ -1262,10 +1349,28 @@ function issueRoutes(config) {
         return res.json({ ok: true, toggled: true });
       }
 
+      // #2603: a No comes with a line, so the proposer learns what is wrong
+      // rather than only that somebody minded — votes.js's rule, and its
+      // wording. Checked AFTER the toggle branch above: retracting a No is
+      // not casting one, and asking for a sentence to take a vote back would
+      // be a trap. The same-side re-cast votes.js exempts cannot arrive here
+      // at all, because on an issue that click is the retraction.
+      if (vote === 'down' && !reason) {
+        return res.status(400).json({
+          error: 'reason_required',
+          message: votesModule.VOTE_REASON_REQUIRED,
+          maxLength: votesModule.VOTE_REASON_MAX,
+        });
+      }
+
+      // A flip REPLACES the line rather than keeping it: the old sentence
+      // argued for the side this vote just left. (votes.js keeps an earlier
+      // line on a same-side re-cast; here that click is the toggle above.)
       await pool.query(
-        `INSERT INTO issue_votes (issue_id, user_id, vote) VALUES ($1, $2, $3)
-         ON CONFLICT (issue_id, user_id) DO UPDATE SET vote = EXCLUDED.vote, created_at = NOW()`,
-        [issue.id, req.user.id, vote]
+        `INSERT INTO issue_votes (issue_id, user_id, vote, reason) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (issue_id, user_id) DO UPDATE
+           SET vote = EXCLUDED.vote, reason = EXCLUDED.reason, created_at = NOW()`,
+        [issue.id, req.user.id, vote, reason]
       );
 
       let voteSubject;
@@ -1285,8 +1390,12 @@ function issueRoutes(config) {
       } else {
         voteSubject = `issue: "${issue.title}"`;
       }
+      // #2603: with a line, the row is the person's sentence as well as their
+      // tally — the same shape votes.js gives a proposal vote's thread line.
       await sendSystemMessage(pool, issue.app_id,
-        `${req.user.username} voted ${vote} on ${voteSubject}`,
+        reason
+          ? `${req.user.username} voted ${vote} on ${voteSubject}: “${reason}”`
+          : `${req.user.username} voted ${vote} on ${voteSubject}`,
         'vote',
         null,
         // #194: per-vote activity lands in the proposal's own thread

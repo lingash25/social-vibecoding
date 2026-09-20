@@ -429,24 +429,39 @@ test('a counted metric fills the rail by the viewer’s ledger rows', () => {
     { state: 'progress', stateLabel: '3/8 tried', fill: 0.375, earned: null });
 });
 
-test('block production with no ledger points claims nothing: a bare ring, no value', () => {
+test('block production with no ledger points says Not started, never a bare ring (#2492)', () => {
   // The real shape: block scores live in snapshots, never in user_activities,
-  // so an active block producer's row has no activities at all.
+  // so an active block producer's row has no activities at all. That used to
+  // return an empty label and draw a dot with nothing beside it; the words
+  // are the same ones Home has always shown for the same challenge.
   const { pane } = loadPane({ challenges: CH, eventId: 900500 });
   pane._mine = new Map([[900500, {
     id: 900500, activities_total: 0, activities: [],
     metric: { kind: 'blocks_produced', label: 'blocks', target: 1 },
   }]]);
   assert.deepEqual(stateOf(pane, CH[0]),
-    { state: 'new', stateLabel: '', fill: null, earned: null },
-    'not "Not started" — Home may be showing this viewer real block progress');
+    { state: 'new', stateLabel: 'Not started', fill: 0, earned: null });
 });
 
-test('before personalization lands, a block challenge still claims nothing', () => {
+test('the row’s own block count wins over the ledger fallback (#2492)', () => {
+  // What the server now attaches: `progress` resolved from the viewer's
+  // newest leaderboard snapshot, the same value Home's meter reads. The
+  // counted branch prints it, so the tab and Home agree on the number.
+  const { pane } = loadPane({ challenges: CH, eventId: 900500 });
+  const block = {
+    id: 900504, completed: false, card_preview: {},
+    metric: { kind: 'blocks_produced', label: 'blocks', target: 500 },
+    progress: { done: false, current: 180, target: 500 },
+  };
+  assert.deepEqual(stateOf(pane, block),
+    { state: 'progress', stateLabel: '180/500 blocks', fill: 0.36, earned: null });
+});
+
+test('before personalization lands, a block challenge says Not started too', () => {
   const { pane } = loadPane({ challenges: CH, eventId: 900500 });
   const block = { id: 900504, completed: false, activity_type: { metric_type: 'blocks_produced', metric_label: 'blocks' }, card_preview: {} };
-  assert.deepEqual(stateOf(pane, block), { state: 'new', stateLabel: '', fill: null, earned: null },
-    'first paint and a failed personalization read the public row’s metric kind');
+  assert.deepEqual(stateOf(pane, block), { state: 'new', stateLabel: 'Not started', fill: 0, earned: null },
+    'first paint and a failed personalization fall back to the ledger, which a block card never has');
 });
 
 test('ledger-credited block production and yes/no challenges are indeterminate, labelled Started', () => {

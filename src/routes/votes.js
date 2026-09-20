@@ -1979,6 +1979,50 @@ function voteRoutes(config) {
 
       const [, repoOwner, repoName] = (session.repo_url || '').match(/github\.com\/([^/]+)\/([^/]+)/) || [];
 
+      // #2500 / #2537: backfill the originating issue for the sessions that
+      // predate the creation-time seed (routes/sessions.js). They recorded
+      // the issue only in `created_from_issue_number`, so their proposal
+      // showed "No issues linked yet" and, since the closing block is built
+      // from `linked_issues`, the pull request opened just below carried no
+      // `Closes #N` either. Promote time is the last moment that can still
+      // be fixed before the group sees the proposal.
+      //
+      // Only ever for a row the seed never touched: on a seeded row an empty
+      // `linked_issues` is an author's deliberate removal, and resurrecting
+      // it here would make the linked-issues editor look broken. Routed
+      // through proposal-update.updateLinkedIssues so a session that already
+      // has a pull request gets the `Closes #N` appended to its live body
+      // too — the lazy-creation block below only runs when there is no PR
+      // yet, or no title on it. Best-effort: a proposal must never fail to
+      // go up for a vote over its issue linkage.
+      if (!session.issue_link_seeded
+          && Number.isInteger(session.created_from_issue_number)
+          && session.created_from_issue_number > 0
+          && !(Array.isArray(session.linked_issues) ? session.linked_issues : []).length) {
+        try {
+          const proposalUpdate = require('../services/proposal-update');
+          await proposalUpdate.updateLinkedIssues({
+            pool, gh: github, session,
+            owner: repoOwner,
+            repo: repoName ? repoName.replace(/\.git$/, '') : repoName,
+            addIssues: [session.created_from_issue_number],
+            removeIssues: [],
+          });
+          await pool.query(
+            'UPDATE chat_sessions SET issue_link_seeded = TRUE WHERE id = $1',
+            [session.id]
+          );
+          session.issue_link_seeded = true;
+          log.info('votes', 'Backfilled the originating issue onto the proposal', {
+            sessionId: session.id, issueNumber: session.created_from_issue_number,
+          });
+        } catch (err) {
+          log.warn('votes', 'Originating-issue backfill failed (continuing)', {
+            sessionId: session.id, err: err.message,
+          });
+        }
+      }
+
       // #183 lazy PR creation: sessions cloned from a headless auto run
       // arrive here without a PR (the headless contract defers it). Create
       // it now on THIS session's branch — the clone's, never the auto

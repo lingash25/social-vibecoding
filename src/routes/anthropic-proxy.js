@@ -317,19 +317,53 @@ async function emitSwitchNotice(pool, sessionId, userId, window = 'daily') {
 // FIRE-AND-FORGET by contract: never awaited into the response path, and
 // a failure is a log.warn and nothing more. Bookkeeping must not be able
 // to fail or delay a turn — same posture as emitSwitchNotice above.
-function noteAgentSpend(pool, { sessionId, costCents, isSyncTurn }) {
+//
+// #2592: it records WHICH MODEL spent it, too. The ledger column has no
+// model dimension, so services/model-costs.js had to leave the agent's
+// spend out of its per-model aggregate entirely — which is why the
+// observed average and median on the Model costs console read far below
+// what a change really costs. The proxy is the one place that knows: the
+// stream reports the model it actually ran on (falling back to the one
+// the request asked for), so the breakdown is recorded rather than
+// inferred. A call whose model could not be determined still lands on the
+// ledger; it just adds no per-model row.
+//
+// ONE STATEMENT, not two. The breakdown rides on a CTE over the ledger
+// UPDATE so the pair cannot half-happen: a session's per-model rows sum to
+// its ledger, or neither was written. That is what lets a reader trust
+// either number on its own.
+const LEDGER_SQL =
+  `UPDATE chat_sessions SET agent_cost_cents = agent_cost_cents + $1 WHERE id = $2`;
+
+const LEDGER_WITH_MODEL_SQL =
+  `WITH ledger AS (
+     UPDATE chat_sessions SET agent_cost_cents = agent_cost_cents + $1 WHERE id = $2
+     RETURNING id
+   )
+   INSERT INTO chat_session_agent_model_costs (session_id, model, cost_cents)
+     SELECT ledger.id, $3::varchar, $1::numeric FROM ledger
+   ON CONFLICT (session_id, model) DO UPDATE
+     SET cost_cents = chat_session_agent_model_costs.cost_cents + EXCLUDED.cost_cents,
+         updated_at = NOW()`;
+
+// The breakdown column is VARCHAR(128); a model id is far shorter than
+// that, but an upstream that answered with something long must not turn a
+// bookkeeping write into an error.
+const MAX_MODEL_ID = 128;
+
+function noteAgentSpend(pool, { sessionId, costCents, isSyncTurn, model }) {
   if (isSyncTurn) return;
   if (!sessionId) return;
   const cents = Number(costCents);
   if (!Number.isFinite(cents) || cents <= 0) return;
+  const modelId = (typeof model === 'string' ? model.trim() : '').slice(0, MAX_MODEL_ID);
   Promise.resolve()
-    .then(() => pool.query(
-      `UPDATE chat_sessions SET agent_cost_cents = agent_cost_cents + $1 WHERE id = $2`,
-      [cents, sessionId]
-    ))
+    .then(() => (modelId
+      ? pool.query(LEDGER_WITH_MODEL_SQL, [cents, sessionId, modelId])
+      : pool.query(LEDGER_SQL, [cents, sessionId])))
     .catch((err) => {
       log.warn('anthropic-proxy', 'Failed to record agent spend on session', {
-        sessionId, costCents: cents, err: err.message,
+        sessionId, costCents: cents, model: modelId || null, err: err.message,
       });
     });
 }
@@ -488,7 +522,7 @@ function anthropicProxyRoutes(config) {
           // #800: BYOK-paid work still costs the change the same at list
           // price, so it lands on the ledger identically.
           noteAgentSpend(pool, {
-            sessionId, costCents: result.costCents, isSyncTurn,
+            sessionId, costCents: result.costCents, isSyncTurn, model: result.model,
           });
           if (result.status === 401 || result.status === 403) {
             log.warn('anthropic-proxy', 'BYOK key rejected by Anthropic upstream', {
@@ -628,7 +662,9 @@ function anthropicProxyRoutes(config) {
     // #800: same cost, recorded durably against the change rather than
     // only in the in-memory trackers above. Counted on kills too, for the
     // same reason the trackers count them — the tokens were consumed.
-    noteAgentSpend(pool, { sessionId, costCents: result.costCents, isSyncTurn });
+    noteAgentSpend(pool, {
+      sessionId, costCents: result.costCents, isSyncTurn, model: result.model,
+    });
     if (result.killed) {
       log.info('anthropic-proxy', 'Killed call settled', {
         sessionId, userId,
