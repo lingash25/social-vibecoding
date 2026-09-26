@@ -559,7 +559,9 @@ test('the change page has no panel to auto-open, and says so in its source', () 
     assert.ok(!src.includes(gone), `${gone} is gone from the conversation module`);
   }
   const mod = loadTsx('frontend/src/features/dev-board/topic/conversation.tsx');
-  assert.deepEqual(Object.keys(mod).sort(), ['ChangeConversation', 'mountChangeDiscussion']);
+  // #2842: `agentDoor` picks the band's existing Build / Explore spec for
+  // the sheet's "work with the AI agent" line; it opens no panel.
+  assert.deepEqual(Object.keys(mod).sort(), ['ChangeConversation', 'agentDoor', 'mountChangeDiscussion']);
 });
 
 test('the issue picker normalizes, searches and ranks the local issue catalog', () => {

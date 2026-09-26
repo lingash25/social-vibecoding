@@ -94,7 +94,10 @@ test('the hero: the eyebrow with the pull request and its state, the age, the ti
     age: hero.age, author: 'maya', verb: 'proposed', provenance: null, tint: 'b',
   });
   assert.ok(v.body.hero.age && v.body.hero.age.s, 'the age is the card meta line’s own part');
-  assert.match(html, /<span class="dev-ws-eyebrow dev-topic-hero-eyebrow">Proposal · <a href="https:\/\/github\.com\/example\/app\/pull\/12" target="_blank" rel="noopener">PR#12<\/a><span> · In review<\/span><\/span><span class="dev-ws-item-of"[^>]*>/);
+  // #2841: the page opens with Basic details, whose eyebrow keeps the state
+  // and leaves the pull request link to Advanced (the model still carries
+  // it — tests/change-detail-mode.test.js draws it with the switch on).
+  assert.match(html, /<span class="dev-ws-eyebrow dev-topic-hero-eyebrow">Proposal · In review<\/span><span class="dev-ws-item-of"[^>]*>/);
   assert.match(html, /<h2 class="dev-ws-item-title dev-topic-hero-title">Authenticate previews<\/h2>/);
   assert.match(html, /<p class="dev-ws-item-by dev-topic-hero-by"><span class="dev-ws-item-avatar" style="background:#[0-9a-f]{6}" aria-hidden="true">M<\/span><span><b>maya<\/b><span> · proposed /);
   // The chips are the card's own tag specs (their tints ride along), and

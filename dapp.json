@@ -2732,8 +2732,9 @@
       "expectText": "Checks starting"
     },
     {
-      "name": "Checks card names the preview-preparation stage on a building run",
+      "name": "Checks card names the preview-preparation stage on a building run, on a page that opens with Basic details and an Advanced details switch that is off (#2841)",
       "path": "/?demo=1#app/usernode-2d5619/dev/proposals/9000022",
+      "expectSelector": ".dev-topic[data-detail-mode=\"basic\"] > .dev-topic-hero > .dev-topic-detail-mode input.un-switch[role=\"switch\"]:not(:checked)",
       "expectText": "Preparing the staging preview"
     },
     {
@@ -2744,8 +2745,7 @@
     {
       "name": "Checks card names the fifth build step while the run waits behind an earlier one",
       "path": "/?demo=1#app/usernode-2d5619/dev/proposals/9000028",
-      "expectSelector": ".dev-step[data-note=\"checks\"] .dev-ledger-progress-build[data-build-step=\"prepare_checks\"] .dev-ledger-build-bar[data-build-progress=\"4/5\"] > .dev-ledger-build-seg.is-now[data-step=\"prepare_checks\"]",
-      "expectText": "prepare checks (waiting for an earlier run)"
+      "expectSelector": ".dev-step[data-note=\"checks\"] .dev-ledger-progress-build[data-build-step=\"prepare_checks\"] .dev-ledger-build-bar[data-build-progress=\"4/5\"] > .dev-ledger-build-seg.is-now[data-step=\"prepare_checks\"]"
     },
     {
       "name": "Checks card says an author's commit started the run (#1144)",
@@ -3715,9 +3715,10 @@
       "expectText": "Preview building"
     },
     {
-      "name": "Imported proposal whose preview failed shows the unavailable chip (#866)",
+      "name": "Imported proposal whose preview failed shows the unavailable chip (#866); under its Discussion a viewer who is not the author is offered the dev chat to keep building with the AI agent (#2842)",
       "path": "/?demo=1#app/usernode-2d5619/dev/proposals/9000043",
-      "expectText": "Preview unavailable"
+      "expectText": "Preview unavailable",
+      "expectSelector": "[data-change-conversation=\"9000043\"] > .dev-conversation-audience + .dev-conversation-agent[data-agent-door=\"explore\"] > button"
     },
     {
       "name": "Freshness (#1442): a conflicted proposal folds behind-main and the conflict into one sync step",
@@ -3745,8 +3746,7 @@
     {
       "name": "A failing check is one line with a Why it failed door, on a Checks step marked blocked whose sentence says who has to act and when it last ran",
       "path": "/?demo=1#app/usernode-2d5619/dev/proposals/9000093",
-      "expectSelector": ".dev-step-blocked[data-note=\"checks\"]:has(.dev-ledger-text > .dev-ledger-lead-bad + .dev-step-when) .dev-ledger-fails > .dev-ledger-check-why > .dev-ledger-why:not([open]) > .dev-ledger-check-line > .dev-ledger-check-name + .dev-ledger-check-open",
-      "expectText": "Why it failed"
+      "expectSelector": ".dev-step-blocked[data-note=\"checks\"]:has(.dev-ledger-text > .dev-ledger-lead-bad + .dev-step-when) .dev-ledger-fails > .dev-ledger-check-why > .dev-ledger-why:not([open]) > .dev-ledger-check-line > .dev-ledger-check-name + .dev-ledger-check-open"
     },
     {
       "name": "Freshness (#1442): a conflicting proposal says so on its merge step, with its vote still open above it",
@@ -4863,10 +4863,10 @@
       "expectText": "Open proposal card"
     },
     {
-      "name": "A change in review has its group discussion in the Discussion sheet under the card, with no tabs, in the general chat's language: a person's message as a named row with no bubble (#2783), a platform notice as a message from the app with one box",
+      "name": "A change in review has its group discussion in the Discussion sheet under the card, with no tabs, in the general chat's language: a person's message as a named row with no bubble (#2783), a platform notice as a message from the app with one box; the sheet says its messages go to people, not the AI agent (#2842)",
       "path": "/?demo=1#app/usernode-2d5619/dev/proposals/9000043",
       "expectSelector": "[data-change-conversation] [data-change-discussion]:has([data-language=\"chat\"] > .gc-msg:not(.gc-msg-self) .gc-msg-content):not(:has(.gc-bubble)):has(.gc-event[data-event=\"notice\"][data-here] .gc-event-text) #gc-thread-input",
-      "expectText": "Visible to the group"
+      "expectText": "Visible to the group · Messages here go to people, not to the AI agent."
     },
     {
       "name": "Choosing Claude Code opens a three-step walkthrough, ending at the hand-off",

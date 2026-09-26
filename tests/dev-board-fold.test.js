@@ -1318,6 +1318,14 @@ test('the declared checks that read a board card’s anatomy run with the cards 
   // the next proposal to add a check folds into an existing one or raises
   // the cap, as tests/lib/check-cap.js says.
   //
+  // #2841/#2842 added no check at 820 (the floor): the Basic/Advanced switch folded
+  // into the expectText-only preview-preparation check on 9000022, the
+  // Discussion check's text on 9000043 pins "Messages here go to people, not
+  // to the AI agent.", and the agent-door button folded into the text-only
+  // unavailable-chip check on 9000043 (the viewer is not its author, so the
+  // door is "explore"). Two checks whose text now sits behind Advanced
+  // details kept their selectors and dropped only the text.
+  //
   // A mismatch says what the count is, what it is pinned at, and what to do
   // (tests/lib/check-cap.js) — it used to print only `812 !== 811`.
   checkCap.assertPinned(DAPP.tests.length, 820);

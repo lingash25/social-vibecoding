@@ -37,6 +37,7 @@ import { useStoreState } from '../../../lib/use-store-state';
 import { Button } from '@/components/ui/button';
 import { ChevronRightIcon, PencilSquareIcon, PlusIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ActionBand, ActionButton, Badge, DevCard, StatusPill, TitleContent, VoteButton, isVoteSpec } from '../card/dev-card';
 import type { DevCardModel } from '../card/model';
@@ -44,6 +45,7 @@ import { swatchFor } from '../../group-chat/swatch';
 import { topicHeadStore } from './topic-store';
 import { ChangeConversation } from './conversation';
 import { TopicBack } from './topic-back';
+import { detailModeStore, setDetailMode } from './detail-mode';
 import type {
   ChecksVerdict,
   CheckRow,
@@ -939,6 +941,45 @@ function BeforeAfter({ body }: { body: TopicBody }): ReactNode {
 }
 
 /**
+ * #2841 / #2842 — Basic or Advanced details, the viewer's choice (see
+ * ./detail-mode.ts). A labelled switch rather than a disclosure, because it
+ * changes several regions at once (the eyebrow, the steps sheet, the
+ * technical description) and stays where it was put across pages.
+ */
+export function DetailModeToggle({ id, advanced }: { id: number; advanced: boolean }): ReactNode {
+  const inputId = `dev-topic-detail-mode-${id}`;
+  const hintId = `${inputId}-hint`;
+  return (
+    <div className="dev-topic-detail-mode" data-detail-toggle={id}>
+      <label htmlFor={inputId} className="dev-topic-detail-mode-label">
+        <Switch
+          id={inputId}
+          role="switch"
+          aria-describedby={hintId}
+          checked={advanced}
+          onChange={(e) => setDetailMode(e.currentTarget.checked ? 'advanced' : 'basic')}
+        />
+        <span>Advanced details</span>
+      </label>
+      <span id={hintId} className="dev-topic-detail-mode-hint">
+        {advanced ? 'Showing checks, build steps and the technical description.' : 'Checks, build steps and the technical description.'}
+      </span>
+    </div>
+  );
+}
+
+/** The testing instructions the author recorded — advanced only (#2841). */
+function TestingDetails({ t }: { t: NonNullable<TopicBody['testing']> }): ReactNode {
+  return (
+    <details className="dev-topic-details">
+      <summary className="dev-topic-details-summary">Testing instructions</summary>
+      {t.html ? <Html className="dev-issue-body dev-topic-details-body" html={t.html} />
+        : <p className="dev-topic-note">{t.path ? `Testing instructions are recorded in ${t.path}.` : 'No testing instructions have been added yet.'}</p>}
+    </details>
+  );
+}
+
+/**
  * The hero: the change as the Workshop's Needs-you item. The eyebrow (what
  * the page is, the pull request, where it stands) with the age at its
  * right; the title, with the author's pencil; who proposed it; the card's
@@ -947,12 +988,14 @@ function BeforeAfter({ body }: { body: TopicBody }): ReactNode {
  * with Vote first; the plain-English summary; the issue it addresses; the
  * picture, or the line that says it is coming.
  */
-function ChangeHero({ id, card, body, linkedIssues, onIssuesSaved }: {
+function ChangeHero({ id, card, body, linkedIssues, onIssuesSaved, advanced = true }: {
   id: number | null;
   card: DevCardModel;
   body: TopicBody;
   linkedIssues: number[];
   onIssuesSaved: (issues: number[]) => void;
+  /** #2841: the pull request link and the technical description are advanced. */
+  advanced?: boolean;
 }): ReactNode {
   const h: HeroView = body.hero || { kind: 'Change', ref: null, status: '', age: null, author: null, verb: 'proposed', provenance: null, tint: 'a' };
   const all = card.actions || [];
@@ -973,7 +1016,7 @@ function ChangeHero({ id, card, body, linkedIssues, onIssuesSaved }: {
     <section className="dev-topic-sheet dev-topic-hero" data-topic-sheet="hero" data-ws-tint={h.tint}>
       <div className="dev-topic-hero-top">
         <span className="dev-ws-eyebrow dev-topic-hero-eyebrow">
-          {h.ref ? (
+          {h.ref && advanced ? (
             <>
               {`${h.kind} · `}
               {h.ref.href ? <a href={h.ref.href} target="_blank" rel="noopener">{h.ref.s}</a> : <span>{h.ref.s}</span>}
@@ -1025,6 +1068,11 @@ function ChangeHero({ id, card, body, linkedIssues, onIssuesSaved }: {
       ) : null}
       <BeforeAfter body={body} />
       {body.note ? <div className="dev-topic-note">{body.note}</div> : null}
+      {id ? <DetailModeToggle id={id} advanced={advanced} /> : null}
+      {/* #2841: the technical half, inline, for whoever asked for it. The
+          ⋯ menu's "Technical details" sheet stays the way in from Basic. */}
+      {advanced && body.proposalBody ? <ProposalBody b={body.proposalBody} /> : null}
+      {advanced && body.testing ? <TestingDetails t={body.testing} /> : null}
     </section>
   );
 }
@@ -1234,19 +1282,22 @@ export function ChangeDetail({ card: initialCard, body: initialBody, item, owner
   };
   const changePage = !!body.changeId;
   const linkedIssues = Array.isArray(session?.linked_issues) ? session.linked_issues : [];
+  // #2841: a change page opens Basic; the switch in the hero flips it.
+  const { mode } = useStoreState(detailModeStore);
+  const advanced = mode === 'advanced';
   return (
-    <div ref={root} className="dev-topic">
+    <div ref={root} className="dev-topic" data-detail-mode={changePage ? mode : undefined}>
       {back ? <TopicBack /> : null}
       {error ? <p role="alert" className="dev-topic-note">{error} <button className="gc-vote-btn" onClick={() => setRevision((n) => n + 1)}>Retry</button></p> : null}
       {changePage ? (
         <>
-          <ChangeHero id={id ? Number(id) : null} card={card} body={body} linkedIssues={linkedIssues} onIssuesSaved={applyLinkedIssues} />
+          <ChangeHero id={id ? Number(id) : null} card={card} body={body} linkedIssues={linkedIssues} onIssuesSaved={applyLinkedIssues} advanced={advanced} />
           {body.steps ? <StepsSheet s={body.steps} help={!!(body.details && body.details.help)} /> : null}
           {/* #2605: a change's page carries NO build surface — not the Build
               sheet, and not the published chat's disclosure that used to sit
               beside it. Both are the dev session page's now, behind the
               hero's pill. */}
-          {conversation ? <ChangeConversation key={body.changeId} item={session} body={body} /> : null}
+          {conversation ? <ChangeConversation key={body.changeId} item={session} body={body} card={card} /> : null}
           {/* The GitHub thread's host (issue-comments.tsx mounts into it):
               a body that carries one gets it whatever page it is on. */}
           {body.comments ? <div id="dev-issue-comments" className="dev-topic-sheet dev-topic-comments"></div> : null}
@@ -1430,11 +1481,7 @@ export function TopicBodySections({ body }: { body: TopicBody }): ReactNode {
             </div>
           ) : null}
           {body.proposalBody ? <ProposalBody b={body.proposalBody} /> : null}
-          {body.testing ? <details className="dev-topic-details">
-            <summary className="dev-topic-details-summary">Testing instructions</summary>
-            {body.testing.html ? <Html className="dev-issue-body dev-topic-details-body" html={body.testing.html} />
-              : <p className="dev-topic-note">{body.testing.path ? `Testing instructions are recorded in ${body.testing.path}.` : 'No testing instructions have been added yet.'}</p>}
-          </details> : null}
+          {body.testing ? <TestingDetails t={body.testing} /> : null}
           {body.note ? <div className="dev-topic-note">{body.note}</div> : null}
           {/* #2603: the votes, in the voters' own words — the same roster
               a change's Review row draws, wearing the review line's box so

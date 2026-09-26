@@ -14299,6 +14299,21 @@ div:is(.dev-card-dense, .dev-card-topic)[data-edge="neutral"]   { --dev-edge: va
    change's own dev session. */
 .dev-conversation { min-width: 0; scroll-margin-top: 12px; }
 .dev-conversation-audience { margin: 0 4px 8px; }
+/* #2842: the thread is people's, and the door to the AI agent sits under it. */
+.dev-conversation-agent { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -2px 4px 10px; }
+/* #2841 / #2842: Basic or Advanced details (topic/detail-mode.ts). Basic
+   keeps each merge step's sentence, the lines that explain it and the
+   lists those lines introduce (the variables a merge is waiting on, the
+   files changed on both sides), and hides the per-check rows and the build
+   pipeline — by CSS, so the nodes the declared checks select on stay in
+   the document. */
+.dev-topic-detail-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 14px; }
+.dev-topic-detail-mode-label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.dev-topic-detail-mode-hint { font-size: 12.5px; color: var(--text-muted); }
+.dev-topic[data-detail-mode="basic"] .dev-topic-steps .dev-ledger-progress-build,
+.dev-topic[data-detail-mode="basic"] .dev-topic-steps .dev-ledger-progress-unit,
+.dev-topic[data-detail-mode="basic"] .dev-topic-steps .dev-step-body > .dev-ledger-fails,
+.dev-topic[data-detail-mode="basic"] .dev-topic-steps .dev-ledger-passes { display: none; }
 .dev-conversation-chat { height: clamp(300px, 50dvh, 540px); }
 /* The thread's scroller wears `overscroll-contain` for the full-height
    thread screens, where the page behind it must not move. Here the thread is

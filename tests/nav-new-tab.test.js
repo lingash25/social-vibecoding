@@ -427,7 +427,7 @@ test('"back out of an issue / proposal / governance topic" is the in-pane Worksh
     'and renders only when that answer exists');
   // First in `.dev-topic`, so it sits above the hero or the card and scrolls
   // with them, on every kind of topic (TopicHead is the head of all of them).
-  assert.match(topicHeadTsx, /<div ref=\{root\} className="dev-topic">\n\s+\{back \? <TopicBack \/> : null\}/,
+  assert.match(topicHeadTsx, /<div ref=\{root\} className="dev-topic"[^>]*>\n\s+\{back \? <TopicBack \/> : null\}/,
     'topic-head.tsx: the chip is the first child of .dev-topic');
   assert.match(topicHeadTsx, /conversation=\{conversation\} back \/>;/,
     'and TopicHead, the topic page, is what asks for it');
