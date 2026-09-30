@@ -3786,13 +3786,18 @@ async function _consumeJournal(containerName, journal, progress, state, { sessio
 //
 // `stopRequestedAt` on the registry entry tightens the watchdog cadence as
 // a fallback for the case where this append doesn't land at all.
-async function stopTurn(sessionId) {
+async function stopTurn(sessionId, { force = false } = {}) {
   const meta = _registryGet(sessionId);
   const containerName = meta?.containerName || workerRuntimeName(sessionId);
   _registryUpsert(sessionId, { stopRequestedAt: Date.now() });
-  await execWorkerCommand(containerName, ['sh', '-c',
-    buildTurnStopScript(meta?.journal || null),
-  ]).catch(() => {});
+  const command = execWorkerCommand(containerName, ['sh', '-c',
+    buildTurnStopScript(meta?.journal || null, { force }),
+  ], null, { timeoutMs: force ? 5000 : 30000 });
+  if (force) {
+    const result = await command;
+    return /__USERNODE_STOP_CONFIRMED__/.test(result?.stdout || '');
+  }
+  await command.catch(() => {});
   log.info('worker', 'Stop signal sent (in-container kill + journal exit marker)', {
     containerName, sessionId, journal: meta?.journal || '(discovered in-container)',
   });
@@ -4140,14 +4145,15 @@ const TURN_STOP_GRACE_TICKS = 20;
 // `journal` is the host's recorded path for the in-flight turn. When it is
 // unknown (an adopted worker whose registry entry predates this dispatch)
 // the script discovers the newest turn journal itself — the dispatch
-// wrapper rm's stale ones first, so at most one exists. `exit 0` throughout:
-// a stop must never fail loudly, the watchdog is behind it either way.
-function buildTurnStopScript(journal) {
+// wrapper rm's stale ones first, so at most one exists. Classic stops are
+// best-effort; force stops must return confirmation or fail for recovery.
+function buildTurnStopScript(journal, { force = false } = {}) {
   const journalExpr = journal
     // Single-quoted: the path is platform-generated (/home/node/.claude/
     // turn-<ms>.log), never user input, and quoting keeps it one word.
     ? `J='${journal}'`
     : 'J=$(ls -t /home/node/.claude/turn-*.log 2>/dev/null | head -1)';
+  if (force) return buildImmediateTurnStopScript(journalExpr);
   return [
     turnProcSignalSnippet('TERM'),
     // Wait for the SIGTERMed processes to actually disappear. Breaks out on
@@ -4162,6 +4168,40 @@ function buildTurnStopScript(journal) {
     // 143 = 128 + SIGTERM, what a docker-stop-based kill would have produced.
     '[ -n "$J" ] && [ -f "$J" ] && echo "__USERNODE_EXIT__ 143" >> "$J" 2>/dev/null',
     'exit 0',
+  ].join('; ');
+}
+
+// Hard cancellation preserves the warm worker and workspace. Freeze the
+// owned roots before walking descendants so a stopped parent cannot fork
+// fresh tools while we terminate its process tree. The warm idle wrapper,
+// journal reader and this control shell are not roots.
+function buildImmediateTurnStopScript(journalExpr) {
+  return [
+    'targets=" "',
+    'for d in /proc/[0-9]*; do '
+      + '[ "$d" = "/proc/$$" ] && continue; '
+      + 'c=$(tr "\\0" " " < "$d/cmdline" 2>/dev/null) || continue; '
+      + `printf "%s" "$c" | grep -qE '${TURN_PROC_RE}' || continue; `
+      + 'p=${d#/proc/}; targets="$targets$p "; kill -STOP "$p" 2>/dev/null; done',
+    'added=1; while [ "$added" = 1 ]; do added=0; '
+      + 'for d in /proc/[0-9]*; do p=${d#/proc/}; [ "$p" = "$$" ] && continue; '
+      + 'case "$targets" in *" $p "*) continue;; esac; '
+      + 'parent=$(sed -n "s/^PPid:[[:space:]]*//p" "$d/status" 2>/dev/null); '
+      + '[ -n "$parent" ] || continue; '
+      + 'case "$targets" in *" $parent "*) targets="$targets$p "; added=1; kill -STOP "$p" 2>/dev/null;; esac; '
+      + 'done; done',
+    'for p in $targets; do kill -KILL "$p" 2>/dev/null; done',
+    // Do not write a terminal marker while any signalled process can run.
+    // A zombie has already exited; reaping it belongs to its parent.
+    'i=0; while :; do alive=0; for p in $targets; do '
+      + '[ -r "/proc/$p/stat" ] || continue; '
+      + 'state=$(sed "s/^.*) //" "/proc/$p/stat" 2>/dev/null); '
+      + 'case "$state" in Z*|X*|"") ;; *) alive=1;; esac; done; '
+      + '[ "$alive" = 0 ] && break; [ "$i" -ge 10 ] && exit 75; '
+      + 'i=$((i+1)); sleep 0.05; done',
+    journalExpr,
+    '[ -n "$J" ] && [ -f "$J" ] && echo "__USERNODE_EXIT__ 137" >> "$J" 2>/dev/null',
+    'echo __USERNODE_STOP_CONFIRMED__',
   ].join('; ');
 }
 

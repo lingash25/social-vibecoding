@@ -620,16 +620,20 @@ function feedbackRoutes(config) {
       }
       let appRow;
       try {
-        // #964: the visibility columns ride along ONLY when a bounty was
-        // asked for — checkAppAccess throws on a row whose access columns
-        // were projected away, and the plain feedback path has no use for
-        // them. `name` / `repo_url` are not in ACCESS_COLUMNS, so both sets
-        // are selected together for that case.
-        const columns = wantsBounty
-          ? `name, repo_url, ${appAccess.ACCESS_COLUMNS}`
-          : 'id, slug, name, repo_url';
-        const { rows } = await pool.query(`SELECT ${columns} FROM apps WHERE slug = $1`, [appSlug]);
+        // The visibility columns always ride along: feedback is filed only on
+        // an app the reporter can view, and checkAppAccess throws on a row
+        // whose access columns were projected away. `name` / `repo_url` are
+        // not in ACCESS_COLUMNS, so both sets are selected together.
+        const { rows } = await pool.query(
+          `SELECT name, repo_url, ${appAccess.ACCESS_COLUMNS} FROM apps WHERE slug = $1`,
+          [appSlug]
+        );
         appRow = rows[0];
+        // A private, suspended or blocked app answers exactly like a missing
+        // one, before anything about it (its repository included) is revealed.
+        if (appRow && !(await appAccess.checkAppAccess(pool, appRow, req.user, 'view'))) {
+          appRow = null;
+        }
       } catch (err) {
         log.error('feedback', 'App lookup failed', { message: err.message });
         return res.status(500).json({ error: 'Internal server error' });

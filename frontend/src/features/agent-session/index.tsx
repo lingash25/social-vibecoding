@@ -1542,6 +1542,29 @@ export function SavedDrafts({ drafts, busy, onSend, onEdit }: {
  * `.agent-session-composer:focus-within` rings the whole card, and the field
  * inside draws no edge of its own in any engine (public/css/app.css).
  */
+export function StopStatus({ turn, onStop }: {
+  turn: { running: boolean; stopping: boolean; stopRequestedAt: number | null; stopPending: boolean; stopError: string | null };
+  onStop: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!turn.running || !turn.stopping) return undefined;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [turn.running, turn.stopping]);
+  if (!turn.running || (!turn.stopping && !turn.stopError)) return null;
+  const slow = !!turn.stopRequestedAt && now - turn.stopRequestedAt >= 3000;
+  return (
+    <div data-agent-session-stop-status className="flex flex-wrap items-center gap-2 px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-300" role="status">
+      <span className="min-w-0 flex-1">{turn.stopError || (slow ? 'Stopping is taking longer than expected.' : 'Stopping the agent…')}</span>
+      {turn.stopError || slow ? (
+        <Button type="button" variant="pillNeutral" ink="neutral" size="sm" disabledStyle="dim" disabled={turn.stopPending} onClick={() => onStop()}>Retry stop</Button>
+      ) : null}
+    </div>
+  );
+}
+
 function Composer({ id }: { id: string }) {
   // The fields the box draws from, and not the streamed text: a reply
   // arriving does not re-render the box being typed in.
@@ -1557,6 +1580,9 @@ function Composer({ id }: { id: string }) {
     attachments: s.attachments,
     running: s.turn.running,
     stopping: s.turn.stopping,
+    stopRequestedAt: s.turn.stopRequestedAt,
+    stopPending: s.turn.stopPending,
+    stopError: s.turn.stopError,
     turnPhase: s.turn.phase,
   }));
   const [value, setValue] = useState('');
@@ -1735,6 +1761,7 @@ function Composer({ id }: { id: string }) {
       </p>
     ) : null}
     <SavedDrafts drafts={snapshot.drafts} busy={running} onSend={onSendDraft} onEdit={onEditDraft} />
+    <StopStatus turn={snapshot} onStop={() => { void stopAgentTurn(); }} />
     <form
       className="agent-session-composer flex flex-col gap-2 rounded-[1.75rem] border border-zinc-200 bg-white px-3 pb-2.5 pt-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-800"
       onSubmit={submit}
@@ -1831,6 +1858,11 @@ function Composer({ id }: { id: string }) {
             space and decides from it how much to say. */}
         {credit ? <CreditPill credit={credit} onOpen={() => openSheet('homeroom')} /> : <div className="min-w-0 flex-1" />}
         {kind === 'save' ? (
+          <>
+          <Button type="button" variant="pillDanger" ink="dangerTint" size="icon" className="inline-flex h-10 w-10 shrink-0 items-center justify-center" aria-label="Stop" title="Stop"
+            disabled={snapshot.turnPhase === 'mayor2'} onClick={() => { void stopAgentTurn(); }}>
+            <span className="h-3.5 w-3.5 rounded-sm bg-current" aria-hidden="true" />
+          </Button>
           <Button
             key="save"
             type="submit"
@@ -1846,6 +1878,7 @@ function Composer({ id }: { id: string }) {
             <SaveDraftIcon width={18} height={18} aria-hidden="true" />
             <span>Save draft</span>
           </Button>
+          </>
         ) : (
           <Button
             key="send"

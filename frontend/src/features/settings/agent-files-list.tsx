@@ -19,6 +19,11 @@
  *
  * `Delete` still goes back to settings.js by name: it owns the confirm dialog,
  * the API call, the status line and the reload.
+ *
+ * Every row has a View and a Delete, so both buttons name their file in
+ * `aria-label`: a screen reader otherwise hears a list of identical
+ * "View, Delete" pairs and cannot tell which file a Delete removes. View also
+ * reports `aria-expanded` and points `aria-controls` at its `<pre>`.
  */
 
 import { useState } from 'react';
@@ -40,6 +45,16 @@ function controller(): any {
  */
 const ROW_CLASS = 'rounded-lg bg-white dark:bg-zinc-900 px-3 py-2 text-xs';
 
+/**
+ * The `<pre>`'s id, unique per file: kind and name with every character an id
+ * should not carry (and `_`, the escape itself) written as `_<hex>_`, so two
+ * different names can never map to the same id.
+ */
+export function agentFileContentId(kind: string, name: string): string {
+  const safe = (s: string) => s.replace(/[^A-Za-z0-9-]/g, (c) => `_${c.codePointAt(0)!.toString(16)}_`);
+  return `agent-file-content-${safe(kind)}-${safe(name)}`;
+}
+
 function FileRow({ file, demo }: { file: AgentFileView; demo: boolean }) {
   const [open, setOpen] = useState(false);
   const [content, setContent] = useState<string | null>(null);
@@ -49,6 +64,7 @@ function FileRow({ file, demo }: { file: AgentFileView; demo: boolean }) {
   // network blip left "Failed to load: …" pinned in the pane for the life of
   // the row, with every re-open a no-op. Here the next open retries.
   const [failed, setFailed] = useState(false);
+  const contentId = agentFileContentId(file.kind, file.name);
 
   const toggle = async () => {
     if (open) { setOpen(false); return; }
@@ -79,6 +95,9 @@ function FileRow({ file, demo }: { file: AgentFileView; demo: boolean }) {
             type="button"
             data-role="view"
             className="text-violet-700 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 font-medium touch-target-32"
+            aria-expanded={open}
+            aria-controls={contentId}
+            aria-label={`${open ? 'Hide' : 'View'} ${file.name}`}
             onClick={() => { void toggle(); }}
           >
             {open ? 'Hide' : 'View'}
@@ -87,6 +106,7 @@ function FileRow({ file, demo }: { file: AgentFileView; demo: boolean }) {
             type="button"
             data-role="delete"
             className="text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 font-medium touch-target-32"
+            aria-label={`Delete ${file.name}`}
             onClick={() => { void controller()?._onAgentFileDelete?.(file.kind, file.name); }}
           >
             Delete
@@ -98,6 +118,7 @@ function FileRow({ file, demo }: { file: AgentFileView; demo: boolean }) {
       ) : null}
       {open ? (
         <pre
+          id={contentId}
           data-role="content"
           className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-zinc-50 dark:bg-zinc-950 px-2 py-1.5 font-mono text-[11px] text-zinc-700 dark:text-zinc-300"
         >

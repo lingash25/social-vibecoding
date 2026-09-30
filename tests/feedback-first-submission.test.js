@@ -32,7 +32,9 @@ require('../src/db/pool').getPool = () => ({
       return { rows: [{ id: params[0] }] };
     }
     if (/FROM apps WHERE slug = \$1/.test(sql)) {
-      if (destinationFails && /collab_visibility/.test(sql)) throw new Error('lookup unavailable');
+      // The filing lookup selects repo_url; only the first-feedback
+      // destination lookup (access columns alone) is made to fail.
+      if (destinationFails && !/repo_url/.test(sql)) throw new Error('lookup unavailable');
       return { rows: params[0] === app.slug ? [app] : [] };
     }
     if (/FROM apps/.test(sql)) return { rows: platformRegistered ? [app, platform] : [app] };
@@ -84,6 +86,7 @@ test.beforeEach(() => {
   githubFails = markerFails = destinationFails = false;
   platformRegistered = true;
   app.view_visibility = app.collab_visibility = 'public';
+  platform.view_visibility = platform.collab_visibility = 'public';
 });
 async function submit(overrides = {}) {
   const response = await realFetch(`http://127.0.0.1:${server.address().port}/api/feedback`, {
@@ -135,9 +138,17 @@ test('read-only viewers get the board but cannot start a fix', async () => {
   assert.equal(data.firstFeedback.appSlug, app.slug);
   assert.equal(data.firstFeedback.canFix, false);
 });
-test('unavailable or inaccessible destinations preserve the congratulations without unsafe links', async () => {
+test('feedback on an app the reporter cannot view is not filed and keeps the moment', async () => {
   app.view_visibility = 'private';
   const { status, data } = await submit();
+  assert.equal(status, 404);
+  assert.deepEqual(data, { error: 'App not found' });
+  assert.equal(issueNumber, 40);
+  assert.equal(seen.size, 0);
+});
+test('unavailable or inaccessible destinations preserve the congratulations without unsafe links', async () => {
+  platform.view_visibility = 'private';
+  const { status, data } = await submit({ target: 'platform' });
   assert.equal(status, 200);
   assert.equal(data.firstFeedback.appSlug, null);
   assert.equal(data.firstFeedback.canFix, false);

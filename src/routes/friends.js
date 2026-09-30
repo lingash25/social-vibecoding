@@ -31,6 +31,7 @@ const log = require('../services/logger');
 const friends = require('../services/friends');
 const { strictId } = require('../services/conversations');
 const { friendshipLimiter } = require('../middleware/rate-limits');
+const { sameOriginBrowserOnly } = require('../middleware/same-site-browser');
 
 const IS_STAGING = process.env.USERNODE_ENV === 'staging';
 const NOT_FOUND = { error: 'User not found' };
@@ -125,11 +126,13 @@ function friendRoutes(config) {
     };
   }
 
-  router.post('/api/friends/:userId/request', friendshipLimiter, write('request', friends.sendRequest));
-  router.delete('/api/friends/:userId/request', friendshipLimiter, write('cancel', friends.cancel));
-  router.post('/api/friends/:userId/accept', friendshipLimiter, write('accept', friends.accept));
-  router.post('/api/friends/:userId/decline', friendshipLimiter, write('decline', friends.decline));
-  router.delete('/api/friends/:userId', friendshipLimiter, write('unfriend', friends.unfriend));
+  // Every write refuses a browser request the Homeroom page did not send
+  // (middleware/same-site-browser.js).
+  router.post('/api/friends/:userId/request', friendshipLimiter, sameOriginBrowserOnly, write('request', friends.sendRequest));
+  router.delete('/api/friends/:userId/request', friendshipLimiter, sameOriginBrowserOnly, write('cancel', friends.cancel));
+  router.post('/api/friends/:userId/accept', friendshipLimiter, sameOriginBrowserOnly, write('accept', friends.accept));
+  router.post('/api/friends/:userId/decline', friendshipLimiter, sameOriginBrowserOnly, write('decline', friends.decline));
+  router.delete('/api/friends/:userId', friendshipLimiter, sameOriginBrowserOnly, write('unfriend', friends.unfriend));
 
   return router;
 }

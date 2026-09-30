@@ -266,7 +266,8 @@ test('app-targeted feedback embeds every image too', async () => {
   const owned = ownerLookup([A, B]);
   poolHandler = async (sql, params) => {
     if (sql.includes('FROM apps')) {
-      return { rows: [{ id: 3, slug: 'tiers', name: 'Tier list', repo_url: 'https://github.com/acme/tiers' }] };
+      return { rows: [{ id: 3, slug: 'tiers', name: 'Tier list', repo_url: 'https://github.com/acme/tiers',
+        view_visibility: 'public', collab_visibility: 'public' }] };
     }
     return owned(sql, params);
   };

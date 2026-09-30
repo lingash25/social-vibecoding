@@ -68,6 +68,9 @@ export interface AgentTurnState {
   id?: string | null;
   phase: 'mayor' | 'cc' | 'mayor2';
   stopping?: boolean;
+  stopRequestedAt?: number | null;
+  stopToken?: string | null;
+  canForceStop?: boolean;
   changeId?: number | null;
   /** Epoch ms the running work started: the build once dispatched, else the turn. */
   startedAt?: number | null;
@@ -561,17 +564,11 @@ export async function switchChange(id: number, changeId: number): Promise<AgentS
   return body.session;
 }
 
-export async function stopTurn(id: number): Promise<{ stopped: boolean; reason?: string; changeId?: number | null }> {
-  const body = await json<{ stopped: boolean; reason?: string; changeId?: number | null }>(
-    await request(`/api/agent-sessions/${id}/stop`, { method: 'POST' }),
-    'Could not stop the Mayor.',
+export async function stopTurn(id: number, options: { token?: string | null; force?: boolean } = {}): Promise<{ stopped: boolean; reason?: string; stopRequestedAt?: number | null }> {
+  return json<{ stopped: boolean; reason?: string; stopRequestedAt?: number | null }>(
+    await request(`/api/agent-sessions/${id}/stop`, { method: 'POST', body: JSON.stringify(options) }),
+    'Could not stop the agent. Try again.',
   );
-  // A running build belongs to its change: that change's own stop route
-  // confirms the kill (and escalates), as it does from a classic session.
-  if (!body.stopped && body.reason === 'dispatch_running' && body.changeId) {
-    await request(`/api/sessions/${body.changeId}/stop`, { method: 'POST', body: '{}' }).catch(() => null);
-  }
-  return body;
 }
 
 /** Stop the change's running before/after shots (the proposal's Take again starts them again). */

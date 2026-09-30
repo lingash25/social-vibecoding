@@ -162,8 +162,8 @@ test('the state route answers "unchanged" to a screen that is current, and the r
   }, async (call) => {
     const current = await call('GET', '/api/agent-sessions/5/state?version=4&rev=12');
     assert.deepEqual(current.body, {
-      unchanged: true, version: 4, busy: true, turn: { id: 'turn-abcd-1', phase: 'cc', startedAt: 1790000000000 },
-    }, 'one row read, and the turn a screen on any pod can draw');
+      unchanged: true, version: 4, busy: true, turn: { id: 'turn-abcd-1', phase: 'cc', startedAt: 1790000000000, stopping: false, stopRequestedAt: null, stopToken: 'agent:turn-abcd-1', changeId: null, canForceStop: false },
+    }, 'the durable turn and stop controls a screen on any pod can draw');
     const whole = await call('GET', '/api/agent-sessions/5/state');
     assert.equal(whole.body.full, true);
     assert.equal(whole.body.version, 4);
@@ -249,6 +249,7 @@ function fakeServer() {
       server.posts.push(body);
       return server.onTurn(body);
     }
+    if (/\/stop$/.test(url) && init.method === 'POST') return server.onStop(JSON.parse(init.body));
     const state = /\/api\/agent-sessions\/7\/state(?:\?(.*))?$/.exec(url);
     if (state) {
       const query = new URLSearchParams(state[1] || '');
@@ -461,4 +462,67 @@ test('the composer and the router keep it in step: the socket\'s return, the for
   // Leaving a conversation never cancels a send on its way.
   const deactivate = store.slice(store.indexOf('export function deactivateAgentSession()'));
   assert.doesNotMatch(deactivate.slice(0, deactivate.indexOf('\n}\n')), /\.abort\(\)/);
+});
+
+
+test('Stop state survives an unchanged poll, another device, and a fresh screen; only job completion restores Send', async () => {
+  const server = fakeServer();
+  server.busy = true;
+  server.turn = { id: null, phase: 'cc', startedAt: Date.now(), stopToken: 'change:50:job-1', stopping: false };
+  let stopCalls = 0;
+  server.onStop = async (input) => {
+    stopCalls += 1;
+    assert.equal(input.token, server.turn.stopToken);
+    server.turn = { ...server.turn, stopping: true, stopRequestedAt: Date.now() - 45_000, canForceStop: true };
+    return { ok: true, status: 202, json: async () => ({ stopped: true, stopping: true, stopRequestedAt: server.turn.stopRequestedAt }) };
+  };
+  const first = world(server).store;
+  const second = world(server).store;
+  try {
+    await first.openAgentSession({ id: 7, host: 'messages' });
+    await second.openAgentSession({ id: 7, host: 'messages' });
+    await first.stopAgentTurn();
+    await second.requestSync(7);
+    assert.equal(stopCalls, 1, 'one request owns the whole stop');
+    for (const store of [first, second]) {
+      const turn = store.getAgentSessionState().turn;
+      assert.equal(turn.running, true);
+      assert.equal(turn.stopping, true);
+      assert.equal(turn.canForceStop, undefined, 'there is no delayed force-stop step');
+      assert.equal(turn.stopRequestedAt, server.turn.stopRequestedAt);
+    }
+    const refreshed = world(server).store;
+    await refreshed.openAgentSession({ id: 7, host: 'messages' });
+    assert.equal(refreshed.getAgentSessionState().turn.stopRequestedAt, server.turn.stopRequestedAt);
+    server.busy = false;
+    server.turn = null;
+    server.version += 1;
+    for (const store of [first, second, refreshed]) {
+      await store.requestSync(7);
+      assert.equal(store.getAgentSessionState().turn.running, false);
+      assert.equal(store.getAgentSessionState().turn.stopping, false);
+    }
+  } finally { cleanup(); }
+});
+
+test('a delayed stop failure cannot paint the replacement job as stopping or failed', async () => {
+  const server = fakeServer();
+  server.busy = true;
+  server.turn = { phase: 'cc', stopToken: 'change:50:old-job', startedAt: Date.now() };
+  let reply;
+  server.onStop = () => new Promise((resolve) => { reply = resolve; });
+  const { store } = world(server);
+  try {
+    await store.openAgentSession({ id: 7, host: 'messages' });
+    const pending = store.stopAgentTurn();
+    server.turn = { phase: 'cc', stopToken: 'change:50:new-job', startedAt: Date.now() };
+    await store.requestSync(7);
+    reply({ ok: false, status: 409, json: async () => ({ error: 'The old job ended.' }) });
+    await pending;
+    const turn = store.getAgentSessionState().turn;
+    assert.equal(turn.stopToken, 'change:50:new-job');
+    assert.equal(turn.stopping, false);
+    assert.equal(turn.stopError, null);
+    assert.equal(turn.stopPending, false);
+  } finally { cleanup(); }
 });

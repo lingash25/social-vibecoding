@@ -9976,6 +9976,7 @@ BEGIN
     OR NEW.last_done_at IS DISTINCT FROM OLD.last_done_at
     OR (NEW.active_turn->>'id') IS DISTINCT FROM (OLD.active_turn->>'id')
     OR (NEW.active_turn->>'phase') IS DISTINCT FROM (OLD.active_turn->>'phase')
+    OR (NEW.active_turn->>'stopRequestedAt') IS DISTINCT FROM (OLD.active_turn->>'stopRequestedAt')
   ) THEN
     NEW.state_version := OLD.state_version + 1;
   END IF;

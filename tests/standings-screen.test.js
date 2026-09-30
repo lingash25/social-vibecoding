@@ -824,6 +824,33 @@ test('the season board and the per-event board stay column-aligned', () => {
     + 'a third source of truth is how the table skewed before');
 });
 
+test('a standings row opens from the keyboard, and says what it opens', () => {
+  // Like the Kudos rows: Tab reaches a row, Enter or Space opens its details,
+  // and a screen reader hears "Open <user>'s details". The row keeps its
+  // table semantics (no role override).
+  const body = renderStandings({
+    event: { id: 7, name: 'Season 1', display_leaderboard: true, type: 'season' },
+    leaderboard: [SEASON_ROW],
+  });
+  const state = { mounted: true, body, drill: null };
+  const store = { get: () => state, subscribe: () => () => {} };
+  const mod = loadTsx('frontend/src/features/leaderboard/topochain-standings.tsx', {
+    stubs: { './topochain-standings-store.js': { topochainStandingsStore: store } },
+  });
+  const out = renderToHtml(createElement(mod.TopochainStandingsPane, {}));
+  const tr = out.match(/<tr[^>]*class="tc-lb-row[^>]*>/);
+  assert.ok(tr, 'a body row renders');
+  assert.match(tr[0], /tabindex="0"/, 'the row takes focus');
+  assert.match(tr[0], /aria-label="Open Ocank14&#x27;s details"/, 'and is named after what it opens');
+  assert.doesNotMatch(tr[0], /role=/, 'it stays a table row');
+  assert.match(tr[0], /focus-visible:outline-violet-500/, 'with a visible focus ring');
+
+  const row = standingsTsx.slice(standingsTsx.indexOf('<tr\n              key={row.index}'));
+  assert.match(row,
+    /onKeyDown=\{\(e\) => \{\s*if \(e\.key === 'Enter' \|\| e\.key === ' '\) \{\s*e\.preventDefault\(\);\s*controller\(\)\?\._openRowAt\(row\.index\);/,
+    'Enter and Space open the same details a click does');
+});
+
 test('the season caption replaces the "nothing is running" caption', () => {
   // The season event has usually ENDED by the time it is the default
   // (production's closed 2026-06-30), so hasEnded() is true for it and the

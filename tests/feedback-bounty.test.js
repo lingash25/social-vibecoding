@@ -25,13 +25,15 @@ let bountyRows = [];
 let allowanceUsed = 0;
 let appRowOverride = null;
 let insertError = null;
+let issuesCreated = 0;
+let appBlocked = false;
 
 poolMod.getPool = () => ({
   query: async (sql, params) => {
     const s = String(sql);
     poolQueries.push({ sql: s, params });
-    // App lookup for app-targeted feedback. The route selects the access
-    // columns alongside name/repo_url when a bounty was requested.
+    // App lookup for app-targeted feedback. The route always selects the
+    // access columns alongside name/repo_url: it checks view access first.
     if (/FROM apps WHERE slug = \$1/.test(s)) {
       return { rows: appRowOverride === null ? [DEFAULT_APP_ROW] : (appRowOverride ? [appRowOverride] : []) };
     }
@@ -42,6 +44,10 @@ poolMod.getPool = () => ({
     if (/FROM apps\b/.test(s) && /repo_url/.test(s) && !/WHERE slug/.test(s)) {
       if (appRowOverride === false) return { rows: [] };
       return { rows: appRowOverride ? [appRowOverride] : [DEFAULT_APP_ROW, PLATFORM_APP_ROW] };
+    }
+    // The reporter's own "hide this app" block (app-blocks.isBlocked).
+    if (/FROM user_app_blocks WHERE user_id = \$1 AND app_id = \$2/.test(s)) {
+      return { rows: appBlocked ? [{ app_id: params[1] }] : [] };
     }
     // Shared weekly allowance (pr_kudos + issue_bounties).
     if (/FROM issue_bounties\s+WHERE giver_user_id = \$1 AND week_start = \$2/i.test(s)) {
@@ -69,7 +75,7 @@ poolMod.getPool = () => ({
 // The app row both lookups resolve to. Carries appAccess.ACCESS_COLUMNS
 // (collab_visibility / view_visibility / created_by / self_hosted) because
 // checkAppAccess THROWS on a row whose access columns were projected away —
-// the exact trap the route's conditional SELECT exists to avoid.
+// and the route runs it on every app-targeted submit.
 const DEFAULT_APP_ROW = {
   id: 3, slug: 'demo-app', name: 'Demo App',
   repo_url: 'https://github.com/owner/demo-app',
@@ -93,7 +99,7 @@ llm.generateIssueTitle = async () => ({ title: 'Generated title', usage: undefin
 const github = require('../src/services/github');
 github.isEnabled = () => true;
 github.noteIssueCreated = () => {};
-github.createIssue = async (owner, repo) => ({
+github.createIssue = async (owner, repo) => (issuesCreated++, {
   number: 9, html_url: `https://github.com/${owner}/${repo}/issues/9`,
 });
 
@@ -157,6 +163,8 @@ function reset() {
   allowanceUsed = 0;
   appRowOverride = null;
   insertError = null;
+  issuesCreated = 0;
+  appBlocked = false;
 }
 
 async function post(server, body) {
@@ -203,23 +211,76 @@ test('bounty:true on an app submit writes one row for the created issue', async 
   }
 });
 
-test('the app lookup selects the access columns only when a bounty is wanted', async () => {
-  reset();
+test('the app lookup always selects the access columns', async () => {
   const server = await startServer();
   try {
-    await post(server, { description: 'no pledge here', target: 'app', appSlug: 'demo-app' });
-    const plain = poolQueries.find((q) => /FROM apps WHERE slug = \$1/.test(q.sql));
-    assert.doesNotMatch(plain.sql, /collab_visibility/,
-      'the plain path keeps its narrow projection');
+    for (const body of [
+      { description: 'no pledge here', target: 'app', appSlug: 'demo-app' },
+      { description: 'with a pledge', target: 'app', appSlug: 'demo-app', bounty: true },
+    ]) {
+      reset();
+      await post(server, body);
+      const lookup = poolQueries.find((q) => /FROM apps WHERE slug = \$1/.test(q.sql));
+      // checkAppAccess throws without these: the view check runs on every
+      // app-targeted submit, and the bounty's collab check reuses the row.
+      assert.match(lookup.sql, /moderation_suspended_at/);
+      assert.match(lookup.sql, /collab_visibility/);
+      assert.match(lookup.sql, /view_visibility/);
+      assert.match(lookup.sql, /repo_url/, 'and still selects what the issue body needs');
+    }
+  } finally {
+    server.close();
+  }
+});
+
+// ── View access on the target app ────────────────────────────────────
+
+test('feedback on an app the reporter cannot view is not found and files nothing', async () => {
+  const server = await startServer();
+  try {
+    for (const [row, blocked] of [
+      [{ ...DEFAULT_APP_ROW, view_visibility: 'private', collab_visibility: 'private' }],
+      [{ ...DEFAULT_APP_ROW, moderation_suspended_at: '2026-09-01T00:00:00.000Z' }],
+      [DEFAULT_APP_ROW, true], // public, but the reporter blocked it
+      // Hidden AND without a repository: still the same not-found answer.
+      [{ ...DEFAULT_APP_ROW, view_visibility: 'private', collab_visibility: 'private', repo_url: null }],
+    ]) {
+      for (const bounty of [undefined, true]) {
+        reset();
+        appRowOverride = row;
+        appBlocked = !!blocked;
+        const { res, json } = await post(server, {
+          description: 'feedback on a hidden app', target: 'app', appSlug: 'demo-app', bounty,
+        });
+        assert.equal(res.status, 404);
+        assert.deepEqual(json, { error: 'App not found' }, 'the same body as a missing slug');
+        assert.equal(issuesCreated, 0, 'no issue was filed');
+        assert.equal(bountyRows.length, 0);
+        assert.equal(systemMessages.length, 0);
+      }
+    }
 
     reset();
-    await post(server, { description: 'with a pledge', target: 'app', appSlug: 'demo-app', bounty: true });
-    const withAccess = poolQueries.find((q) => /FROM apps WHERE slug = \$1/.test(q.sql));
-    // checkAppAccess throws without these, which would turn every bountied
-    // submit into a "couldn't place the bounty just now".
-    assert.match(withAccess.sql, /collab_visibility/);
-    assert.match(withAccess.sql, /view_visibility/);
-    assert.match(withAccess.sql, /repo_url/, 'and still selects what the issue body needs');
+    appRowOverride = false; // no such slug
+    const missing = await post(server, { description: 'x', target: 'app', appSlug: 'nope' });
+    assert.equal(missing.res.status, 404);
+    assert.deepEqual(missing.json, { error: 'App not found' });
+  } finally {
+    server.close();
+  }
+});
+
+test('feedback on a visible app is filed', async () => {
+  reset();
+  appRowOverride = { ...DEFAULT_APP_ROW, view_visibility: 'public', collab_visibility: 'private' };
+  const server = await startServer();
+  try {
+    const { res, json } = await post(server, {
+      description: 'feedback from a viewer', target: 'app', appSlug: 'demo-app',
+    });
+    assert.equal(res.status, 200);
+    assert.equal(json.url, 'https://github.com/owner/demo-app/issues/9');
+    assert.equal(issuesCreated, 1);
   } finally {
     server.close();
   }
@@ -307,16 +368,18 @@ test('a throwing placeBounty still returns 200 with the issue url', async () => 
 
 test('a collab-private app files the issue but refuses the pledge', async () => {
   reset();
-  // Private to collaborators, and user 7 is neither creator nor collaborator.
-  appRowOverride = { ...DEFAULT_APP_ROW, collab_visibility: 'private', view_visibility: 'private' };
+  // Visible to everyone, but building is private to collaborators, and
+  // user 7 is neither creator nor collaborator.
+  appRowOverride = { ...DEFAULT_APP_ROW, collab_visibility: 'private', view_visibility: 'public' };
   const server = await startServer();
   try {
     const { res, json } = await post(server, {
       description: 'outsider feedback on a private app',
       target: 'app', appSlug: 'demo-app', bounty: true,
     });
-    // POST /api/feedback deliberately has no collab gate — only the bounty
-    // does, so the submission survives and only the pledge is refused.
+    // POST /api/feedback deliberately has no collab gate (only a view gate)
+    // — only the bounty does, so the submission survives and only the
+    // pledge is refused.
     assert.equal(res.status, 200);
     assert.equal(json.url, 'https://github.com/owner/demo-app/issues/9');
     assert.equal(bountyRows.length, 0);

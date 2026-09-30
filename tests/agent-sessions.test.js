@@ -535,43 +535,44 @@ test('a confirmed card gets the Mayor a follow-up turn when the conversation is 
   }
 });
 
-test('stop answers what it stopped, and names the change during a dispatch', async () => {
-  const agentTurnMod = require('../src/services/mayor/agent-turn');
-  const saved = agentTurnMod.stopAgentTurn;
-  agentTurnMod.stopAgentTurn = () => ({ stopped: false, reason: 'dispatch_running', changeId: 50 });
+test('one stop route calls the coding stop server-side and returns its error', async () => {
+  const jobs = require('../src/routes/sessions');
+  const saved = jobs.requestSessionStop;
+  const calls = [];
+  jobs.requestSessionStop = async (args) => {
+    calls.push(args);
+    return { status: 503, body: { error: 'Could not stop the coding job' } };
+  };
   try {
-    await withRoutes({ id: 7, username: 'ada' }, { 'FROM agent_sessions WHERE id': () => ({ rows: [{ active_turn: {} }] }) }, async (call) => {
-      const stopped = await call('POST', '/api/agent-sessions/5/stop');
-      assert.deepEqual(stopped.body, { ok: true, stopped: false, reason: 'dispatch_running', changeId: 50 });
+    const row = { active_turn: null, turn_live: false, change_id: 50, change_turn: { turnId: 'job-1', mode: 'build' } };
+    await withRoutes({ id: 7, username: 'ada' }, { 'FROM agent_sessions s': () => ({ rows: [row] }) }, async (call) => {
+      const stopped = await call('POST', '/api/agent-sessions/5/stop', { token: 'change:50:job-1' });
+      assert.equal(stopped.status, 503);
+      assert.match(stopped.body.error, /Could not stop/);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].sessionId, 50);
+      assert.equal(calls[0].expectedTurnId, 'job-1');
     });
-  } finally {
-    agentTurnMod.stopAgentTurn = saved;
-  }
+  } finally { jobs.requestSessionStop = saved; }
 });
 
-test('stop with no turn running here hands back a lease its dead turn left', async () => {
-  const agentTurnMod = require('../src/services/mayor/agent-turn');
-  const saved = { stopAgentTurn: agentTurnMod.stopAgentTurn, handBackOrphanedTurn: agentTurnMod.handBackOrphanedTurn };
+test('stop with no turn running hands back only a stale lease', async () => {
+  const mod = require('../src/services/mayor/agent-turn');
+  const saved = mod.handBackOrphanedTurn;
   const handBacks = [];
-  agentTurnMod.stopAgentTurn = () => ({ stopped: false, reason: 'no_active_turn' });
-  agentTurnMod.handBackOrphanedTurn = async (args) => { handBacks.push(args); return true; };
+  mod.handBackOrphanedTurn = async (args) => { handBacks.push(args); return true; };
   try {
     let lease = { id: 'dead-turn' };
-    await withRoutes({ id: 7, username: 'ada' }, { 'FROM agent_sessions WHERE id': () => ({ rows: [{ active_turn: lease }] }) }, async (call) => {
+    await withRoutes({ id: 7, username: 'ada' }, { 'FROM agent_sessions s': () => ({ rows: [{ active_turn: lease, turn_live: false }] }) }, async (call) => {
       const stopped = await call('POST', '/api/agent-sessions/5/stop');
-      assert.deepEqual(stopped.body, { ok: true, stopped: false, reason: 'no_active_turn', released: true });
+      assert.deepEqual(stopped.body, { stopped: false, reason: 'no_active_turn', released: true });
       assert.equal(handBacks.length, 1);
-      assert.equal(handBacks[0].agentSessionId, 5);
-      assert.equal(handBacks[0].userId, 7, 'the owner\'s conversation only');
-
+      assert.equal(handBacks[0].userId, 7);
       lease = null;
-      const idle = await call('POST', '/api/agent-sessions/5/stop');
-      assert.deepEqual(idle.body, { ok: true, stopped: false, reason: 'no_active_turn' });
-      assert.equal(handBacks.length, 1, 'no lease, nothing to hand back');
+      assert.deepEqual((await call('POST', '/api/agent-sessions/5/stop')).body, { stopped: false, reason: 'no_active_turn' });
+      assert.equal(handBacks.length, 1);
     });
-  } finally {
-    Object.assign(agentTurnMod, saved);
-  }
+  } finally { mod.handBackOrphanedTurn = saved; }
 });
 
 test('a build recovery adopted on the active change reads as the conversation\'s running dispatch', async () => {
@@ -646,33 +647,13 @@ test('a recovered build\'s clock counts from its dispatch, and the lists mark it
   }
 });
 
-test('stop during a build recovery adopted names the change, and hands no lease back', async () => {
-  const agentTurnMod = require('../src/services/mayor/agent-turn');
-  const saved = {
-    stopAgentTurn: agentTurnMod.stopAgentTurn,
-    handBackOrphanedTurn: agentTurnMod.handBackOrphanedTurn,
-    recoveredRunState: agentTurnMod.recoveredRunState,
-  };
-  const handBacks = [];
-  const asked = [];
-  agentTurnMod.stopAgentTurn = () => ({ stopped: false, reason: 'no_active_turn' });
-  agentTurnMod.handBackOrphanedTurn = async (args) => { handBacks.push(args); return true; };
-  agentTurnMod.recoveredRunState = (id, changeId) => {
-    asked.push([id, changeId]);
-    return { phase: 'cc', stopping: false, changeId };
-  };
-  try {
-    const row = { active_turn: { id: 'dead-turn' }, active_change_id: '50' };
-    await withRoutes({ id: 7, username: 'ada' }, { 'FROM agent_sessions WHERE id': () => ({ rows: [row] }) }, async (call) => {
-      const stopped = await call('POST', '/api/agent-sessions/5/stop');
-      assert.deepEqual(stopped.body, { ok: true, stopped: false, reason: 'dispatch_running', changeId: 50 },
-        'the screen stops the change, as it does during a live dispatch');
-      assert.deepEqual(asked, [[5, 50]]);
-      assert.equal(handBacks.length, 0, 'the run\'s own end hands the conversation back');
-    });
-  } finally {
-    Object.assign(agentTurnMod, saved);
-  }
+test('stop and force stop are owner-scoped and reject malformed requests', async () => {
+  await withRoutes({ id: 8 }, {}, async (call) => {
+    for (const force of [false, true]) {
+      assert.equal((await call('POST', '/api/agent-sessions/5/stop', { force })).status, 404);
+    }
+    assert.equal((await call('POST', '/api/agent-sessions/5/stop', { force: 'true' })).status, 400);
+  });
 });
 
 test('the changes drawer switches the active change without a model call', async () => {

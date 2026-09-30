@@ -31,6 +31,7 @@ const log = require('../services/logger');
 const appAccess = require('../services/app-access');
 const invites = require('../services/community-invites');
 const { drainGuard } = require('../services/lifecycle');
+const { sameOriginBrowserOnly } = require('../middleware/same-site-browser');
 const { applyShellDocumentHeaders, shellAssetCacheControl } = require('../services/static-cache');
 const {
   inviteLinkCreateLimiter, inviteRedeemLimiter, invitePreviewLimiter,
@@ -187,7 +188,9 @@ function communityInviteRoutes(config) {
     }
   });
 
-  router.post('/api/invite-links/by-token/:token/redeem', drainGuard, inviteRedeemLimiter, async (req, res) => {
+  // Only the Homeroom page itself may follow a link for a signed-in visitor
+  // (middleware/same-site-browser.js).
+  router.post('/api/invite-links/by-token/:token/redeem', drainGuard, inviteRedeemLimiter, sameOriginBrowserOnly, async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     try {
       const result = await invites.redeem(pool, { token: req.params.token, user: req.user });

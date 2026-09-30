@@ -210,6 +210,11 @@ limits.settleTurnSpend = async (_pool, userId, cents, opts) => { rec.billing.pus
 
 // ── Titles, broadcasts, fire-and-forget work ─────────────────────────────
 
+// Status fan-out has its own suite. Its 150ms coalescer otherwise records
+// unrelated SQL here depending on CPU load, sometimes in the NEXT scenario.
+// Keep the turn golden deterministic without changing its expected output.
+require('../src/services/session-state').touch = () => {};
+
 const sessionTitles = require('../src/services/session-title');
 sessionTitles.titleAtTurnEnd = (args) => { rec.calls.push({ fn: 'titleAtTurnEnd', firstTurn: !!args.firstTurn, message: args.message }); };
 sessionTitles.titleFromFirstMessage = (args) => { rec.calls.push({ fn: 'titleFromFirstMessage', message: args.message }); };

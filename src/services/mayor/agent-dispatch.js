@@ -251,10 +251,13 @@ async function runDispatch({
   sendAgent,
   res,
   onStopHandle = () => {},
+  shouldStop = async () => false,
   scheduleInteractiveRecovery = null,
   deps = {},
 }) {
   const d = defaults(deps);
+  const stoppedBeforeStart = () => ({ ran: false, isError: false, stopped: true, finish: async () => {} });
+  if (await shouldStop()) return stoppedBeforeStart();
   let change = await loadActiveChange(pool, { agentSessionId, userId: user.id });
   if (!change) {
     return refusal('no_active_change: there is no active change. Start one (start_change) or switch to one first.');
@@ -290,8 +293,8 @@ async function runDispatch({
   const turnDeps = turnDepsOf(d);
   // The conversation's model choice applies from the next build: switch the
   // change to it now, before the operation guard is claimed (the switch
-  // refuses a busy change). A switch that cannot happen is logged, and the
-  // build runs on what the change already has rather than not at all.
+  // refuses a busy change). If the switch fails, report it rather than
+  // silently starting another build with the model the user replaced.
   const choice = await d.agentSessions.getAgentChoice(pool, agentSessionId);
   if (needsAgentSwitch(change, choice)) {
     const switched = await turnDeps.switchSessionAgent(pool, {
@@ -303,8 +306,10 @@ async function runDispatch({
       log.warn('agent-mayor', 'Could not switch the change to the conversation\'s model', {
         agentSessionId, changeId, err: switched.error,
       });
+      return refusal('model_switch_failed: Could not switch to the selected model. No new coding run was started. Try again.');
     }
   }
+  if (await shouldStop()) return stoppedBeforeStart();
   const release = d.activeWorkers.beginSessionOperation(changeId);
   // #937: a new dispatch is the boundary that retires the previous turn's
   // pending stop, exactly as a new classic turn is.
@@ -391,7 +396,8 @@ async function runDispatch({
 
   let result;
   try {
-    result = kind === 'scout'
+    if (await shouldStop()) stopHandle.stopped = true;
+    result = stopHandle.stopped ? null : kind === 'scout'
       ? await turnDeps.runScoutTool(args)
       : await turnDeps.runClaudeCodeTool(args);
   } catch (err) {

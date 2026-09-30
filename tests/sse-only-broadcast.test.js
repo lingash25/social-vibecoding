@@ -142,18 +142,18 @@ test('the turn hands its send() closure to the stop handle', () => {
 });
 
 test('POST /stop emits stopping with the requesting user, before the kill', () => {
-  const route = SRC.slice(SRC.indexOf("router.post('/api/sessions/:id/stop'"));
+  const route = SRC.slice(SRC.indexOf('async function requestSessionStop('), SRC.indexOf('async function confirmStopLanded('));
   const emit = route.search(/handle\.send\?\.\(\s*'stopping'/);
   assert.ok(emit >= 0, 'the stop route emits a stopping event');
-  assert.match(route.slice(emit, emit + 200), /by:\s*req\.user\.username/,
+  assert.match(route.slice(emit, emit + 200), /by:\s*user\.username/,
     'carries who requested it, so other viewers can name them');
 
   // Ordering: the announcement is a synchronous write + broadcast, so it
   // must sit ahead of every await in the handler. Being immediate is the
   // entire point — anything in front of it is dead air for the user.
-  const kill = route.indexOf('worker.stopTurn(');
+  const kill = route.indexOf('confirmStopLanded(sessionId, handle)', emit);
   assert.ok(kill > emit, 'stopping is announced before the worker kill is dispatched');
-  const disarm = route.indexOf('notify_on_done = FALSE');
+  const disarm = route.indexOf('notify_on_done = FALSE', emit);
   assert.ok(disarm > emit, 'stopping is announced before the notify_on_done write');
 });
 
@@ -164,10 +164,10 @@ test('the notify_on_done disarm still lands before the abort (#161)', () => {
   // this column — so the write must be awaited AND ahead of the abort, or
   // stopping a turn fires a spurious "your session finished" notification.
   const route = SRC.slice(
-    SRC.indexOf("router.post('/api/sessions/:id/stop'"),
-    SRC.indexOf("router.get('/api/sessions/:id/events'")
+    SRC.indexOf('async function requestSessionStop('),
+    SRC.indexOf('async function confirmStopLanded(')
   );
-  const disarmIdx = route.indexOf('notify_on_done = FALSE');
+  const disarmIdx = route.lastIndexOf('notify_on_done = FALSE');
   assert.ok(disarmIdx > 0, 'found the disarm write');
   const abortIdx = route.indexOf('handle.abort.abort()');
   assert.ok(abortIdx > disarmIdx, 'disarm is dispatched before the abort');
@@ -179,15 +179,15 @@ test('the notify_on_done disarm still lands before the abort (#161)', () => {
 
 test('the stop route still answers with a stopped flag the client can branch on', () => {
   const route = SRC.slice(
-    SRC.indexOf("router.post('/api/sessions/:id/stop'"),
-    SRC.indexOf("router.get('/api/sessions/:id/events'")
+    SRC.indexOf('async function requestSessionStop('),
+    SRC.indexOf('async function confirmStopLanded(')
   );
   // The client reads all three of these: `stopped` decides whether a
   // `stopped` event is coming at all, and the two reasons drive the
   // wrap-up / already-ended branches.
   assert.match(route, /stopped:\s*false,\s*reason:\s*'no active turn'/);
   assert.match(route, /stopped:\s*false,\s*reason:\s*'wrap-up cannot be stopped'/);
-  assert.match(route, /res\.json\(\{\s*ok:\s*true,\s*stopped:\s*true,\s*phase:\s*handle\.phase\s*\}\)/);
+  assert.match(route, /body:\s*\{\s*ok:\s*true,\s*stopped:\s*true,\s*phase:\s*handle\.phase\s*\}/);
 });
 
 test('/status exposes stopping so a reload repaints the Stopping button', () => {

@@ -121,8 +121,8 @@ test('stopping a local turn does not go hunting for a container that never exist
 
 test('the force-orphan stop path also releases a local turn', () => {
   const orphan = sessions.slice(
-    sessions.indexOf('force_orphan'),
-    sessions.indexOf('force_orphan') + 2000
+    sessions.indexOf("if (action === 'force_orphan')"),
+    sessions.indexOf("if (action === 'force_without_stop')")
   );
   assert.match(orphan, /localAgent\.requestStop/);
 });

@@ -445,6 +445,8 @@ function leaseTurn(activeTurn) {
   return {
     id: typeof turn.id === 'string' ? turn.id : null,
     phase,
+    stopping: !!turn.stopRequestedAt,
+    stopRequestedAt: Date.parse(turn.stopRequestedAt || '') || null,
     // What the screen's clock counts from: the build once one was
     // dispatched, else the turn (agent-turn.js turnState's rule).
     startedAt: phase !== 'mayor' && Number.isFinite(phaseStartedAt) && phaseStartedAt > 0
@@ -769,6 +771,11 @@ async function acquireTurnLease(pool, { agentSessionId, userId, turnId }) {
         SET active_turn = jsonb_build_object('id', $3::text, 'startedAt', NOW(), 'phase', 'mayor'),
             last_activity_at = NOW()
       WHERE id = $1 AND user_id = $2 AND status = 'open'
+        AND NOT EXISTS (
+          SELECT 1 FROM chat_sessions c WHERE c.id = agent_sessions.active_change_id
+            AND c.user_id = $2 AND c.active_turn IS NOT NULL
+            AND COALESCE(c.active_turn->>'mode', 'build') <> 'shots'
+        )
         AND (active_turn IS NULL
              OR COALESCE(active_turn->>'renewedAt', active_turn->>'startedAt')::timestamptz
                 < NOW() - make_interval(secs => $4))
@@ -862,6 +869,27 @@ async function renewTurnLease(pool, { agentSessionId, turnId }) {
     [agentSessionId, turnId]
   );
   return rows.length > 0;
+}
+
+async function markTurnStopRequested(pool, { agentSessionId, userId, turnId, by }) {
+  const { rows } = await pool.query(
+    `UPDATE agent_sessions SET active_turn = active_turn || jsonb_build_object(
+       'stopRequestedAt', COALESCE(active_turn->>'stopRequestedAt', NOW()::text),
+       'stopRequestedBy', COALESCE(active_turn->>'stopRequestedBy', $4::text))
+     WHERE id = $1 AND user_id = $2 AND active_turn->>'id' = $3
+       AND COALESCE(active_turn->>'phase', 'mayor') <> 'mayor2'
+     RETURNING active_turn`,
+    [agentSessionId, userId, turnId, by || null],
+  );
+  return rows[0]?.active_turn || null;
+}
+
+async function readTurnStopRequest(pool, { agentSessionId, turnId }) {
+  const { rows } = await pool.query(
+    `SELECT active_turn FROM agent_sessions WHERE id = $1 AND active_turn->>'id' = $2`,
+    [agentSessionId, turnId],
+  );
+  return rows[0]?.active_turn?.stopRequestedAt ? rows[0].active_turn : null;
 }
 
 // Where the turn is (the Mayor, the coding agent, the wrap-up), on the lease
@@ -1030,6 +1058,9 @@ module.exports = {
   listMessages,
   shapeMessage,
   readState,
+  leaseTurn,
+  markTurnStopRequested,
+  readTurnStopRequest,
   appendConversationEvent,
   parkChange,
   prepareChangeStart,

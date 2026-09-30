@@ -65,6 +65,10 @@ function _onBusMessage({ kind, routing, data, oversize }) {
       void require('./account-deletion-runtime').receive(_pool, r.userId)
         .catch(() => log.warn('ws', 'Account stream cleanup will retry'));
       return;
+    case 'agent_stop':
+      if (!oversize) void require('./mayor/agent-turn').receiveStopRequest(_pool, payload)
+        .catch(() => log.warn('ws', 'Agent stop notification will retry from durable state'));
+      return;
     case 'homeroom_bot':
       // Not a socket event at all: the Homeroom bot's loop runs on one Pod
       // and an issue event can land on any, so the wake rides this bus.

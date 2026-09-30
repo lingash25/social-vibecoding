@@ -76,9 +76,10 @@ function reset() {
   appCreates = [];
   poolHandler = async (sql) => {
     // App lookup for app-targeted feedback.
-    if (/SELECT id, slug, name, repo_url FROM apps/.test(sql)) {
+    if (/SELECT name, repo_url, .* FROM apps WHERE slug/.test(sql)) {
       return {
-        rows: [{ id: 3, slug: 'demo-app', name: 'Demo App', repo_url: 'https://github.com/owner/demo-app' }],
+        rows: [{ id: 3, slug: 'demo-app', name: 'Demo App', repo_url: 'https://github.com/owner/demo-app',
+          view_visibility: 'public', collab_visibility: 'public' }],
       };
     }
     return { rows: [] };

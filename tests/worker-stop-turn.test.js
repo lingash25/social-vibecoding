@@ -633,3 +633,27 @@ test('Codex dispatch forwards OpenRouter model metadata without exposing its key
       'the OpenRouter key value never enters docker argv');
   } finally { restore(); }
 });
+
+
+test('immediate Stop kills the process tree without a TERM grace window and confirms before the journal marker', () => {
+  const { worker, restore } = loadWorker();
+  try {
+    const script = worker.buildTurnStopScript('/tmp/turn.log', { force: true });
+    assert.doesNotMatch(script, /kill -TERM/);
+    assert.ok(script.indexOf('kill -STOP') < script.indexOf('kill -KILL'), 'freeze before collecting descendants');
+    assert.match(script, /PPid:/, 'tool subprocesses are included');
+    assert.ok(script.indexOf('kill -KILL') < script.indexOf('__USERNODE_EXIT__ 137'));
+    assert.ok(script.indexOf('exit 75') < script.indexOf('__USERNODE_EXIT__ 137'), 'a live survivor is an error, never a fake exit');
+  } finally { restore(); }
+});
+
+test('immediate stop errors reach the caller, and its remote command has a short timeout', async () => {
+  const { worker, calls, restore } = loadWorker({ onExec: async () => { throw new Error('runtime unavailable'); } });
+  try {
+    await assert.rejects(worker.stopTurn(4242, { force: true }), /runtime unavailable/);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].opts.timeout, 5000);
+    assert.match(calls[0].args[4], /kill -KILL/);
+    assert.doesNotMatch(calls[0].args[4], /kill -TERM/);
+  } finally { restore(); }
+});
