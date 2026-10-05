@@ -1105,6 +1105,12 @@ function ChangeHero({ id, card, body, linkedIssues, onIssuesSaved }: {
         ) : null}
         <ActionBand actions={pills} menuKey={card.rail.menuKey || ''} preview={card.actionPreview || card.rail.preview || null} dense={false} />
       </div>
+      {/* #3826: the pill's lock explains itself only in a hover title, which
+          a phone never shows. While the other member's Yes is missing, say
+          it; once it is in, the line goes. */}
+      {pill && pill.awaitsOtherYes
+        ? <p className="dev-topic-note" data-topic-part="needs-other-yes">Needs a Yes from another member before it can go live.</p>
+        : null}
       {/* DevChat.renderMarkdown's output — sanitised where it is built. */}
       <Html className="dev-topic-hero-summary dev-topic-about-body" data-topic-part="summary" html={body.summaryHtml || ''} />
       {body.summaryMore ? <SummaryMore m={body.summaryMore} /> : null}

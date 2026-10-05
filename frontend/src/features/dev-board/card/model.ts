@@ -74,6 +74,8 @@ export interface StatusPillState {
   lock: boolean;
   /** Why the lock is there, in the reason's own words (AppView._lockTitle). */
   lockTitle?: string;
+  /** The lock applies and no member but the author has said Yes yet (#3826). */
+  awaitsOtherYes?: boolean;
   dot?: boolean;
   spinner?: boolean;
   countdown?: number;

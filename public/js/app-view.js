@@ -19460,9 +19460,14 @@ const AppView = {
     const advisory = (p.approval_policy === 'invited' && p.qualified_yes_count != null && isOpenRow)
       ? Math.max(0, (parseInt(p.yes_count, 10) || 0) - yes) : 0;
     const lock = !!(p.requires_explicit_approval && isOpenRow);
+    // #3826: the lock is a glyph with a hover title, which a phone never
+    // shows. While the other member's Yes is still missing, the change's
+    // page says so in words (topic-head.tsx); once it is in, nothing.
+    const awaitsOtherYes = !!(lock && p.status !== 'closed' && AppView._awaitingOtherMember(p));
     const base = {
       yes, no, majority: maj, advisory, lock, reasons: [],
       ...(lock ? { lockTitle: AppView._lockTitle(p) } : {}),
+      ...(awaitsOtherYes ? { awaitsOtherYes: true } : {}),
     };
 
     // 0 — settled. `merged` is the stored lifecycle; deployment_state is a

@@ -849,3 +849,27 @@ test('every state reads in the before & after words', () => {
   assert.equal(av._shotsView({ state: 'verified', claims: [CLAIM] }).label, 'Shots ready');
   assert.doesNotMatch(JSON.stringify(at), /visual change preview|visual preview/i);
 });
+
+// #3826: a change that needs a Yes from another member said so only in the
+// lock glyph's hover title, which a phone never shows. The hero says it in
+// words under the status row while that Yes is missing, and says nothing
+// once it is in or when the rule does not apply.
+test('the hero says when a change still needs a Yes from another member', () => {
+  const av = context();
+  const flagged = {
+    ...PR, requires_explicit_approval: true, explicit_approval_reason: 'governance',
+    needs_other_member_yes: true, other_member_yes_count: 0,
+  };
+  const line = /<p class="dev-topic-note" data-topic-part="needs-other-yes">Needs a Yes from another member before it can go live\.<\/p>/;
+  const { page } = render(av, flagged);
+  assert.match(page, line);
+  assert.ok(page.indexOf('dev-topic-hero-actions') < page.indexOf('needs-other-yes'), 'under the status row');
+  assert.ok(page.indexOf('needs-other-yes') < page.indexOf('data-topic-part="summary"'), 'above the summary');
+  // Satisfied: nothing.
+  assert.doesNotMatch(render(av, { ...flagged, other_member_yes_count: 1 }).page, /needs-other-yes/);
+  // A one-member project, or an unflagged change: nothing.
+  assert.doesNotMatch(render(av, { ...flagged, needs_other_member_yes: false }).page, /needs-other-yes/);
+  assert.doesNotMatch(render(av, PR).page, /needs-other-yes/);
+  // Settled: nothing.
+  assert.doesNotMatch(render(av, { ...flagged, status: 'closed' }).page, /needs-other-yes/);
+});
