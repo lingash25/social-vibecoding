@@ -211,6 +211,35 @@ test('Your votes: still open, then decided, each saying your vote as it stands',
   assert.equal(votesView({ items: [] }).empty, true);
 });
 
+test('Your votes: a change still open says what happens next (#4003)', () => {
+  const { votesView } = loadTsx(STORE);
+  const row = (status, progress) => ({
+    type: 'pr_vote', vote: 'yes', status, app: { slug: 'run-club', name: 'Run Club' },
+    pr: { sessionId: 31, title: 'T' }, ...(progress ? { progress } : {}),
+  });
+  const metaOf = (item) => votesView({ items: [item] }).sections[0].rows[0].meta;
+  const open = { votesDone: true };
+  assert.equal(metaOf(row('promoted', { yes: 1, required: 2, checkState: 'passing' })),
+    'Run Club · you voted yes · needs 1 more approval');
+  assert.equal(metaOf(row('promoted', { yes: 0, required: 3, checkState: 'pending' })),
+    'Run Club · you voted yes · needs 3 more approvals');
+  assert.equal(metaOf(row('promoted', { yes: 1, required: 2, lazy: true })),
+    'Run Club · you voted yes · goes live after a wait if nobody objects');
+  assert.equal(metaOf(row('promoted', { ...open, yes: 1, required: 1, needsMember: true })),
+    'Run Club · you voted yes · needs another member\u2019s yes');
+  assert.equal(metaOf(row('promoted', { ...open, yes: 2, required: 2, checkState: 'pending' })),
+    'Run Club · you voted yes · approved, checks running');
+  assert.equal(metaOf(row('promoted', { ...open, yes: 2, required: 2, checkState: null })),
+    'Run Club · you voted yes · approved, checks running');
+  assert.equal(metaOf(row('promoted', { ...open, yes: 3, required: 2, checkState: 'failing' })),
+    'Run Club · you voted yes · approved, checks failing');
+  assert.equal(metaOf(row('promoted', { ...open, yes: 2, required: 2, checkState: 'passing' })),
+    'Run Club · you voted yes · approved, waiting to merge');
+  assert.equal(metaOf(row('promoted')), 'Run Club · you voted yes', 'no progress, nothing claimed');
+  assert.equal(metaOf(row('merging')), 'Run Club · you voted yes · merging');
+  assert.equal(metaOf(row('going_live')), 'Run Club · you voted yes · going live');
+});
+
 // ── The screen ─────────────────────────────────────────────────────────
 
 test('the screen ships hidden and empty, one root for all three views', () => {

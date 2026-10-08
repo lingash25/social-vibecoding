@@ -256,6 +256,63 @@ test('merged feed: all four types, strict reverse-chronological order', async ()
   }
 });
 
+test('#4003: a change still up for a vote carries what it waits on; others do not', async () => {
+  const pool = seedPool();
+  pool.state.sessions.get(11).check_state = 'pending';
+  const baseQuery = pool.query;
+  const asked = [];
+  pool.query = async (sql, params = []) => {
+    if (/FROM chat_sessions/.test(String(sql)) && /status = 'promoted'/.test(String(sql))) {
+      asked.push(params[0]);
+      return { rows: params[0].map((id) => pool.state.sessions.get(id))
+        .filter((cs) => cs && cs.status === 'promoted') };
+    }
+    return baseQuery(sql, params);
+  };
+  const govPath = require.resolve('../src/services/governance');
+  const original = require.cache[govPath];
+  const gates = [];
+  require.cache[govPath] = {
+    id: govPath, filename: govPath, loaded: true, paths: [],
+    exports: {
+      governedGate: async (_pool, appId, opts) => {
+        gates.push({ appId, ...opts });
+        return { qualifiedYes: 1, required: 3, mergeable: false, lazyArmed: false, memberFloor: null };
+      },
+    },
+  };
+  const { baseUrl, close } = await startTestServer(pool);
+  try {
+    const data = await (await fetch(`${baseUrl}/api/me/history?type=votes`)).json();
+    assert.deepEqual(asked, [[11]], 'only the promoted vote is looked up');
+    assert.equal(gates[0].appId, 1);
+    assert.equal(gates[0].id, 11);
+    const prVote = data.items.find((i) => i.type === 'pr_vote');
+    assert.deepEqual(prVote.progress, {
+      checkState: 'pending', yes: 1, required: 3, votesDone: false, lazy: false, needsMember: false,
+    });
+    assert.equal(data.items.find((i) => i.type === 'proposal_vote').progress, undefined);
+  } finally {
+    await close();
+    if (original) require.cache[govPath] = original;
+    else delete require.cache[govPath];
+  }
+});
+
+test('#4003: the vote list still answers when the progress lookup fails', async () => {
+  // The seed's mock pool throws on any query it does not know, which is
+  // exactly what the progress lookup is to it.
+  const { baseUrl, close } = await startTestServer(seedPool());
+  try {
+    const r = await fetch(`${baseUrl}/api/me/history?type=votes`);
+    assert.equal(r.status, 200);
+    const data = await r.json();
+    assert.equal(data.items.find((i) => i.type === 'pr_vote').progress, undefined);
+  } finally {
+    await close();
+  }
+});
+
 test('type=kudos returns only the kudos + bounty arms', async () => {
   const { baseUrl, close } = await startTestServer(seedPool());
   try {

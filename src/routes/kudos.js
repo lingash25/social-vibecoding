@@ -29,6 +29,55 @@ const {
 // signal, not encouragement on private work.
 const ELIGIBLE_STATES = ['promoted', 'merging', 'merged'];
 
+// #4003: what a change you voted on is waiting for, while it is up for a
+// vote: the governed gate the merge decides by (its qualifying Yes votes
+// against the threshold, the lazy-consensus clock, the member floor) and its
+// checks verdict. Me › Your votes turns these into one phrase ("needs 1 more
+// approval", "checks running"). Only the newest PROGRESS_LOOKUPS promoted
+// rows are asked, side by side, so a long page costs a bounded number of
+// reads (governance and the electorate are cached per app). Best effort: a
+// failure leaves the rows without it, and they read as they did before.
+const PROGRESS_LOOKUPS = 10;
+async function openVoteProgress(pool, sessionIds) {
+  const out = new Map();
+  const ids = sessionIds.slice(0, PROGRESS_LOOKUPS);
+  if (!ids.length) return out;
+  try {
+    const governance = require('../services/governance');
+    const { rows } = await pool.query(
+      `SELECT id, app_id, user_id, check_state, promoted_at, created_at,
+              requires_explicit_approval
+         FROM chat_sessions
+        WHERE id = ANY($1::int[]) AND status = 'promoted'`,
+      [ids]
+    );
+    await Promise.all(rows.map(async (row) => {
+      const gate = await governance.governedGate(pool, row.app_id, {
+        kind: 'pr',
+        id: row.id,
+        openedAt: row.promoted_at || row.created_at,
+        explicitApproval: !!row.requires_explicit_approval,
+        authorId: row.user_id ?? null,
+      });
+      out.set(Number(row.id), {
+        checkState: row.check_state || null,
+        yes: Number(gate.qualifiedYes) || 0,
+        required: Number(gate.required) || 1,
+        // The vote side is done: it merges once the checks let it.
+        votesDone: !!gate.mergeable,
+        // Below the threshold, but an unopposed Yes started the clock.
+        lazy: !!gate.lazyArmed,
+        // Its votes are in, but none is from a member besides the author.
+        needsMember: !!(gate.memberFloor && gate.memberFloor.met === false),
+      });
+    }));
+  } catch (err) {
+    log.warn('kudos', 'me/history vote progress skipped', { err: err.message });
+    out.clear();
+  }
+  return out;
+}
+
 // Canonical set of per-user fields the GET /api/leaderboard/users handler
 // returns, kept in sync with the SELECT aliases in that query. Used to
 // validate the optional `fields` allowlist query param: unknown names are
@@ -610,6 +659,10 @@ function kudosRoutes(config) {
         params
       );
 
+      const progress = await openVoteProgress(pool, rows
+        .filter((r) => r.type === 'pr_vote' && r.status === 'promoted' && r.session_id != null)
+        .map((r) => Number(r.session_id)));
+
       const items = rows.map((r) => {
         const item = {
           type: r.type,
@@ -626,6 +679,8 @@ function kudosRoutes(config) {
             // NULL when the PR's author account was deleted (LEFT JOIN).
             author: r.author_username || null,
           };
+          const next = r.type === 'pr_vote' ? progress.get(Number(r.session_id)) : null;
+          if (next) item.progress = next;
         } else if (r.type === 'bounty') {
           item.issue = { number: r.issue_number };
           if (r.status === 'awarded') {

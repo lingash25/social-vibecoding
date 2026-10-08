@@ -542,11 +542,35 @@ function voteOutcome(item) {
 }
 
 /**
+ * What happens next to a change still being decided (#4003): one phrase from
+ * its votes against what the merge needs (`progress`, from
+ * /api/me/history) and then its checks. The decided rows say how it ended
+ * (voteOutcome), so every row says where the change is now. A row without
+ * `progress` says nothing more than it did: the server could not tell.
+ */
+function voteNext(item) {
+  if (item.type !== 'pr_vote') return null;
+  if (item.status === 'merging') return 'merging';
+  const p = item.progress;
+  if (!p || typeof p !== 'object') return null;
+  if (p.needsMember) return 'needs another member\u2019s yes';
+  if (!p.votesDone) {
+    if (p.lazy) return 'goes live after a wait if nobody objects';
+    const missing = Math.max((Number(p.required) || 1) - (Number(p.yes) || 0), 1);
+    return `needs ${missing} more ${missing === 1 ? 'approval' : 'approvals'}`;
+  }
+  if (p.checkState === 'failing') return 'approved, checks failing';
+  if (p.checkState === 'error') return 'approved, checks couldn\u2019t run';
+  if (p.checkState === 'passing' || p.checkState === 'skipped') return 'approved, waiting to merge';
+  return 'approved, checks running';
+}
+
+/**
  * "Your votes" (UI overhaul; it was a filter of Kudos › My history): the
  * changes and group decisions the viewer voted on, from GET
  * /api/me/history?type=votes. Still open, then Decided. Only the vote
  * standing now is kept (a vote can be changed while it is open), so each
- * row says the vote as it stands.
+ * row says the vote as it stands, then where the change is now.
  */
 export function votesView(data) {
   const items = data && Array.isArray(data.items) ? data.items : null;
@@ -560,7 +584,8 @@ export function votesView(data) {
       const vote = item.vote === 'yes' || item.vote === 'no' ? item.vote : null;
       const meta = [app.name || app.slug || 'An app'];
       if (vote) meta.push(`you voted ${vote}`);
-      if (!open) meta.push(voteOutcome(item));
+      const where = open ? voteNext(item) : voteOutcome(item);
+      if (where) meta.push(where);
       let href = null;
       if (slug && item.type === 'pr_vote' && Number(item.pr && item.pr.sessionId) > 0) {
         href = `#app/${encodeURIComponent(slug)}/dev/proposals/${Number(item.pr.sessionId)}`;
