@@ -193,7 +193,7 @@ async function acceptAndPin(pool, appId, userId) {
     await client.query('BEGIN');
     const { rows } = await client.query(
       `UPDATE app_collaborators
-          SET status = 'member', accepted_at = NOW()
+          SET status = 'member', accepted_at = NOW(), accepted_via = 'invite'
         WHERE app_id = $1 AND user_id = $2 AND status = 'invited'
         RETURNING invited_by`,
       [appId, userId]

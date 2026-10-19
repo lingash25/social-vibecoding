@@ -12824,10 +12824,11 @@ BEGIN
   -- Building by invitation: the link is the maker's collaborator invite,
   -- accepted. The collaborator trigger joins the community from this row.
   IF r.collab_visibility = 'private' AND NOT r.self_hosted THEN
-    INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at)
-    VALUES (r.app_id, r.user_id, 'member', r.created_by, NOW())
+    INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at, accepted_via)
+    VALUES (r.app_id, r.user_id, 'member', r.created_by, NOW(), 'link')
     ON CONFLICT (app_id, user_id) DO UPDATE
-      SET status = 'member', accepted_at = COALESCE(app_collaborators.accepted_at, NOW())
+      SET status = 'member', accepted_at = COALESCE(app_collaborators.accepted_at, NOW()),
+          accepted_via = 'link'
       WHERE app_collaborators.status <> 'member';
   END IF;
   INSERT INTO community_members (community_id, user_id, source)
@@ -13251,6 +13252,34 @@ ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS included_in_session_id INTEGE
 -- through community-invites.js cleanNote. Kept once the invite is accepted,
 -- like invited_by.
 ALTER TABLE app_collaborators ADD COLUMN IF NOT EXISTS invite_note TEXT;
+-- #5104: HOW a member row was accepted, for users_connected's consent rule.
+-- 'invite' is an invitation the person accepted (collab-invites.js
+-- acceptAndPin), 'link' an invite link they redeemed (apply_community_invite).
+-- NULL is everything nobody accepted: the creator's own row (the creator is
+-- read off apps.created_by instead), dapp.json's declared admins
+-- (app-manifest.js applyAdminsChange) and fixtures. The backfill runs once,
+-- when the column is added: an existing member with an inviter and an
+-- acceptance is taken to have accepted an invitation.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = current_schema() AND table_name = 'app_collaborators'
+       AND column_name = 'accepted_via'
+  ) THEN
+    ALTER TABLE app_collaborators ADD COLUMN accepted_via VARCHAR(16);
+    UPDATE app_collaborators SET accepted_via = 'invite'
+     WHERE status = 'member' AND accepted_at IS NOT NULL
+       AND invited_by IS NOT NULL AND invited_by <> user_id;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conname = 'app_collaborators_accepted_via_check' AND conrelid = 'app_collaborators'::regclass
+  ) THEN
+    ALTER TABLE app_collaborators ADD CONSTRAINT app_collaborators_accepted_via_check
+      CHECK (accepted_via IS NULL OR accepted_via IN ('invite', 'link'));
+  END IF;
+END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -15021,28 +15050,23 @@ BEGIN
 END $$;
 
 -- The projects `u` is in BY CONSENT on both sides, the ties users_connected
--- below counts. Each one is something the person did themselves and that
--- somebody already in the project offered:
+-- below counts:
 --
---   - a project they created;
---   - a collaborator row that came through an invitation they accepted, or
---     an invite link they redeemed: status 'member' with an inviter and an
---     acceptance on it (invited_by, accepted_at). A row written with no
---     inviter is NOT one: dapp.json's declared admins
---     (app-manifest.js applyAdminsChange) are seeded that way without being
---     asked, so a stranger cannot reach somebody by naming them an admin of
---     a project of their own. app_admins alone never counts, for the same
---     reason;
---   - an invite link they redeemed into a community that is NOT public
---     (community_invite_redemptions, applied, and still a member). The
---     community_members row it writes says 'joined', the same as the Join
---     button, so the row's source cannot tell the two apart; the redemption
---     can. Joining, pinning, voting or being active somewhere (the
---     'joined', 'favorite', 'voter' and 'active' sources) is self-service
---     and never counts, so neither does a project that was public when
---     somebody joined it and went private later.
+--   - a project they created (apps.created_by);
+--   - a project they joined by accepting an invitation or redeeming an
+--     invite link (app_collaborators.accepted_via, set only by those two
+--     paths), from somebody who is in it by consent themselves: its creator,
+--     or a member whose own row has accepted_via. That check is one level
+--     deep, not recursive.
 --
--- Homeroom's own project is never one: every account is in it.
+-- Nothing else counts. A member row nobody accepted (dapp.json's declared
+-- admins, which applyAdminsChange seeds without asking, even over a pending
+-- invite) has no accepted_via. app_admins alone never counts. Community
+-- membership never counts on its own: Join, a Home pin, a vote or activity
+-- is self-service, and an invite link into a community that is not public
+-- always writes a collaborator row (apps_visibility_combo_check: a project
+-- only its people can see is one only its people build), which the second
+-- rule reads with its maker. Homeroom's own project is never one.
 CREATE OR REPLACE FUNCTION user_consented_projects(u INTEGER)
 RETURNS SETOF INTEGER
 LANGUAGE sql STABLE AS $$
@@ -15052,17 +15076,13 @@ LANGUAGE sql STABLE AS $$
   SELECT c.app_id FROM app_collaborators c
     JOIN apps pa ON pa.id = c.app_id
    WHERE c.user_id = u AND c.status = 'member'
+     AND c.accepted_via IS NOT NULL
      AND c.invited_by IS NOT NULL AND c.invited_by <> u
-     AND c.accepted_at IS NOT NULL
      AND NOT pa.self_hosted
-  UNION
-  SELECT i.app_id FROM community_invite_redemptions x
-    JOIN community_invites i ON i.id = x.invite_id
-    JOIN apps pa ON pa.id = i.app_id
-    JOIN community_members m ON m.community_id = pa.community_id AND m.user_id = u
-   WHERE x.user_id = u AND x.status = 'joined' AND x.applied_at IS NOT NULL
-     AND NOT pa.self_hosted
-     AND pa.view_visibility IS DISTINCT FROM 'public'
+     AND (pa.created_by = c.invited_by
+          OR EXISTS (SELECT 1 FROM app_collaborators mk
+                      WHERE mk.app_id = c.app_id AND mk.user_id = c.invited_by
+                        AND mk.status = 'member' AND mk.accepted_via IS NOT NULL))
 $$;
 
 -- Two people are CONNECTED only by a tie neither of them can make alone: an

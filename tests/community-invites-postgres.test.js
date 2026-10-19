@@ -102,6 +102,8 @@ async function connectPool() {
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       status VARCHAR(16) NOT NULL DEFAULT 'member',
       invited_by INTEGER, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), accepted_at TIMESTAMPTZ,
+      -- #5104: how a member row was accepted; a redeemed link writes 'link'.
+      accepted_via VARCHAR(16),
       PRIMARY KEY (app_id, user_id));
     CREATE TABLE app_favorites (
       app_id INTEGER NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
@@ -256,8 +258,8 @@ test('invite links against a real PostgreSQL', async (t) => {
       const made = await invites.createInvite(pool, { app: group, user: ADA });
       const joined = await invites.redeem(pool, { token: made.link.token, user: as(4, 'dee', true) });
       assert.equal(joined.status, 'joined');
-      const collab = await pool.query('SELECT status, invited_by FROM app_collaborators WHERE app_id = 2 AND user_id = 4');
-      assert.deepEqual(collab.rows, [{ status: 'member', invited_by: 1 }]);
+      const collab = await pool.query('SELECT status, invited_by, accepted_via FROM app_collaborators WHERE app_id = 2 AND user_id = 4');
+      assert.deepEqual(collab.rows, [{ status: 'member', invited_by: 1, accepted_via: 'link' }]);
       assert.equal(await member(2, 4), true);
       const eve = await invites.redeem(pool, { token: made.link.token, user: as(5, 'eve', false) });
       assert.deepEqual([eve.status, eve.privateMember], ['joined', true], 'somebody still waiting joins as a private member');

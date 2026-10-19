@@ -58,6 +58,7 @@ const userDirectory = require('../src/services/user-directory');
 const collabInvites = require('../src/services/collab-invites');
 const emailInvites = require('../src/services/email-invites');
 const approverInvites = require('../src/services/approver-invites');
+const appManifest = require('../src/services/app-manifest');
 const { conversationRoutes } = require('../src/routes/conversations');
 
 async function openDatabase(t) {
@@ -101,6 +102,21 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
     );
     return rows[0];
   }
+  async function makeLink(app, maker) {
+    const communityId = (await pool.query('SELECT community_id FROM apps WHERE id = $1', [app.id])).rows[0].community_id;
+    return (await pool.query(
+      `INSERT INTO community_invites (token, community_id, app_id, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days') RETURNING id`,
+      [crypto.randomBytes(12).toString('hex'), communityId, app.id, maker.id]
+    )).rows[0].id;
+  }
+  async function redeem(inviteId, person) {
+    const redemption = (await pool.query(
+      `INSERT INTO community_invite_redemptions (invite_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [inviteId, person.id]
+    )).rows[0];
+    return (await pool.query('SELECT apply_community_invite($1) AS ok', [redemption.id])).rows[0].ok;
+  }
   async function project(slug, owner, members) {
     await pool.query(
       `INSERT INTO apps (name, slug, created_by, view_visibility, collab_visibility)
@@ -111,13 +127,18 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
     const { rows } = await pool.query(
       'SELECT id, slug, community_id, self_hosted, collab_visibility FROM apps WHERE slug = $1', [slug]
     );
+    // The creator's own row, as POST /api/apps writes it: no inviter.
+    await pool.query(
+      `INSERT INTO app_collaborators (app_id, user_id, status, accepted_at) VALUES ($1, $2, 'member', NOW())`,
+      [rows[0].id, owner.id]
+    );
     // Each member came in by an invitation the owner sent and they accepted,
     // the way collab-invites.js writes it; the collaborator trigger joins
     // them to the community.
     for (const person of members) {
       await pool.query(
-        `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at)
-         VALUES ($1, $2, 'member', $3, NOW())`,
+        `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at, accepted_via)
+         VALUES ($1, $2, 'member', $3, NOW(), 'invite')`,
         [rows[0].id, person.id, owner.id]
       );
     }
@@ -218,8 +239,8 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
 
     // An invitation she accepted connects ivy to the project's creator.
     await pool.query(
-      `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at)
-       VALUES ($1, $2, 'member', $3, NOW())`, [square.id, ivy.id, jack.id]
+      `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at, accepted_via)
+       VALUES ($1, $2, 'member', $3, NOW(), 'invite')`, [square.id, ivy.id, jack.id]
     );
     assert.equal(await connected(jack, ivy), true, 'an accepted collaborator and the creator');
     assert.equal(await connected(henry, ivy), false, 'still not the member who only joined');
@@ -252,19 +273,79 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
       `INSERT INTO app_collaborators (app_id, user_id, status, accepted_at) VALUES ($1, $2, 'member', NOW())`,
       [reading.id, jack.id]
     );
-    const invite = (await pool.query(
-      `INSERT INTO community_invites (token, community_id, app_id, created_by, expires_at)
-       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days') RETURNING id`,
-      [crypto.randomBytes(12).toString('hex'), reading.community_id, reading.id, jack.id]
-    )).rows[0];
-    const redemption = (await pool.query(
-      `INSERT INTO community_invite_redemptions (invite_id, user_id) VALUES ($1, $2) RETURNING id`,
-      [invite.id, kate.id]
-    )).rows[0];
-    assert.equal((await pool.query('SELECT apply_community_invite($1) AS ok', [redemption.id])).rows[0].ok, true);
+    assert.equal(await redeem(await makeLink(reading, jack), kate), true);
     assert.equal(await connected(jack, kate), true, 'an invite-link joiner of a private community');
     // Members of a private community who both came in by invitation.
     assert.equal(await connected(alice, bob), true);
+
+    // A link redeemed into a community while it was PUBLIC (building open,
+    // so the link is membership only) connects nobody once it goes private.
+    const lia = await user('lia');
+    await pool.query(
+      `INSERT INTO apps (name, slug, created_by, view_visibility, collab_visibility)
+       VALUES ('plaza', 'plaza', $1, 'public', 'public')`, [jack.id]
+    );
+    const plaza = await appRow('plaza');
+    await pool.query(
+      `INSERT INTO community_members (community_id, user_id, source) VALUES ($1, $2, 'creator')
+       ON CONFLICT DO NOTHING`, [plaza.community_id, jack.id]
+    );
+    const plazaLink = await makeLink(plaza, jack);
+    assert.equal(await redeem(plazaLink, lia), true);
+    await pool.query(
+      `UPDATE apps SET view_visibility = 'private', collab_visibility = 'private' WHERE id = $1`, [plaza.id]
+    );
+    assert.equal(await connected(jack, lia), false, 'a link redeemed while the community was public');
+  });
+
+  await t.test('an acceptance counts only when the person accepted, from someone in by consent', async () => {
+    const connected = async (a, b) => (await pool.query('SELECT users_connected($1, $2) AS v', [a.id, b.id])).rows[0].v;
+    const owner = await user('olga');
+    const mia = await user('mia');
+    const ned = await user('ned');
+    const forge = await project('forge', owner, []);
+
+    // A pending invite to mia, then the project's dapp.json names her an
+    // admin: applyAdminsChange makes the row a member, which she never
+    // accepted, so it connects her to nobody.
+    await pool.query(
+      `INSERT INTO app_collaborators (app_id, user_id, status, invited_by) VALUES ($1, $2, 'invited', $3)`,
+      [forge.id, mia.id, owner.id]
+    );
+    await appManifest.applyAdminsChange(pool, { id: forge.id, slug: forge.slug, admin_usernames: [] },
+      { usernames: ['mia'], userIds: [mia.id] });
+    const miaRow = (await pool.query(
+      'SELECT status, accepted_at, accepted_via FROM app_collaborators WHERE app_id = $1 AND user_id = $2',
+      [forge.id, mia.id]
+    )).rows[0];
+    assert.equal(miaRow.status, 'member');
+    assert.equal(miaRow.accepted_at, null, 'no acceptance is recorded for her');
+    assert.equal(miaRow.accepted_via, null);
+    assert.equal(await connected(owner, mia), false, 'a pending invite turned into a membership by dapp.json');
+
+    // mia, a member nobody asked, makes an invite link and ned redeems it:
+    // the link's maker is not in the project by consent, so ned's place
+    // there connects him to nobody, the creator included.
+    const link = await makeLink(forge, mia);
+    assert.equal(await redeem(link, ned), true);
+    assert.equal((await pool.query(
+      'SELECT accepted_via FROM app_collaborators WHERE app_id = $1 AND user_id = $2', [forge.id, ned.id]
+    )).rows[0].accepted_via, 'link');
+    assert.equal(await connected(owner, ned), false, 'a link from a member who never accepted');
+
+    // The same link made by the creator connects its joiner.
+    const pia = await user('pia');
+    assert.equal(await redeem(await makeLink(forge, owner), pia), true);
+    assert.equal(await connected(owner, pia), true, 'a link from the creator');
+    // And accepting an invitation through the real path records it.
+    const quin = await user('quin');
+    assert.equal((await collabInvites.sendInvite(pool, { app: forge, target: quin, inviterId: owner.id })).ok, false,
+      'a stranger to her, until she takes invitations from anyone');
+    await pool.query(`UPDATE users SET contact_policy = 'anyone' WHERE id = $1`, [quin.id]);
+    assert.equal((await collabInvites.sendInvite(pool, { app: forge, target: quin, inviterId: owner.id })).ok, true);
+    assert.equal((await collabInvites.acceptInvite(pool, { appId: forge.id, user: quin })).ok, true);
+    assert.equal(await connected(owner, quin), true, 'an accepted invitation');
+    assert.equal(await connected(pia, quin), true, 'two people who both accepted');
   });
 
   await t.test('a new direct message, group or invitation waits on contact_policy', async () => {

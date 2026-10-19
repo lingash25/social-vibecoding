@@ -2145,7 +2145,12 @@ async function applyAdminsChange(pool, app, { usernames, userIds }, { actorLabel
            SELECT $1, uid, 'member', NOW() FROM UNNEST($2::int[]) AS uid
          ON CONFLICT (app_id, user_id) DO UPDATE
            SET status = 'member',
-               accepted_at = COALESCE(app_collaborators.accepted_at, NOW())`,
+               -- #5104: a pending invite made a member this way was never
+               -- accepted, so it records no acceptance (and no accepted_via,
+               -- which users_connected reads as consent).
+               accepted_at = CASE WHEN app_collaborators.status = 'member'
+                                  THEN COALESCE(app_collaborators.accepted_at, NOW())
+                                  ELSE app_collaborators.accepted_at END`,
         [app.id, ids]
       );
     } catch (err) {
