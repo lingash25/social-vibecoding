@@ -111,11 +111,14 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
     const { rows } = await pool.query(
       'SELECT id, slug, community_id, self_hosted, collab_visibility FROM apps WHERE slug = $1', [slug]
     );
-    for (const person of [owner, ...members]) {
+    // Each member came in by an invitation the owner sent and they accepted,
+    // the way collab-invites.js writes it; the collaborator trigger joins
+    // them to the community.
+    for (const person of members) {
       await pool.query(
-        `INSERT INTO community_members (community_id, user_id, source) VALUES ($1, $2, 'joined')
-         ON CONFLICT DO NOTHING`,
-        [rows[0].community_id, person.id]
+        `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at)
+         VALUES ($1, $2, 'member', $3, NOW())`,
+        [rows[0].id, person.id, owner.id]
       );
     }
     return rows[0];
@@ -178,23 +181,27 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
     assert.deepEqual(await contactPrivacy.restrictedAmong(pool, alice.id, [bob.id, carol.id, dana.id, frank.id]), [carol.id]);
   });
 
-  await t.test('a public community anyone can join connects nobody; a role on a project does', async () => {
+  await t.test('only ties both people chose connect them', async () => {
+    const connected = async (a, b) => (await pool.query('SELECT users_connected($1, $2) AS v', [a.id, b.id])).rows[0].v;
     const henry = await user('henry');
     const ivy = await user('ivy');
     const jack = await user('jack');
-    // A public project: ivy joined it, and so does henry, a stranger to her.
+    const join = async (app, person) => pool.query(
+      `INSERT INTO community_members (community_id, user_id, source) VALUES ($1, $2, 'joined')
+       ON CONFLICT DO NOTHING`, [app.community_id, person.id]
+    );
+    const appRow = async (slug) => (await pool.query(
+      'SELECT id, slug, community_id, view_visibility FROM apps WHERE slug = $1', [slug]
+    )).rows[0];
+
+    // A public project ivy joined: henry joining it too connects him to nobody.
     await pool.query(
       `INSERT INTO apps (name, slug, created_by, view_visibility, collab_visibility)
        VALUES ('square', 'square', $1, 'public', 'private')`, [jack.id]
     );
-    const square = (await pool.query(`SELECT id, community_id FROM apps WHERE slug = 'square'`)).rows[0];
-    for (const person of [ivy, henry]) {
-      await pool.query(
-        `INSERT INTO community_members (community_id, user_id, source) VALUES ($1, $2, 'joined')
-         ON CONFLICT DO NOTHING`, [square.community_id, person.id]
-      );
-    }
-    const connected = async (a, b) => (await pool.query('SELECT users_connected($1, $2) AS v', [a.id, b.id])).rows[0].v;
+    const square = await appRow('square');
+    await join(square, ivy);
+    await join(square, henry);
     assert.equal(await connected(henry, ivy), false, 'joining a public community she is in does not connect him');
     await assert.rejects(conversations.createDirect(pool, henry, ivy.id), contactPrivacy.ContactRestrictedError);
     await assert.rejects(
@@ -203,21 +210,60 @@ test('who can reach you and who can find you (#5104)', { timeout: 120000 }, asyn
     );
     assert.deepEqual((await userDirectory.searchPrefix(pool, 'iv', 10, { viewerId: henry.id })).users, []);
 
-    // Collaborators on that same public project are connected: that role
-    // comes by invitation, not by a button.
+    // ...and when the project goes private later, those self-service joins
+    // still connect nobody.
+    await pool.query(`UPDATE apps SET view_visibility = 'private' WHERE id = $1`, [square.id]);
+    assert.equal(await connected(henry, ivy), false, 'a member who joined while it was public');
+    assert.equal(await connected(jack, ivy), false, 'nor the creator to somebody who only joined');
+
+    // An invitation she accepted connects ivy to the project's creator.
     await pool.query(
-      `INSERT INTO app_collaborators (app_id, user_id, status, accepted_at)
-       VALUES ($1, $2, 'member', NOW()), ($1, $3, 'member', NOW())
-       ON CONFLICT (app_id, user_id) DO UPDATE SET status = 'member'`,
-      [square.id, jack.id, ivy.id]
+      `INSERT INTO app_collaborators (app_id, user_id, status, invited_by, accepted_at)
+       VALUES ($1, $2, 'member', $3, NOW())`, [square.id, ivy.id, jack.id]
     );
-    assert.equal(await connected(jack, ivy), true, 'two collaborators');
+    assert.equal(await connected(jack, ivy), true, 'an accepted collaborator and the creator');
     assert.equal(await connected(henry, ivy), false, 'still not the member who only joined');
-    // An app admin of the project is connected to its collaborators too.
-    await pool.query('INSERT INTO app_admins (app_id, user_id) VALUES ($1, $2)', [square.id, henry.id]);
-    assert.equal(await connected(henry, ivy), true, 'an admin of the project');
-    // Members of the same PRIVATE community are connected (alice and bob,
-    // book-club), whatever their role there.
+
+    // A stranger names ivy an admin in his own project's dapp.json:
+    // applyAdminsChange writes app_admins and a collaborator row with no
+    // inviter and no asking. That connects nobody.
+    await pool.query(
+      `INSERT INTO apps (name, slug, created_by, view_visibility, collab_visibility)
+       VALUES ('lair', 'lair', $1, 'private', 'private')`, [henry.id]
+    );
+    const lair = await appRow('lair');
+    await pool.query('INSERT INTO app_admins (app_id, user_id) VALUES ($1, $2)', [lair.id, ivy.id]);
+    await pool.query(
+      `INSERT INTO app_collaborators (app_id, user_id, status, accepted_at) VALUES ($1, $2, 'member', NOW())`,
+      [lair.id, ivy.id]
+    );
+    assert.equal(await connected(henry, ivy), false, 'a declared admin who never accepted');
+    await assert.rejects(conversations.createDirect(pool, henry, ivy.id), contactPrivacy.ContactRestrictedError);
+
+    // An invite link into a private community (the maker's collaborator
+    // invite, accepted by redeeming it) connects the joiner to its creator.
+    const kate = await user('kate');
+    await pool.query(
+      `INSERT INTO apps (name, slug, created_by, view_visibility, collab_visibility)
+       VALUES ('reading', 'reading', $1, 'private', 'private')`, [jack.id]
+    );
+    const reading = await appRow('reading');
+    await pool.query(
+      `INSERT INTO app_collaborators (app_id, user_id, status, accepted_at) VALUES ($1, $2, 'member', NOW())`,
+      [reading.id, jack.id]
+    );
+    const invite = (await pool.query(
+      `INSERT INTO community_invites (token, community_id, app_id, created_by, expires_at)
+       VALUES ($1, $2, $3, $4, NOW() + INTERVAL '7 days') RETURNING id`,
+      [crypto.randomBytes(12).toString('hex'), reading.community_id, reading.id, jack.id]
+    )).rows[0];
+    const redemption = (await pool.query(
+      `INSERT INTO community_invite_redemptions (invite_id, user_id) VALUES ($1, $2) RETURNING id`,
+      [invite.id, kate.id]
+    )).rows[0];
+    assert.equal((await pool.query('SELECT apply_community_invite($1) AS ok', [redemption.id])).rows[0].ok, true);
+    assert.equal(await connected(jack, kate), true, 'an invite-link joiner of a private community');
+    // Members of a private community who both came in by invitation.
     assert.equal(await connected(alice, bob), true);
   });
 

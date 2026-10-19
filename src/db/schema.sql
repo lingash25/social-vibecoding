@@ -15020,20 +15020,55 @@ BEGIN
   END IF;
 END $$;
 
--- Two people are CONNECTED only by a tie neither of them can make alone:
+-- The projects `u` is in BY CONSENT on both sides, the ties users_connected
+-- below counts. Each one is something the person did themselves and that
+-- somebody already in the project offered:
 --
---   - an accepted friendship (both said yes);
---   - a role on the same project: both are its collaborators (members, not
---     pending invites; the creator is one) or its admins. Those come by
---     invitation or by a merged change, never by a button a stranger presses;
---   - membership of the same community while it is NOT public. A public
---     ('open') community is one anyone can join (communities.audienceSql:
---     view_visibility 'public'), so sharing one says nothing: a stranger
---     could join it to reach somebody in it. A private one is joined only
---     through a member's invitation or invite link.
+--   - a project they created;
+--   - a collaborator row that came through an invitation they accepted, or
+--     an invite link they redeemed: status 'member' with an inviter and an
+--     acceptance on it (invited_by, accepted_at). A row written with no
+--     inviter is NOT one: dapp.json's declared admins
+--     (app-manifest.js applyAdminsChange) are seeded that way without being
+--     asked, so a stranger cannot reach somebody by naming them an admin of
+--     a project of their own. app_admins alone never counts, for the same
+--     reason;
+--   - an invite link they redeemed into a community that is NOT public
+--     (community_invite_redemptions, applied, and still a member). The
+--     community_members row it writes says 'joined', the same as the Join
+--     button, so the row's source cannot tell the two apart; the redemption
+--     can. Joining, pinning, voting or being active somewhere (the
+--     'joined', 'favorite', 'voter' and 'active' sources) is self-service
+--     and never counts, so neither does a project that was public when
+--     somebody joined it and went private later.
 --
--- Homeroom's own project counts for none of these: every account with
--- platform access is in its community ('auto', join_platform_community).
+-- Homeroom's own project is never one: every account is in it.
+CREATE OR REPLACE FUNCTION user_consented_projects(u INTEGER)
+RETURNS SETOF INTEGER
+LANGUAGE sql STABLE AS $$
+  SELECT pa.id FROM apps pa
+   WHERE pa.created_by = u AND NOT pa.self_hosted
+  UNION
+  SELECT c.app_id FROM app_collaborators c
+    JOIN apps pa ON pa.id = c.app_id
+   WHERE c.user_id = u AND c.status = 'member'
+     AND c.invited_by IS NOT NULL AND c.invited_by <> u
+     AND c.accepted_at IS NOT NULL
+     AND NOT pa.self_hosted
+  UNION
+  SELECT i.app_id FROM community_invite_redemptions x
+    JOIN community_invites i ON i.id = x.invite_id
+    JOIN apps pa ON pa.id = i.app_id
+    JOIN community_members m ON m.community_id = pa.community_id AND m.user_id = u
+   WHERE x.user_id = u AND x.status = 'joined' AND x.applied_at IS NOT NULL
+     AND NOT pa.self_hosted
+     AND pa.view_visibility IS DISTINCT FROM 'public'
+$$;
+
+-- Two people are CONNECTED only by a tie neither of them can make alone: an
+-- accepted friendship, or a project both are in by consent
+-- (user_consented_projects above). Sharing a public community, or being
+-- named somewhere without being asked, connects nobody.
 CREATE OR REPLACE FUNCTION users_connected(a INTEGER, b INTEGER)
 RETURNS BOOLEAN
 LANGUAGE sql STABLE AS $$
@@ -15043,22 +15078,8 @@ LANGUAGE sql STABLE AS $$
               AND f.user_low_id = LEAST(a, b) AND f.user_high_id = GREATEST(a, b))
       OR EXISTS (
            SELECT 1
-             FROM (SELECT ca.app_id FROM app_collaborators ca WHERE ca.user_id = a AND ca.status = 'member'
-                   UNION
-                   SELECT da.app_id FROM app_admins da WHERE da.user_id = a) ra
-             JOIN (SELECT cb.app_id FROM app_collaborators cb WHERE cb.user_id = b AND cb.status = 'member'
-                   UNION
-                   SELECT db.app_id FROM app_admins db WHERE db.user_id = b) rb ON rb.app_id = ra.app_id
-             JOIN apps pa ON pa.id = ra.app_id
-            WHERE NOT pa.self_hosted)
-      OR EXISTS (
-           SELECT 1
-             FROM community_members ma
-             JOIN community_members mb ON mb.community_id = ma.community_id
-             JOIN apps pa ON pa.community_id = ma.community_id
-            WHERE ma.user_id = a AND mb.user_id = b
-              AND NOT pa.self_hosted
-              AND pa.view_visibility IS DISTINCT FROM 'public')
+             FROM user_consented_projects(a) pa(app_id)
+             JOIN user_consented_projects(b) pb(app_id) ON pb.app_id = pa.app_id)
 $$;
 
 -- Whether `sender_id` may start something new with `target_id` (see

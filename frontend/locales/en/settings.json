@@ -1532,7 +1532,7 @@
     "description": "First choice under \"Who can message or invite me\" in Settings > Privacy, and the default: only people who are in one of your projects with you, or your friends, can start a conversation or invite you."
   },
   "privacy.whoCanMessage.sharedDescription": {
-    "text": "Your friends, people building a project with you, and members of your private communities. Anyone else can still send you an invite link.",
+    "text": "Your friends, and people who made or were invited into a project you're in. Joining a public community doesn't count. Anyone else can still send you an invite link.",
     "description": "Small explanation under the \"People in projects I'm in\" choice in Settings > Privacy."
   },
   "privacy.whoCanMessage.anyone": {
@@ -1548,7 +1548,7 @@
     "description": "Label of a switch in Settings > Privacy, off by default. When on, people who are not in a project with you can find your username when they search for people."
   },
   "privacy.discoverable.description": {
-    "text": "When this is off, only your friends, people building a project with you and members of your private communities find your username when they search for someone to message, mention or invite. A link to your profile still works.",
+    "text": "When this is off, only your friends and people who made or were invited into a project you're in find your username when they search for someone to message, mention or invite. A link to your profile still works.",
     "description": "Explanation under the \"Let people find my profile\" switch in Settings > Privacy."
   },
   "privacy.loadFailed": {
