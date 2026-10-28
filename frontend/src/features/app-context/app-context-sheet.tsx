@@ -503,7 +503,8 @@ export function AppsSwitcherSheet(): ReactNode {
     return () => { live = false; };
   }, [open, slug]);
 
-  // The menu's blue "Suggest an improvement" opens comment mode, and the
+  // The menu's blue "Suggest an improvement" opens comment mode (the form,
+  // on a phone, where this draws nothing: suggest-shortcut.ts), and the
   // page under the menu is still while it is open: the mode's picture of it is drawn now, once the sheet has slid in,
   // so the mode opens on it the moment the menu has gone
   // (../comment-pin/comment-pin.tsx `prepareCommentView`).

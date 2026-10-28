@@ -7,10 +7,12 @@
  *
  * ── The other way in ────────────────────────────────────────────────────
  *
- * "Suggest an improvement" opens comment mode, on a
- * phone too (a tap is a comment there), and the form is one switch away
- * (Form, on comment mode's bar or in its box). The form's own Comment switch
- * opens comment mode with the form's draft. Both reach this module through
+ * "Suggest an improvement" opens comment mode on a computer, and the form is
+ * one switch away (Form, on comment mode's bar or in its box). On a phone it
+ * opens the form, and comment mode is the switch (#5762): the mode shows the
+ * page as a smaller picture of itself with its bar at the top, which on a
+ * phone read as the screen shrinking, the text box jammed at the top. The
+ * form's own Comment switch opens comment mode with the form's draft. Both reach this module through
  * `openCommentMode` (the form's island imports it; feedback-controller.js,
  * which cannot import, through window.UsernodeReact.suggestShortcut).
  *
@@ -56,6 +58,7 @@
  * copy of this module stands down there.
  */
 
+import { PHONE_QUERY } from '../../lib/keyboard-open';
 import { EMBEDDED_PANEL_CLASS } from '../../lib/side-panel-mode';
 import type { OpenOptions } from '../comment-pin/comment-pin';
 import {
@@ -369,7 +372,7 @@ export function scheduleWarmComment(win: Pick<Window, 'setTimeout' | 'addEventLi
  * mode is one tap away: load its code and draw the page now, while it sits
  * still under the sheet, so the mode opens on it at once (comment-pin.tsx
  * `prepareCommentView`). Nothing at all where the device has turned it off,
- * and nothing on a capture route (`onCaptureRoute`).
+ * on a phone (the form opens there), and on a capture route (`onCaptureRoute`).
  */
 export function prepareComment(): void {
   if (!suggestOpensComment() || onCaptureRoute()) return;
@@ -392,6 +395,7 @@ export function openCommentMode(opts: OpenOptions = {}): void {
 
 type MediaHost = {
   document?: { documentElement?: { classList?: { contains(name: string): boolean } } | null };
+  matchMedia?: (query: string) => { matches: boolean };
 };
 
 /**
@@ -407,12 +411,25 @@ function commentable(win: MediaHost | null): boolean {
   }
 }
 
-/** Whether "Suggest an improvement" opens comment mode: this device has not turned it off, and it can be here. */
+/** Whether this screen is a phone: the test comment mode itself lays out by. */
+function onPhone(win: MediaHost | null): boolean {
+  try {
+    return !!win?.matchMedia?.(PHONE_QUERY).matches;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether "Suggest an improvement" opens comment mode: this device has not
+ * turned it off, it can be here, and this is not a phone, where the form
+ * opens first and comment mode is its switch (#5762).
+ */
 export function suggestOpensComment(
   win: MediaHost | null = typeof window !== 'undefined' ? window : null,
   storage: StorageLike | null = defaultStorage(),
 ): boolean {
-  return suggestShortcutEnabled(storage) && commentable(win);
+  return suggestShortcutEnabled(storage) && commentable(win) && !onPhone(win);
 }
 
 /** Whether the form offers the switch to comment mode: the same. */

@@ -397,11 +397,19 @@ function modeStorage(entries = {}) {
   };
 }
 
-test('Suggest an improvement opens comment mode by default, on a phone too, but not in the side panel', () => {
+test('Suggest an improvement opens comment mode by default, but the form on a phone and in the side panel', () => {
   const on = { [shortcut.SUGGEST_SHORTCUT_STORAGE_KEY]: '1' };
   const off = { [shortcut.SUGGEST_SHORTCUT_STORAGE_KEY]: '0' };
-  const page = { document: { documentElement: { classList: { contains: () => false } } } };
+  const root = { documentElement: { classList: { contains: () => false } } };
+  const page = { document: root, matchMedia: () => ({ matches: false }) };
   const panel = { document: { documentElement: { classList: { contains: (c) => c === 'in-side-panel' } } } };
+  // #5762: on a phone the picture of the page read as the screen shrinking,
+  // so the form opens first there and still offers comment mode as its switch.
+  const asked = [];
+  const phone = { document: root, matchMedia: (q) => { asked.push(q); return { matches: true }; } };
+  assert.equal(shortcut.suggestOpensComment(phone, modeStorage()), false, 'a phone opens the form');
+  assert.equal(asked[0], '(max-width: 767px) and (pointer: coarse)', 'the phone test comment mode lays out by');
+  assert.equal(shortcut.formOffersComment(phone, modeStorage()), true, 'the form on a phone keeps its Comment switch');
   assert.equal(shortcut.suggestOpensComment(page, modeStorage()), true, 'a fresh device opens comment mode');
   assert.equal(shortcut.suggestOpensComment(page, modeStorage(on)), true);
   assert.equal(shortcut.suggestOpensComment(page, modeStorage(off)), false, 'the form, where the device turned it off');
