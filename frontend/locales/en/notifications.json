@@ -19,13 +19,13 @@
     "text": "Other",
     "description": "Heading on the Unread filter over the notifications that belong to no project (messages, friends, account)."
   },
-  "stack.more_one": {
-    "text": "{{count}} more notification",
-    "description": "Last line of the top card of a closed stack of notifications on the Unread filter, one stack per project: how many more notifications are under it. Tapping the card opens the stack. {{count}} is how many."
+  "stack.showAll_one": {
+    "text": "Show {{count}} notification",
+    "description": "Last line of the top card of a closed stack of notifications on the Unread filter, one stack per project. {{count}} is how many notifications the whole stack holds, this card's included, and it is the only count the card shows while the stack is closed. Tapping the card opens the stack."
   },
-  "stack.more_other": {
-    "text": "{{count}} more notifications",
-    "description": "Last line of the top card of a closed stack of notifications on the Unread filter, one stack per project: how many more notifications are under it. Tapping the card opens the stack. {{count}} is how many."
+  "stack.showAll_other": {
+    "text": "Show all {{count}} notifications",
+    "description": "Last line of the top card of a closed stack of notifications on the Unread filter, one stack per project. {{count}} is how many notifications the whole stack holds, this card's included, and it is the only count the card shows while the stack is closed. Tapping the card opens the stack."
   },
   "stack.showLess": {
     "text": "Show less",
@@ -42,6 +42,10 @@
   "story.meta_other": {
     "text": "#{{number}} · {{count}} notifications",
     "description": "Small last line of a card on the Unread filter that stands for several notifications about one request or proposal: which one, by its number, and how many notifications the card is. {{number}} is the request's or proposal's number, like 5580; {{count}} is how many notifications."
+  },
+  "story.ref": {
+    "text": "#{{number}}",
+    "description": "Small last line of the top card of a closed stack on the Unread filter when that card stands for several notifications about one request or proposal: just which one, by its number. The card's last line says how many notifications the whole stack is, so this line gives no count. {{number}} is the request's or proposal's number, like 5580."
   },
   "story.metaUnnumbered_one": {
     "text": "{{count}} notification",

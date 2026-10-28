@@ -764,7 +764,7 @@ type ScreenRowProps = {
  * phone pressing and holding the card does the same, the way iOS opens a
  * notification you hold; the press that opened it does not also open the
  * notification. The top card of a closed stack opens the stack instead of
- * the notification, and says how many more are under it; the cards under it
+ * the notification, and says how many the whole stack is; the cards under it
  * are `inert` until it opens. The slot is the card on a desk; on a phone the
  * swipe host is (it is what slides), and the slot only rounds the kit's wrap.
  */
@@ -1181,7 +1181,7 @@ const PROJECT_INK = 'font-medium text-zinc-600 dark:text-zinc-300';
  * line names only what the heading over the stack does not: who did it, a
  * source other than the project, or for the bot's news just the bot. A
  * story card names its request or proposal and how many notifications it
- * is. The top card of a stack says how many more are under it; the line
+ * is. The top card of a stack says how many the whole stack is; the line
  * stays while the stack is open, folded to nothing, so the card shrinks and
  * grows with the stack instead of jumping. A card in no stack (the older
  * rows, one per change) has no heading over it, so its meta line names the
@@ -1200,8 +1200,13 @@ function CardWords({ view, card, hasHistory, saveOnHover }: {
   const source = view.botMoment && view.appId != null ? t('notifications:row.bot.name')
     : view.appLine && view.appLine !== card.groupName ? view.appLine : null;
   const by = view.botMoment ? null : view.by;
-  const meta = story ? (view.storyRef
-    ? t('notifications:story.meta', { number: view.storyRef.number, count: story.members.length })
+  // #5929: the top card of a closed stack says one number, the stack's
+  // total, on its last line; its own story count waits until the stack opens.
+  const closedTop = !!(top && top.closed);
+  const meta = story && !(closedTop && !view.storyRef) ? (view.storyRef
+    ? (closedTop
+      ? t('notifications:story.ref', { number: view.storyRef.number })
+      : t('notifications:story.meta', { number: view.storyRef.number, count: story.members.length }))
     : t('notifications:story.metaUnnumbered', { count: story.members.length }))
     : source && by ? t('notifications:row.meta.sourceBy', { source, username: by })
       : by ? t('notifications:row.meta.by', { username: by }) : source;
@@ -1257,13 +1262,13 @@ function CardWords({ view, card, hasHistory, saveOnHover }: {
           >
             <span className="min-h-0 overflow-hidden">
               <span className="block pt-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                {t('notifications:stack.more', { count: top.more })}
+                {t('notifications:stack.showAll', { count: top.total })}
               </span>
             </span>
           </span>
         ) : null}
       </span>
-      <RunCount view={view} />
+      {closedTop ? null : <RunCount view={view} />}
     </>
   );
 }

@@ -115,8 +115,9 @@ test('a project with several cards is a closed stack: its newest card on top, th
     'the heading stays the stack\'s first child, so the cards are its siblings');
   // The top card says how many are under it, and tapping it opens the stack.
   assert.match(html, /data-stack-top=""><button data-notif-id="1" class="notifications-row [^"]*" aria-expanded="false">/);
-  assert.ok(html.includes(message('notifications:stack.more', { count: 2 })));
-  assert.equal(message('notifications:stack.more', { count: 2 }), '2 more notifications');
+  // #5929: the count is the whole stack's, the top card's own included.
+  assert.ok(html.includes(message('notifications:stack.showAll', { count: 3 })));
+  assert.equal(message('notifications:stack.showAll', { count: 3 }), 'Show all 3 notifications');
   // The cards under it are the real cards, out of reach until it opens.
   assert.match(html, /data-stack-behind="1" inert="" aria-hidden="true"><button data-notif-id="2"/);
   assert.match(html, /data-stack-behind="2" inert="" aria-hidden="true"><button data-notif-id="3"/);
@@ -125,6 +126,24 @@ test('a project with several cards is a closed stack: its newest card on top, th
   // Each card is the shell's card; the time sits at its top right.
   assert.match(html, /class="notifications-row-slot group\/notif relative notifications-card grid grid-cols-1 rounded-\[20px\] bg-white dark:bg-zinc-900 /);
   assert.match(html, /<span class="flex-1 min-w-0 truncate">[^<]+<\/span><time title="Tuesday" class="shrink-0[^"]*">1m ago<\/time>/);
+});
+
+test('a closed stack whose top card is a story says one number: the whole stack\'s', () => {
+  // #5929: "#24 · 9 notifications" over "4 more notifications" read as 9, 4
+  // or 13. Closed, the top card names its request and the stack's total only.
+  const story = { storyKey: 'r:5:24', storyRef: { number: 24, title: 'Plant shelf' } };
+  const html = renderSheet({
+    list: [
+      view(1, { ...story, label: 'Live' }),
+      view(2, { ...story, label: 'Ready to try' }),
+      view(3, { ...story, label: 'Mentioned you' }),
+      view(4, { kind: 'pr_proposed', label: 'New change' }),
+    ],
+  });
+  assert.ok(html.includes(message('notifications:stack.showAll', { count: 4 })), 'three in the story and one under it');
+  assert.doesNotMatch(html, /#24 · 3 notifications/, 'the story count waits until the stack opens');
+  assert.match(html, /<span class="block text-xs text-zinc-500 truncate">#24<\/span>/);
+  assert.doesNotMatch(html, /more notification/);
 });
 
 test('a project with one card has nothing to stack', () => {

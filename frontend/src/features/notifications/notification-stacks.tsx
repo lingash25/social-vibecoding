@@ -5,8 +5,9 @@
  * ── A project is a stack ──────────────────────────────────────────────
  *
  * Each project's unread notifications are one stack under its name. While
- * it is closed only its newest card shows, with "N more notifications" on
- * it and the edges of the next two peeking out below; tapping it opens the
+ * it is closed only its newest card shows, with "Show all N notifications"
+ * on it (#5929: N is every notification in the stack, the top card's own
+ * included, and the card says no other count while closed) and the edges of the next two peeking out below; tapping it opens the
  * stack, the cards slide out from behind the top one, and "Show less" in the
  * heading folds them back. A project with one card has nothing to stack.
  *
@@ -79,8 +80,8 @@ export type StoryEntry<V extends StoryRowView = StoryRowView> = { type: 'notif';
 export type CardPlace = {
   /** The project's own name: the heading the card sits under. */
   groupName: string;
-  /** The top card of a stack of several: how many sit under it, and the way in. */
-  top?: { more: number; closed: boolean; open: () => void } | null;
+  /** The top card of a stack of several: how many notifications the whole stack is, and the way in. */
+  top?: { total: number; closed: boolean; open: () => void } | null;
   /** Under the top card of a closed stack: 1 and 2 peek out, 3 stands for the rest. */
   behind?: number;
   /**
@@ -270,8 +271,11 @@ export function ProjectStack<V extends StoryRowView>({ groupKey, name, entries, 
     if (from && stack) play(stack, from, open);
   }, [open]);
 
-  let more = 0;
-  entries.forEach((entry, i) => { if (i > 0) more += notificationsIn(entry.view); });
+  // #5929: the whole stack's count, the top card's own notifications too.
+  // "#24 · 9 notifications" over "4 more notifications" left people unsure
+  // whether it was 9, 4 or 13; a closed stack now says only "Show all 13".
+  let total = 0;
+  entries.forEach((entry) => { total += notificationsIn(entry.view); });
 
   return (
     <div
@@ -284,7 +288,7 @@ export function ProjectStack<V extends StoryRowView>({ groupKey, name, entries, 
       {head(many && open ? () => toggle(false) : null)}
       {entries.map((entry, i) => renderCard(entry, {
         groupName: name,
-        top: many && i === 0 ? { more, closed, open: () => toggle(true) } : null,
+        top: many && i === 0 ? { total, closed, open: () => toggle(true) } : null,
         behind: closed && i > 0 ? Math.min(i, 3) : 0,
       }))}
     </div>
