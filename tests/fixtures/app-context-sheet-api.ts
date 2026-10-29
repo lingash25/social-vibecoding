@@ -4,3 +4,4 @@
 export { AppsSwitcherSheet } from '../../frontend/src/features/app-context/app-context-sheet';
 export { improveStore } from '../../frontend/src/features/improve/improve-store.js';
 export { navStore } from '../../frontend/src/features/nav/nav-store.js';
+export { appContextStore } from '../../frontend/src/features/app-context/app-context-store.js';

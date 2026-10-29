@@ -129,8 +129,9 @@ import {
   XIcon,
 } from '@/components/ui/icons';
 
-import { AboutPane } from './about-pane';
-import { offeringGoToHomeroom, owedHomeWalk, useAboutApp } from './about-data';
+import { AboutPane, ExternalMark } from './about-pane';
+import { offeringGoToHomeroom, owedHomeWalk, useAboutApp, usePlatformAbout } from './about-data';
+import { versionRowText } from './about-model';
 import { InvitePane } from './invite-pane';
 import { isNativeApp } from '../mobile-install/environment';
 import { InstallStepsSheet } from '../mobile-install/install-steps-sheet';
@@ -206,10 +207,14 @@ const SECTION = 'px-5 pt-4 pb-1 ' + SECTION_TYPE;
  * the rest are <a>s. One fragment is what keeps "the buttons look like the
  * links" true by construction rather than by copies staying in step.
  */
-function RowBody({ icon, label, trailing }: {
+function RowBody({ icon, label, trailing, external }: {
   icon: ReactNode;
   label: string;
   trailing?: ReactNode;
+  // A row that leaves Homeroom (#5927): the browser, or another site. It
+  // ends in the external-link glyph rather than the chevron every row
+  // inside the platform ends in, and says so to a screen reader.
+  external?: boolean;
 }): ReactNode {
   return (
     <>
@@ -218,9 +223,24 @@ function RowBody({ icon, label, trailing }: {
       </span>
       <span className="flex-1 min-w-0 truncate font-medium">{label}</span>
       {trailing}
-      <ChevronRightIcon className="w-4 h-4 shrink-0 text-zinc-300 dark:text-zinc-600" aria-hidden="true" />
+      {external ? <ExternalMark /> : (
+        <ChevronRightIcon className="w-4 h-4 shrink-0 text-zinc-300 dark:text-zinc-600" aria-hidden="true" />
+      )}
     </>
   );
+}
+
+/**
+ * The Homeroom build THIS document loaded (App.loadedPlatformSha, read off
+ * the page at boot), as a short commit. Not the server's: after a deploy a
+ * tab still running the previous shell would otherwise name a build it is
+ * not running, which is the wrong number for a bug report (#5927). Null
+ * when the shell has not recorded one; the about read is the fallback.
+ */
+function loadedPlatformShort(): string | null {
+  if (typeof window === 'undefined') return null;
+  const sha = (window as unknown as { App?: { loadedPlatformSha?: unknown } }).App?.loadedPlatformSha;
+  return typeof sha === 'string' && /^[0-9a-f]{7,40}$/i.test(sha) ? sha.slice(0, 7) : null;
 }
 
 /**
@@ -313,6 +333,7 @@ export function AppsSwitcherSheet(): ReactNode {
   // and what About prints — and adds no fetch: the Improve panel was reading
   // exactly these for the rows that moved here.
   const {
+    target, version, deploying,
     slug, name, showTerminal, restricted, canReport, readOnly: writeBarred,
   } = useStoreState(improveStore);
   // A PRIVATE MEMBER (../nav/nav-store.js): an invite link let them into this
@@ -336,6 +357,15 @@ export function AppsSwitcherSheet(): ReactNode {
     return () => { live = false; };
   }, [open, privacyHref]);
   const readOnly = writeBarred || privateMember;
+  // THE VERSION AT THE FOOT (#5927): what is running, for whoever is about to
+  // report a bug, without a trip into About. The same short commit and the
+  // same words About's last line prints (./about-model.ts versionRowText):
+  // the app's own on an app, Homeroom's on Homeroom, whose figure is the
+  // platform's about read (shared and cached with About's). Only while the
+  // menu is open, which it never is at hydration, so the prerender and the
+  // hydrating render agree.
+  const onPlatform = target === 'platform';
+  const platformAbout = usePlatformAbout(open && onPlatform);
   // Votes this viewer owes on the app in context — the badge on the
   // "Go to community hub" row. See the fetch below.
   const [owed, setOwed] = useState<number | null>(null);
@@ -412,6 +442,10 @@ export function AppsSwitcherSheet(): ReactNode {
   // is the platform's own self-hosted row and the name may not have landed.
   const appName = name || slug || null;
   const appLabel = appName || t('agent:appContext.thisApp');
+  const shownVersion = onPlatform ? (loadedPlatformShort() || platformAbout?.version || version) : version;
+  const versionText = open
+    ? versionRowText(shownVersion || null, !!deploying && !onPlatform, onPlatform)
+    : null;
   // The back disc's name says where it goes (AppContext.goBack): About, for
   // an invite pane opened from there, or the menu.
   const backLabel = view === 'invite' && back === 'about'
@@ -587,8 +621,21 @@ export function AppsSwitcherSheet(): ReactNode {
                 inside the list below (`<div className={SECTION}>`) is this
                 one now, and the list opens on its first row.
             */
-            <span className={'flex-1 min-w-0 block truncate ' + SECTION_TYPE}>
-              {appLabel}
+            /*
+                A TITLE THAT SAYS WHAT THE PANEL IS (#5927). The app's name
+                alone, in a section label's small caps, named the subject and
+                not the panel, so it read as a caption over nothing. The panel
+                is the place to give feedback on the app and to find out about
+                it, so that is its title, in the row type (15px, 650); the
+                app's name stays under it as the label it was.
+            */
+            <span className="flex-1 min-w-0">
+              <span id="apps-switcher-title" className="block truncate text-[15px] leading-5 font-[650] text-zinc-900 dark:text-zinc-100">
+                {t('agent:appContext.title')}
+              </span>
+              <span className={'flex-1 min-w-0 block truncate ' + SECTION_TYPE}>
+                {appLabel}
+              </span>
             </span>
           )}
           {/* A 36px target with a 24px ✕ (#5927): the 20px glyph was the
@@ -931,7 +978,7 @@ export function AppsSwitcherSheet(): ReactNode {
                 void AppContext.close().then(() => setHomeroomSteps(os));
               }}
             >
-              <RowBody icon={<PhonePlusIcon />} label={t('agent:appContext.row.addHomeroom')} />
+              <RowBody icon={<PhonePlusIcon />} label={t('agent:appContext.row.addHomeroom')} external={homeroomOffer.via === 'browser'} />
             </button>
           ) : null}
           {/* AGENT CHATS left the menu (#4729): see the note above
@@ -963,6 +1010,7 @@ export function AppsSwitcherSheet(): ReactNode {
                   className={'inline-flex items-center min-h-[44px] px-3 rounded-lg hover:text-zinc-900 dark:hover:text-zinc-100 hover:underline ' + FOCUS_RING}
                 >
                   {t('agent:appContext.privacy')}
+                  <ExternalMark className="ml-1 w-3.5 h-3.5" />
                 </a>
               ) : null}
               {slug && canReport ? (
@@ -980,6 +1028,11 @@ export function AppsSwitcherSheet(): ReactNode {
                 </button>
               ) : null}
             </div>
+          ) : null}
+          {versionText ? (
+            <p id="app-menu-version" className="px-5 pb-2 text-center text-[13px] text-zinc-500 dark:text-zinc-400 select-text">
+              {versionText}
+            </p>
           ) : null}
           </>
           )}

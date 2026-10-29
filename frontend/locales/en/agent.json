@@ -1987,6 +1987,14 @@
     "text": "this app",
     "description": "Stands where the app's name is shown on its own at the top of the app menu when the name has not loaded. Shown alone, as a label; lower case in English. Sentences that name the app have unnamed wordings of their own."
   },
+  "appContext.title": {
+    "text": "Feedback & info",
+    "description": "Title at the top of the app menu (the sheet opened from the Homeroom mark in the header), above the app's name: what the menu is for, which is giving feedback on the app and finding out about it."
+  },
+  "appContext.opensOutside": {
+    "text": "(opens outside Homeroom)",
+    "description": "Read by screen readers only, after a link in the app menu that leaves Homeroom (the privacy notice, an app's code, or the browser), where a small box-with-arrow glyph is shown."
+  },
   "appContext.sheetLabel": {
     "text": "Menu",
     "description": "Accessible name of the app menu: the sheet opened from the app's name in the header. A noun."

@@ -82,6 +82,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import {
+  ArrowTopRightOnSquareIcon,
   CheckIcon,
   CodeIcon,
   Glyph,
@@ -115,6 +116,22 @@ import {
   useContributors,
   usePlatformAbout,
 } from './about-data';
+
+/**
+ * The mark on a link that leaves Homeroom (#5927), where a row inside the
+ * platform has its chevron: the glyph, and the words for a screen reader.
+ * Here for the Code row below, and exported for the menu pane's links out
+ * (./app-context-sheet.tsx: Privacy, and Add Homeroom when it opens the browser).
+ */
+export function ExternalMark({ className = 'w-4 h-4 text-zinc-400 dark:text-zinc-500' }: { className?: string }): ReactNode {
+  const t = useMessages('agent');
+  return (
+    <>
+      <ArrowTopRightOnSquareIcon data-external-mark="" className={'shrink-0 ' + className} aria-hidden="true" />
+      <span className="sr-only">{t('agent:appContext.opensOutside')}</span>
+    </>
+  );
+}
 
 const ROW = 'flex items-center gap-3 px-5 min-h-[44px] text-sm w-full text-left '
   + 'text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800 '
@@ -633,6 +650,7 @@ export function AboutPane({ label }: { label: string; unnamed?: boolean }): Reac
               {repoKind === 'github' ? (
                 <span className="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">{t('agent:appContext.about.codePublic')}</span>
               ) : null}
+              <ExternalMark />
             </a>
           ) : null}
           {/* THE VERSION, last and plain (#4218): a fact for whoever needs

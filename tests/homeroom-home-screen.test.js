@@ -94,7 +94,8 @@ test('the row: after About, a plain row, steps in the browser and Homeroom from 
   assert.match(row, /if \(homeroomOffer\.via === 'browser'\) \{\s+openHomeroomInBrowser\(\);\s+void AppContext\.dismissForNav\(\);/,
     'the window opens in the tap itself, then the menu closes');
   assert.match(row, /void AppContext\.close\(\)\.then\(\(\) => setHomeroomSteps\(os\)\);/, 'the steps once the menu is down');
-  assert.match(row, /<RowBody icon=\{<PhonePlusIcon \/>\} label=\{t\('agent:appContext\.row\.addHomeroom'\)\} \/>/);
+  assert.match(row, /<RowBody icon=\{<PhonePlusIcon \/>\} label=\{t\('agent:appContext\.row\.addHomeroom'\)\} external=\{homeroomOffer\.via === 'browser'\} \/>/);
+  // Opening the browser leaves Homeroom, so that row ends in the external-link mark, not a chevron (#5927).
   assert.equal(en['appContext.row.addHomeroom'].text, 'Add Homeroom to your home screen');
   assert.equal(en['install.steps.title'].text, 'Add Homeroom to your home screen', 'the sheet it opens says the same');
   // Read after mount only, and the sheet is the banner's own.

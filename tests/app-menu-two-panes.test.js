@@ -67,8 +67,8 @@ test('each fact appears only when there is one', () => {
   assert.match(full, /target="_blank"/, 'the repository opens away from the shell');
   // The row says what the code is: every repository is public on GitHub
   // (services/github.js createRepo), whoever the project lets open it.
-  assert.match(full, /id="improve-row-github"[^>]*>[\s\S]*?>Code<\/span><span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Public on GitHub<\/span><\/a>/,
-    'Code, with Public on GitHub muted at the end of the row');
+  assert.match(full, /id="improve-row-github"[^>]*>[\s\S]*?>Code<\/span><span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">Public on GitHub<\/span><svg [^>]*data-external-mark=""[\s\S]*?<\/svg><span class="sr-only">\(opens outside Homeroom\)<\/span><\/a>/,
+    'Code, with Public on GitHub muted, then the mark of a link that leaves Homeroom (#5927)');
   assert.doesNotMatch(full, /View on GitHub/);
   assert.doesNotMatch(full, /improve-row-share/, 'no Share, even with an address: Invite brings people in');
   // The version is a plain row at the foot of More (#4218), not the pill

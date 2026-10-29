@@ -372,6 +372,8 @@ const RETIRED_IDS = {
 
 // Ids a conversion chunk deliberately added, each with the reason.
 const ADDED_IDS = {
+  // ── #5927: the Homeroom menu says what it is ────────────────────────
+  'apps-switcher-title': 'The app menu\'s title, "Feedback & info", over the app\'s name in small caps, which was the whole label before (features/app-context/app-context-sheet.tsx). Rendered on the menu pane only; the second panes keep their back disc there.',
   // ── iPhone Duo: the side strip (24 Oct 2026) ───────────────────────
   'platform-side-strip-top': 'iPhone Duo: the top of the column of system chrome down the screen\'s edge, holding the header\'s back controls while <html data-side-strip> is set (features/nav/strip-back.tsx, app.css THE SIDE STRIP). Ships drawn as nothing; display:none off the strip.',
   'platform-side-strip-back': 'iPhone Duo: #back-btn\'s copy in the side strip, rendered from the same useBackSlot hook and handing its press to #back-btn. Ships hidden with no href, as #back-btn does.',
