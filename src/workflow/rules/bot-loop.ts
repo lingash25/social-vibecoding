@@ -269,6 +269,7 @@ export const READ_CANDIDATES_SQL = `
        WHERE cs.user_id = $1 AND cs.app_id = q.app_id AND cs.status IN ('active', 'paused')
          AND cs.branch_name = 'main'
          AND NOT EXISTS (SELECT 1 FROM homeroom_bot_runs br WHERE br.build_session_id = cs.id)
+         AND NOT EXISTS (SELECT 1 FROM homeroom_bot_look_sessions ls WHERE ls.session_id = cs.id)
        ORDER BY cs.id DESC LIMIT 1
     ) bs ON fu.id IS NULL
    WHERE q.started_at IS NULL
@@ -361,12 +362,37 @@ export function personKeyOf(row: { person_id?: unknown; app_id?: unknown } | nul
 
 export interface Slot { kind: string; appId: number; person: string }
 
+// Homeroom bot parity (P4): a running batch's raise, for each request its
+// Build started (`${appId}:${issueNumber}` → the batch's per-person number,
+// read by bot-lane/facts.ts BATCH_RAISES_SQL). The project's owner working
+// through its requests may have up to MAX_PER_PERSON of them going at once,
+// and as many building on the project (services/homeroom-bot-batches.js
+// raiseFor). Only those requests, only while the batch runs: every other
+// candidate keeps the settings' numbers.
+export type Raised = Readonly<Record<string, number>>;
+export const raisedKey = (appId: unknown, issueNumber: unknown) => `${Number(appId)}:${Number(issueNumber)}`;
+// The raise rows as the picks read them, never past MAX_PER_PERSON. Pure.
+export function raisedOf(rows: { app_id: unknown; issue_number: unknown; per_person: unknown }[]): Raised {
+  const out: Record<string, number> = {};
+  for (const r of rows || []) {
+    const n = Math.min(MAX_PER_PERSON, Math.floor(Number(r.per_person) || 0));
+    const key = raisedKey(r.app_id, r.issue_number);
+    if (n > 0) out[key] = Math.max(out[key] || 0, n);
+  }
+  return out;
+}
+// A candidate's limit: the setting's, or its batch's raise when higher.
+const limitFor = (raised: Raised | undefined, row: { app_id: unknown; issue_number?: unknown }, base: number) =>
+  Math.max(base, (raised && row.issue_number != null && raised[raisedKey(row.app_id, row.issue_number)]) || 0);
+
 // Which waiting reads and follow-ups to start now. `candidates` in order;
 // `inUse` what runs. A read runs on its app's own session, so one per app;
 // a follow-up runs on its proposal's session, so neither holds the app.
-// At most `perPerson` per person counting what runs, at most `slots` new.
-export function pickLive<R extends { app_id: unknown; follow_up_session_id?: unknown; person_id?: unknown }>(
-  candidates: R[], { inUse = [], slots = 0, perPerson = 1 }: { inUse?: Slot[]; slots?: number; perPerson?: number } = {},
+// At most `perPerson` per person counting what runs (a running batch's
+// request: its `raised` number), at most `slots` new.
+export function pickLive<R extends { app_id: unknown; issue_number?: unknown; follow_up_session_id?: unknown; person_id?: unknown }>(
+  candidates: R[], { inUse = [], slots = 0, perPerson = 1, raised = {} }:
+    { inUse?: Slot[]; slots?: number; perPerson?: number; raised?: Raised } = {},
 ): (R & { person: string; followUp: boolean })[] {
   const busy = new Set(inUse.filter((s) => s.kind === 'read').map((s) => Number(s.appId)));
   const count = new Map<string, number>();
@@ -378,7 +404,7 @@ export function pickLive<R extends { app_id: unknown; follow_up_session_id?: unk
     const followUp = row.follow_up_session_id != null;
     if (!followUp && busy.has(appId)) continue;
     const person = personKeyOf(row);
-    if ((count.get(person) || 0) >= perPerson) continue;
+    if ((count.get(person) || 0) >= limitFor(raised, row, perPerson)) continue;
     if (!followUp) busy.add(appId);
     count.set(person, (count.get(person) || 0) + 1);
     picks.push({ ...row, person, followUp });
@@ -388,10 +414,11 @@ export function pickLive<R extends { app_id: unknown; follow_up_session_id?: unk
 
 // Which waiting builds to start now: at most `perProject` under way on one
 // project counting those building, at most `perPerson` live pieces of work
-// for any one person counting what runs, at most `slots` in all.
-export function pickLiveBuilds<R extends { app_id: unknown; person_id?: unknown }>(
-  candidates: R[], { inUse = [], slots = 0, perPerson = 1, perProject = BUILDS_PER_PROJECT }:
-    { inUse?: Slot[]; slots?: number; perPerson?: number; perProject?: number } = {},
+// for any one person counting what runs, at most `slots` in all. A running
+// batch's request (`raised`) may go to its batch's number for both.
+export function pickLiveBuilds<R extends { app_id: unknown; issue_number?: unknown; person_id?: unknown }>(
+  candidates: R[], { inUse = [], slots = 0, perPerson = 1, perProject = BUILDS_PER_PROJECT, raised = {} }:
+    { inUse?: Slot[]; slots?: number; perPerson?: number; perProject?: number; raised?: Raised } = {},
 ): (R & { person: string })[] {
   const building = new Map<number, number>();
   for (const s of inUse) if (s.kind === 'build') building.set(Number(s.appId), (building.get(Number(s.appId)) || 0) + 1);
@@ -401,9 +428,9 @@ export function pickLiveBuilds<R extends { app_id: unknown; person_id?: unknown 
   for (const row of candidates || []) {
     if (picks.length >= slots) break;
     const appId = Number(row.app_id);
-    if ((building.get(appId) || 0) >= perProject) continue;
+    if ((building.get(appId) || 0) >= limitFor(raised, row, perProject)) continue;
     const person = personKeyOf(row);
-    if ((count.get(person) || 0) >= perPerson) continue;
+    if ((count.get(person) || 0) >= limitFor(raised, row, perPerson)) continue;
     building.set(appId, (building.get(appId) || 0) + 1);
     count.set(person, (count.get(person) || 0) + 1);
     picks.push({ ...row, person });

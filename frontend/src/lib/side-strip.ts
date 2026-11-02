@@ -240,6 +240,8 @@ function sideInsetProbe(doc: Document): HTMLElement {
   return probe;
 }
 
+const NO_INSETS: SideInsets = { left: 0, right: 0, top: 0 };
+
 /** The insets as the page resolves them. */
 function readSideInsets(doc: Document, win: Window): SideInsets {
   try {
@@ -283,7 +285,11 @@ export function watchSideStrip(doc: Document = document, win: Window = window): 
   let observer: ResizeObserver | null = null;
   let observed: HTMLElement | null = null;
   const update = () => {
-    const insets = readSideInsets(doc, win);
+    // THE SIDE PANEL'S OWN DOCUMENT OWNS NO EDGE (1 Nov 2026). It is a column
+    // inside the page (features/side-panel/), which keeps it beside the Duo's
+    // column already, but WebKit hands the frame the screen's insets, and it
+    // padded itself an 84px column it does not touch.
+    const insets = root.classList?.contains('in-side-panel') ? NO_INSETS : readSideInsets(doc, win);
     const side = stripSide(insets);
     applyStrip(root, side, side ? insets[side] : 0);
     // A browser tab never owns the top of the screen (#2509), whatever the

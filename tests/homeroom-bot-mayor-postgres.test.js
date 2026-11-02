@@ -1101,7 +1101,7 @@ test('the Homeroom bot DM, read by a model, against the full PostgreSQL schema',
     };
     const sent = await turn('how far along are you?', chat);
     assert.equal((await read(sent)).content, 'Ear trainer is still being set up.');
-    assert.deepEqual(asks.map((a) => a.max), [900, mayor.RETRY_OUTPUT_TOKENS]);
+    assert.deepEqual(asks.map((a) => a.max), [mayor.MAX_OUTPUT_TOKENS, mayor.RETRY_OUTPUT_TOKENS]);
     assert.match(asks[0].session, new RegExp(`^hrbot-dm-${ada.id}-\\d+$`), 'a provider route of this turn, not of every turn of hers');
     assert.equal(asks[1].session, `${asks[0].session}-r2`);
     const { rows: [row] } = await pool.query('SELECT error FROM homeroom_bot_dm_turns ORDER BY id DESC LIMIT 1');
@@ -2307,5 +2307,45 @@ test('the Homeroom bot DM, read by a model, against the full PostgreSQL schema',
     assert.equal((await mayor.drawScreen(pool, ctx, { what: '', title: 'X' })).ok, false, 'it says what to draw');
     assert.equal((await mayor.drawScreen(pool, ctx, { what: 'A seed calendar', title: 'Calendar' })).ok, true);
     assert.deepEqual(ctx.drawScreen, { app: null, title: 'Calendar', brief: 'A seed calendar' }, 'or a new project\'s');
+  });
+
+  // Homeroom bot parity, P1 and P2: what the reply looked at, and the card
+  // it put under it, as the message stores them; a tap on the card decided
+  // once, on the stored message.
+  await t.test('parity: a reply stores what it looked at and its card, and Pick is decided once on the stored card', async () => {
+    await pool.query('DELETE FROM homeroom_bot_dm_turns WHERE user_id = $1', [ada.id]);
+    const sent = await turn('where do my seed swap requests stand? show me a table', scripted([
+      [['get_request', { slug: 'seed-swap', number: 3 }]],
+      [['show_table', {
+        title: 'Seed swap requests', columns: ['Request', 'Where it is'],
+        rows: [{ cells: ['Sort by date', 'Being built'], tag: 'ready', project: 'seed-swap', number: 3 }, { cells: ['Sam\'s shop', 'x'], project: 'sam-shop', number: 1 }],
+        actions: [{ label: 'Build the ready ones', say: 'Build the ready ones' }],
+      }]],
+      [['reply', { text: 'Here is where they stand.' }]],
+    ]));
+    const meta = (await read(sent)).metadata.homeroomBot;
+    assert.deepEqual(meta.looked.items, [{ what: 'Read Seed swap request #3' }], 'named by its name, from the full schema');
+    assert.ok(Number.isInteger(meta.looked.ms));
+    assert.equal(meta.card.type, 'table');
+    assert.deepEqual(meta.card.rows[0], { cells: ['Sort by date', 'Being built'], tag: 'ready', appSlug: 'seed-swap', appName: 'Seed swap', number: 3 });
+    assert.equal(meta.card.rows[1].appSlug, 'sam-shop', 'a public project she can see links too');
+
+    const offered = await turn('what are some ways to sort it?', scripted([
+      [['offer_options', { options: [{ title: 'Newest first' }, { title: 'By name', detail: 'A to Z' }] }]],
+      [['reply', { text: 'Two ways.' }]],
+    ]));
+    assert.equal((await read(offered)).metadata.homeroomBot.looked, undefined, 'it looked nothing up: no line');
+    const cards = require('../src/services/homeroom-bot-cards');
+    assert.deepEqual(await cards.decide(pool, CONFIG, { user: ada, messageId: offered.messageId, action: 'pick', value: 'B' }), { ok: true, picked: 'B' });
+    const stored = (await read(offered)).metadata.homeroomBot.card;
+    assert.equal(stored.picked, 'B');
+    assert.deepEqual(stored.options, [{ key: 'A', title: 'Newest first' }, { key: 'B', title: 'By name', detail: 'A to Z' }]);
+    assert.deepEqual(await cards.decide(pool, CONFIG, { user: ada, messageId: offered.messageId, action: 'pick', value: 'A' }),
+      { ok: true, picked: 'B', already: true }, 'decided once, whatever is tapped after');
+    assert.equal((await cards.decide(pool, CONFIG, { user: sam, messageId: offered.messageId, action: 'pick', value: 'A' })).status, 404,
+      'only a member of the conversation');
+    // The model reads the pick back.
+    const history = await mayor.historyMessages(pool, { conversationId: opened.conversationId, botId: bot.id, upToId: offered.messageId });
+    assert.match(history.at(-1).content, /^Two ways\.\n\[Homeroom: under this reply you offered options: A\. Newest first; B\. By name \(A to Z\)\. They picked B\.\]$/);
   });
 });

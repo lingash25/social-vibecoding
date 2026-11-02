@@ -338,9 +338,11 @@ test('the popover is a menu\'s width — narrower than the rail, and it fits', (
     'and no narrower than the vote popover it is modelled on');
 
   // The guard keeps it inside the narrowest viewport the desktop rule
-  // applies to, with the placement's 8px margin on both sides.
-  const guard = closed.match(/max-width:\s*calc\(100vw\s*-\s*([\d.]+)rem\)/);
-  assert.ok(guard, 'and it caps itself against the viewport');
+  // applies to, with the placement's 8px margin on both sides. It is taken
+  // from the float box (1 Nov 2026), the window less iPhone Duo's column,
+  // which is the window wherever there is no column.
+  const guard = closed.match(/max-width:\s*calc\(var\(--platform-float-w\)\s*-\s*([\d.]+)rem\)/);
+  assert.ok(guard, 'and it caps itself against the float box, the viewport less the Duo\'s column');
   assert.equal(Number(guard[1]) * 16, 16, '8px a side, the margin the placement clamps to');
   const SM = 640;
   const px = Number(mine[1]) * 16;

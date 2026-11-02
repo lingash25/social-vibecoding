@@ -130,6 +130,7 @@ const DENIED_TABLES = new Set([
   'global_chat_tool_runs', // private action inputs and authoritative results
   'global_chat_action_tokens', // one-use action capabilities and sealed payloads
   'agent_session_actions', // the agent-session Mayor's sealed confirmation cards (#2779)
+  'homeroom_bot_admin_actions', // Homeroom bot's sealed admin confirm cards (bot parity P7)
   'private_requests',         // admin-only confidential and security requests, kept off GitHub (#5048)
   'private_request_comments', // their discussion (#5048)
   'platform_db_roles',   // this role's own password, encrypted (AES blob, still deny)
@@ -186,6 +187,12 @@ const DENIED_COLUMNS = {
   ],
   agent_session_actions: [
     // The sealed exact input of a pending write and its fingerprint (#2779).
+    'input_hash',
+    'sealed_input',
+  ],
+  homeroom_bot_admin_actions: [
+    // The same for an admin's confirm card in their chat with Homeroom bot
+    // (homeroom-bot-thread-tools/admin.js).
     'input_hash',
     'sealed_input',
   ],

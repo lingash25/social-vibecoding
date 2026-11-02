@@ -174,6 +174,10 @@
      reader can see it. */
   --ws-gap: 8px;
   --platform-safe-top: var(--un-safe-inset-top, env(safe-area-inset-top, 0px));
+  /* THE SIDES have no token here (1 November 2026). Their insets are read
+     by frontend/src/lib/side-strip.ts, which publishes the Duo's column,
+     and what the page keeps clear of is THE USABLE BOX, declared on body
+     beside the rail's tokens (`--platform-usable-*`, `--platform-float-*`). */
 
   /* Content-row height of the mobile install strip (#1372). Declared here,
      unconditionally, rather than on either element that reads it: `body`
@@ -444,6 +448,77 @@ html.un-kb .platform-kb-column .un-kb-avoid {
   padding-bottom: 0;
 }
 
+/* ── A chat's foot ────────────────────────────────────────
+   Under every transcript with a reply box, four siblings in one flex column:
+   the transcript's scroller (`.chat-transcript`), Jump to latest hung from
+   its foot, the status line (`.chat-status`), and the bar the composer's
+   card sits in (`.chat-composer-bar`, with `.platform-safe-bar`).
+   @/components/ui/chat draws them ("A chat's foot" there) for Messages (a
+   conversation, its reply threads, a blank thread with Homeroom bot) and
+   for the group chat (a project's channel, a topic's thread, a request's
+   page and a change's) alike. They were two sets of rules, `.messages-*`
+   here and Tailwind on the `#gc-*` elements, and each spacing fix landed in
+   one set and missed the other (1 November 2026). These are the one set.
+
+   THE TRANSCRIPT ENDS 12px INSIDE ITS SCROLLER, and the scroller's bottom
+   edge is the composer card's top edge (iPhone Duo, 1 November 2026).
+   Scrolled up a chat, the messages were cut off 24px above the reply box
+   with bare page between them: the band was OUTSIDE the scroller, made of
+   the empty typing line held open and the bar's padding over its card. Now
+   the air under the newest message is padding inside the scroller, there
+   at the newest line and scrolled away with the rest, at rest and with the
+   keyboard up alike.
+
+   Only where a bar follows (`~ .platform-safe-bar`: Send, the request
+   awaiting acceptance, "you can't send here", a read-only notice). Messages'
+   scrollers carry `.platform-safe-scroll` as well, which keeps the tab
+   bar's band at their foot, and that class won once (iPhone app, 19 October
+   2026): on a phone the history held the bar's full height (56px in a
+   browser, about 90 in the app) empty above a composer that clears the bar
+   again itself. Where no composer follows (an invitation before it is
+   accepted), the history reaches the foot of the screen and keeps the band.
+
+   The second selector is the first said again for those scrollers: the two
+   keyboard-up `.platform-safe-scroll` rules are (0,2,1) and `!important`,
+   so the end needs (0,3,0) to stay 12px with the keys up. `!important` for
+   everything else a scroller brings: its own utilities (`pt-3`), the topic
+   page's `#gc-thread-scroll` padding, and the kit's `.un-kb-avoid`, whose
+   inset the column reserves instead (`.platform-kb-column`, above). */
+.chat-transcript:has(~ .platform-safe-bar),
+.chat-transcript.platform-safe-scroll:has(~ .platform-safe-bar) {
+  padding-bottom: 12px !important;
+}
+/* WHO IS TYPING TAKES NO ROOM UNTIL SOMEBODY TYPES (1 November 2026). The
+   line held 18px open between the transcript and the reply box whether or
+   not it said anything (20px in the group chat, whose lines were Tailwind
+   `h-5`), so the messages stopped short of the box above an empty band.
+   Empty, it is 0 tall and still in the page, so its live region announces
+   the first name. When it fills, the transcript gets a line shorter and, if
+   the reader is at the newest message, stays there: Messages'
+   stick-to-bottom.ts and group-chat.js's ResizeObservers both watch the
+   scroller's own size. 13 over 18, muted, the size of a row's second line,
+   and inset 16px, where a message row starts. */
+.chat-status {
+  flex: 0 0 auto;
+  padding: 2px 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+.chat-status:empty {
+  padding-block: 0;
+}
+/* THE BAR HAS NO PADDING OVER ITS CARD (1 November 2026): the transcript
+   runs to the card's top edge, where Messages' bar stopped it 6px short and
+   the group chat's 4px (`pt-1`). 12px each side and 8px under the card, to
+   which `.platform-safe-bar` (above) adds the home-indicator strip or the
+   tab bar, whichever is taller, so on a notched phone the gap under the
+   card grows and the card itself does not. */
+.chat-composer-bar {
+  flex: 0 0 auto;
+  padding: 0 12px 8px;
+}
+
 /* ── Platform Messages screen ─────────────────────────────
    Fully React-owned (frontend/src/features/messages). Every rule is scoped
    to messages-* so the app group chat keeps its own contract.
@@ -606,21 +681,9 @@ html.un-kb .platform-kb-column .un-kb-avoid {
 .messages-list-scroll {
   padding-bottom: var(--platform-tabs-h, 0px);
 }
-/* THE HISTORY ABOVE A COMPOSER RESERVES NOTHING AT ITS FOOT (iPhone app,
-   19 October 2026). The note above is the rule, but the scroller carries
-   `.platform-safe-scroll` too, and that class won: on a phone the history
-   kept a band of the tab bar's full height (56px in a browser, about 90 in
-   the app, with the home-indicator strip) empty above the composer, which
-   clears the bar again itself. So the band goes wherever a composer
-   (`.platform-safe-bar`: Send, the request awaiting acceptance, "you can't
-   send here") follows the history in its pane, the reply thread's
-   included. Where none does (an invitation before it is accepted), the
-   history reaches the foot of the screen and keeps the band. 0 rather
-   than the 6px below: `.platform-safe-scroll` already made it 0 wherever
-   the bar is down, so a desktop is exactly as it was. */
-.messages-thread-scroll.platform-safe-scroll:has(~ .platform-safe-bar) {
-  padding-bottom: 0 !important;
-}
+/* THE HISTORY ABOVE A COMPOSER reserves no band at its foot, only the
+   transcript's own 12px end: `.chat-transcript`, under "A chat's foot"
+   above, which every chat's scroller wears (1 November 2026). */
 /* THE BOT'S CHAT, OPENING (features/messages/open-hold.ts). Its rows are
    laid out, so the transcript can tell whether they fill the screen, and
    not seen until they are what it will stay as; the spinner stays at the
@@ -823,6 +886,19 @@ html.un-kb .platform-kb-column .un-kb-avoid {
   flex: 0 0 auto;
   gap: 12px;
   padding: 14px 16px 8px;
+}
+/* TYPING ON A SHORT SCREEN, THE CONVERSATION'S HEADER FOLDS AWAY (layout
+   audit, 1 November 2026). An iPhone held sideways is 393px tall and its
+   keys leave about 184: the platform's header, this one (66px) and the
+   reply box came to more than that, so the box ended behind the keys and
+   the transcript above it had no height at all. Main Chat's head on the
+   bot tab folds the same way. While a field has the keys
+   on a screen that short, the transcript and the box take the room; the
+   header comes back the moment the keyboard drops. */
+@media (max-height: 500px) {
+  html:is(.un-kb, .platform-kb-open) :is(.messages-thread-header, #ai-screen .ai-main-head) {
+    display: none;
+  }
 }
 .messages-thread-name,
 .messages-thread-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1292,7 +1368,8 @@ html.dark .messages-markdown .gc-ref-issue.gc-ref-request { color: hsl(var(--req
   flex-direction: column;
   gap: 8px;
   width: 344px;
-  max-width: calc(100vw - 24px);
+  /* Off the Duo's column as well as the window's edge (THE USABLE BOX). */
+  max-width: calc(var(--platform-float-w) - 24px);
   padding: 10px;
   box-sizing: border-box;
 }
@@ -1720,25 +1797,27 @@ html.dark .messages-markdown .gc-ref-issue.gc-ref-request { color: hsl(var(--req
    writes in (16px inset + 36px avatar + 12px gap). */
 .messages-card-run { padding-block: 0 6px; padding-inline: 64px 16px; }
 
-.messages-typing {
-  flex: 0 0 auto;
-  min-height: 18px;
-  padding: 2px 20px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
+/* The typing line (`.messages-typing`) is the chat foot's status line,
+   `.chat-status`, under "A chat's foot" near the top of this file. */
 
 /* ── The composer ────────────────────────────────────────────────────────
    One white card at the foot of the sheet: bare glyphs, a borderless field
    at reading size, and the round accent send disc the dev chat draws. The
-   BAR around the card is what carries the home-indicator inset
-   (`platform-safe-bar`), so on a notched phone the gap under the card
-   grows and the card itself does not. */
-.messages-composer,
+   BAR around the card is the chat foot's (`.chat-composer-bar`, near the
+   top of this file): no padding over the card, 12px each side and 8px
+   under it, and the home-indicator inset (`platform-safe-bar`) under that,
+   so on a notched phone the gap under the card grows and the card itself
+   does not. Positioned, for the @ and # menus and the drop overlay that
+   hang from it.
+
+   "You can't send here" is not a bar round a card but a line in its place:
+   it keeps its own padding (below), and the foot's flex. */
+.messages-composer {
+  position: relative;
+}
 .messages-composer-disabled {
   position: relative;
   flex: 0 0 auto;
-  padding: 6px 12px 8px;
 }
 .messages-composer-card {
   border-radius: 22px;
@@ -1763,7 +1842,7 @@ html.dark .messages-markdown .gc-ref-issue.gc-ref-request { color: hsl(var(--req
    Before the opening message, one muted line over the card says what it will
    be; after it, the card itself gives way to the invitation banner's tinted
    panel, which names who the thread is waiting for. */
-.messages-composer-hint { margin: 0 4px 6px; color: var(--text-muted); font-size: 13px; line-height: 1.35; }
+.messages-composer-hint { margin: 6px 4px 6px; color: var(--text-muted); font-size: 13px; line-height: 1.35; }
 .messages-awaiting {
   padding: 12px 16px;
   border-radius: 16px;
@@ -2920,14 +2999,24 @@ html.dark[data-contrast="more"] .dark\:border-zinc-800 { border-color: #48484a; 
    away with Home on a phone, and the sign-in screens are `fixed inset-0`
    over anything in flow. Above those screens (z-40) and below the drawer and
    panels (z-50), like the install strip. `--language-notice-inset` is the
-   island's own measurement when a composer sits above the tab bar. */
+   island's own measurement when a composer sits above the tab bar.
+   CENTRED ON THE PAGE, NOT THE WINDOW (iPhone Duo, 1 November 2026). It was
+   `left: 50%` and at most `100vw - 24px`: on the folded Duo that ran its
+   right end under the column of system chrome, and from 768px it straddled
+   the sidebar on a narrow window. It speaks for the page, so it sits in the
+   page's box (THE USABLE BOX): beside the rail and the column, centred
+   between them. With the rail docked at 1280px that moves its centre from
+   640px to 746px, the centre of the page's own column. */
+/* direction: physical — the centre of the page's box, in the box's own
+   window figures; html[dir="rtl"] sets those figures (THE USABLE BOX). */
 #language-notice {
   position: fixed;
-  left: 50%;
+  left: calc(var(--platform-usable-left) + var(--platform-usable-w) / 2);
+  /* direction: logical */
   bottom: calc(16px + max(var(--language-notice-inset, var(--platform-tabs-h, 0px)), var(--platform-safe-bottom, 0px)));
   z-index: 45;
   width: max-content;
-  max-width: min(calc(100vw - 24px), 480px);
+  max-width: min(calc(var(--platform-usable-w) - 24px), 480px);
   transform: translateX(-50%);
 }
 
@@ -11288,12 +11377,19 @@ html.un-kb .un-modal {
 /* Wide viewports: side panel beside the chat. The width is set
    inline by JS (persisted from the previous drag) but clamped here
    so any stale localStorage value can't strand the chat at < 320px
-   wide. */
+   wide.
+   320px LESS THAN THE ROW, NOT THE WINDOW (1 November 2026). The chat
+   and this pane share `.dc-session-body`, and the row is narrower than
+   the window by the sidebar, its gutters and the Duo's column: at
+   1280px with the rail docked the row is at most 1020px, so
+   `100vw - 320px` (960px) let a stale width leave the chat under 60px.
+   A percentage of the row is the drag's own ceiling
+   (DevChat._initSpecResizer: the row's width less 320). */
 .dc-spec-viewer.dc-spec-viewer-open {
   display: flex;
   width: 480px;
   min-width: 280px;
-  max-width: calc(100vw - 320px);
+  max-width: calc(100% - 320px);
   flex-shrink: 0;
 }
 
@@ -11352,11 +11448,12 @@ html.un-kb .un-modal {
 .dc-staging-panel { display: none; }
 
 @media (min-width: 1024px) {
+  /* 320px less than the row, as the spec viewer above. */
   .dc-staging-panel.dc-staging-panel-open {
     display: block;
     width: 480px;
     min-width: 320px;
-    max-width: calc(100vw - 320px);
+    max-width: calc(100% - 320px);
     flex-shrink: 0;
   }
 }
@@ -11849,12 +11946,15 @@ body:has(#dc-session-header) #staging-overlay.staging-overlay-under-chrome #stag
 
 /* Wide viewports: side panel beside the chat. Width can be inline-
    styled by the drag handler (persisted to localStorage); CSS clamps
-   so a stale value can't strand the chat too narrow. */
+   so a stale value can't strand the chat too narrow: 320px less than
+   the `.gc-tab-body` row it shares with the chat (the drag's own
+   ceiling), not less than the window (1 November 2026; see
+   `.dc-spec-viewer-open`). */
 .gc-spec-side-panel.gc-spec-side-panel-open {
   display: flex;
   width: min(560px, 50vw);
   min-width: 280px;
-  max-width: calc(100vw - 320px);
+  max-width: calc(100% - 320px);
   flex-shrink: 0;
   border-inline-start: 1px solid var(--border, rgba(255,255,255,0.12));
 }
@@ -12764,7 +12864,11 @@ a.drawer-ver--fork:hover {
 @media (min-width: 640px) {
   #apps-switcher-sheet {
     top: var(--menu-anchor-top, calc(var(--platform-header-h) + var(--platform-safe-top)));
-    inset-inline-start: var(--menu-anchor-left, calc(100vw - 25rem));
+    /* The fallback's right edge is the header's right content edge, which
+       is beside the Duo's column (1 November 2026): the float box's right
+       edge, less the header's 1rem. It was `100vw - 25rem`, under the
+       column on the unfolded Duo held sideways. */
+    inset-inline-start: var(--menu-anchor-left, calc(var(--platform-float-left) + var(--platform-float-w) - 25rem));
     inset-inline-end: auto;
     bottom: auto;
     /* 24rem, NARROWER than the 26rem notifications rail, on purpose. It was
@@ -12775,9 +12879,9 @@ a.drawer-ver--fork:hover {
        menu's width, a little wider than the vote popover's 312px because the
        rows carry longer labels ("Go to app discussion").
        max-width keeps it inside a narrow window with the 8px the placement
-       clamps to on either side. */
+       clamps to on either side, and off the Duo's column (THE USABLE BOX). */
     width: 24rem;
-    max-width: calc(100vw - 1rem);
+    max-width: calc(var(--platform-float-w) - 1rem);
     max-height: calc(100dvh - var(--menu-anchor-top, calc(var(--platform-header-h) + var(--platform-safe-top))) - 0.75rem);
     border-width: 1px;
     border-color: var(--brand-line);
@@ -13328,7 +13432,9 @@ button.attr-chip { cursor: pointer; }
   z-index: 2000;
   box-sizing: border-box;
   width: 320px;
-  max-width: calc(100vw - 16px);
+  /* Off the Duo's column too (THE USABLE BOX). The width and the left edge
+     are _openVotingHelpPopover's, from window.innerWidth. */
+  max-width: calc(var(--platform-float-w) - 16px);
   /* max-height is set inline by _openVotingHelpPopover to exactly the room
      available above/below the anchor, so the body scrolls internally rather
      than spilling off the viewport. This 70vh is only a fallback. */
@@ -15748,14 +15854,20 @@ div.dev-card-topic [data-work-note] { font-size: 12.5px; line-height: 1.45; marg
    boxes are neutralised); open it is drawn in the top layer at nearly the
    window's size, over a dim on the page. It must be a popover rather than
    position: fixed, because the reply pane and the app sheet it sits in
-   carry a backdrop-filter, which would trap a fixed viewer in the pane. */
+   carry a backdrop-filter, which would trap a fixed viewer in the pane.
+   BESIDE THE DUO'S COLUMN (1 November 2026). Centred on the window at
+   `100vw - 48px`, the folded Duo's viewer ran its right end, and the close
+   button at the end of its bar, under the clock. It floats over the rail,
+   so it takes the float box (THE USABLE BOX): its inset stops at the
+   column and it is centred in what is left. Off the Duo both are the
+   window, exactly as before. */
 .shots-viewer[popover] { display: block; position: relative; inset: auto; margin: 0; padding: 0; border: 0; width: auto; height: auto;
   overflow: hidden; color: inherit; background: transparent; }
-.shots-viewer:popover-open { position: fixed; inset: 0; margin: auto; height: fit-content; overflow: auto; overscroll-behavior: contain;
-  width: min(calc(100vw - 48px), calc((100vh - 200px) * 1.6)); max-height: calc(100vh - 48px); background: #fff; }
+.shots-viewer:popover-open { position: fixed; inset: 0 var(--platform-float-right) 0 var(--platform-float-left); margin: auto; height: fit-content; overflow: auto; overscroll-behavior: contain;
+  width: min(calc(var(--platform-float-w) - 48px), calc((100vh - 200px) * 1.6)); max-height: calc(100vh - 48px); background: #fff; }
 .dark .shots-viewer:popover-open { background: #1c1c1e; }
 @supports (height: 100dvh) {
-  .shots-viewer:popover-open { width: min(calc(100vw - 48px), calc((100dvh - 200px) * 1.6)); max-height: calc(100dvh - 48px); }
+  .shots-viewer:popover-open { width: min(calc(var(--platform-float-w) - 48px), calc((100dvh - 200px) * 1.6)); max-height: calc(100dvh - 48px); }
 }
 .shots-viewer::backdrop { background: rgba(0, 0, 0, 0.55); }
 .shots-viewer:has(.shots-theme-dark:checked) .shots-theme-to-dark,
@@ -16660,11 +16772,15 @@ div.dev-card-topic [data-work-note] { font-size: 12.5px; line-height: 1.45; marg
 .dev-request-read:disabled { opacity: .6; cursor: default; }
 
 /* The stream: no sheet of its own (the sheet is the thread's), Messages'
-   row metrics, and the viewer's own replies not set apart. */
+   row metrics, and the viewer's own replies not set apart. No padding under
+   it either: the transcript's end is its scroller's 12px, as in every chat
+   (`.chat-transcript`, "A chat's foot", 1 November 2026). Its 8px, stacked
+   on the scroller's 6px, put 14px under the last reply; on the scroller's
+   12px it would have put 20. */
 #dev-topic-thread #gc-thread-messages:is([data-language="request"], [data-language="change"]) {
   margin: 0;
   max-width: none;
-  padding: 0 0 8px;
+  padding: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -18176,10 +18292,22 @@ html[data-browser-scroller] .dev-ws { min-height: var(--ws-area); }
    (`--platform-strip-w`, THE SIDE STRIP; 0 everywhere else). Unfolded and
    held sideways the Duo is 951px with an 84px column the body pads out, so
    sums taken from 100vw counted the column twice: Main came out 379px and
-   the list's card 220px. The columns pinned to the right edge also stop at
-   the column (`--ai-edge`), as every other surface there does. */
+   the list's card 220px. Since the same day the room is the page's usable
+   box (`--platform-usable-w`, THE USABLE BOX beside the rail's tokens),
+   which takes the rail and the column off once for every reader: the same
+   value, decided in one place.
+   THE PINNED COLUMNS RUN UNDER IT (1 Nov 2026), as the header does: Main,
+   the side panel in its place and a design's preview reach the screen's
+   edge. Stopped at the column instead, Main ended in a hard edge with bare
+   wallpaper beside it. The clock, the camera and the Wi-Fi ring sit at the
+   column's top, within the height of each column's head, so the heads pad
+   their contents by the column (`--ai-edge`). Below that the column is
+   plain screen (taps reach the page there, measured on the Duo simulator),
+   so Main's chat and the page in the side panel run under it: padded too,
+   they left a band of the column's own colour beside a chat that stopped
+   short. A design's preview pads the column, as its ✕ is at its top. */
 body:has(#ai-screen:not(.hidden)) {
-  --ai-room: calc(100vw - var(--platform-rail-w, 0px) - var(--platform-strip-w, 0px));
+  --ai-room: var(--platform-usable-w);
   --ai-list-min: 480px;
   --ai-main-auto: clamp(400px, calc(var(--ai-room) - 720px), 720px);
   --ai-main-w: max(320px, min(var(--side-panel-chosen-w, var(--ai-main-auto)), calc(var(--ai-room) - var(--ai-list-min))));
@@ -18187,11 +18315,30 @@ body:has(#ai-screen:not(.hidden)) {
 html[data-side-strip="right"] body:has(#ai-screen:not(.hidden)) {
   --ai-edge: var(--platform-strip-w, 0px);
 }
-/* 1 Nov 2026: between 768 and 1024px the list keeps 360px, not 480: its
+/* A NOTCH ON THE RIGHT (an iPhone held sideways, THE NOTCH below) is an
+   edge the same way, for the columns' width and their heads. Unlike the
+   Duo's column it is the camera island halfway down, not plain screen, so
+   Main's chat and the page in its place keep clear of it too. */
+html:not([data-side-strip]):not([data-side-corner]) body:has(#ai-screen:not(.hidden)) {
+  --ai-edge: var(--platform-notch-right, 0px);
+}
+/* Main stands on the left in Arabic, so the edge beside it is that side's. */
+html[dir="rtl"][data-side-strip="right"] body:has(#ai-screen:not(.hidden)) { --ai-edge: 0px; }
+html[dir="rtl"][data-side-strip="left"] body:has(#ai-screen:not(.hidden)) { --ai-edge: var(--platform-strip-w, 0px); }
+html[dir="rtl"]:not([data-side-strip]):not([data-side-corner]) body:has(#ai-screen:not(.hidden)) { --ai-edge: var(--platform-notch-left, 0px); }
+html:not([data-side-strip]):not([data-side-corner]) #ai-screen .ai-main-pane > .messages-layout,
+html:not([data-side-strip]):not([data-side-corner]) body:has(#ai-screen:not(.hidden)) .side-panel-body {
+  padding-inline-end: var(--ai-edge, 0px);
+}
+/* 1 Nov 2026: between 768 and 1024px the list keeps 280px, not 480: its
    rows are one line (their numbers left out, as a phone's are), and the
-   column is 320px at the least. */
+   column is 320px at the least. 280 rather than the 360 first chosen, so
+   Main's divider can give the chat most of an iPhone Duo held sideways;
+   at its floor the list's title wraps to two lines and its rows shorten,
+   which is the reader's choice to make. The divider reads this figure
+   (features/side-panel/resize.ts probeLayout). */
 @media (max-width: 1023.98px) {
-  body:has(#ai-screen:not(.hidden)) { --ai-list-min: 360px; }
+  body:has(#ai-screen:not(.hidden)) { --ai-list-min: 280px; }
 }
 #ai-screen[data-ai-docked] { padding-inline-end: var(--ai-main-w); }
 /* NO GUTTER AFTER THE RAIL WHILE MAIN IS DOCKED (1 Nov 2026). Every screen
@@ -18204,10 +18351,10 @@ html[data-side-strip="right"] body:has(#ai-screen:not(.hidden)) {
 #ai-screen .ai-main-pane {
   position: fixed;
   z-index: 20;
-  inset-inline-end: var(--ai-edge, 0px);
+  inset-inline-end: 0;
   bottom: 0;
   top: calc(var(--platform-header-h) + var(--platform-safe-top, 0px) - .5rem);
-  width: var(--ai-main-w);
+  width: calc(var(--ai-main-w) + var(--ai-edge, 0px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -18223,7 +18370,7 @@ html[data-side-strip="right"] body:has(#ai-screen:not(.hidden)) {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 18px;
+  padding-block: 12px; padding-inline: 18px calc(18px + var(--ai-edge, 0px));
   border-bottom: 1px solid var(--app-sheet-line);
   background-color: var(--dc-sheet-fill);
 }
@@ -18256,6 +18403,13 @@ html[data-side-strip="right"] body:has(#ai-screen:not(.hidden)) {
   box-shadow: none;
 }
 .messages-layout[data-main-chat] > .messages-reply-pane > .messages-reply-resizer { display: none; }
+/* Its head is the column's head then, Main Chat's own not being drawn, so
+   it pads its contents by iPhone Duo's column of system chrome as Main
+   Chat's does (`--ai-edge`, 0 everywhere else): unpadded, a thread's long
+   title ran under the clock and the Wi-Fi ring (1 Nov 2026). */
+#ai-screen .ai-main-pane .messages-thread-header[data-reply-head="main"] {
+  padding-inline-end: calc(16px + var(--ai-edge, 0px));
+}
 /* A request or a change opened from the list: the side panel in Main's
    place, and Main back when the panel closes. It is drawn as this page's
    own column, not as a panel of its own (29 Oct 2026): Main's width, edge
@@ -18267,8 +18421,7 @@ html[data-side-panel] #ai-screen .ai-main-pane { display: none; }
   html[data-side-panel] #ai-screen { padding-inline-end: var(--ai-main-w); }
 }
 body:has(#ai-screen:not(.hidden)) .side-panel {
-  width: var(--ai-main-w);
-  inset-inline-end: var(--ai-edge, 0px);
+  width: calc(var(--ai-main-w) + var(--ai-edge, 0px));
   border-start-end-radius: 0;
   border-start-start-radius: 1.75rem;
 }
@@ -18301,10 +18454,11 @@ html.in-side-panel.side-panel-beside-ai .dev-request-bar:not(:has(.dev-card-menu
 #ai-screen .ai-preview-pane {
   position: fixed;
   z-index: 21;
-  inset-inline-end: var(--ai-edge, 0px);
+  inset-inline-end: 0;
   bottom: 0;
   top: calc(var(--platform-header-h) + var(--platform-safe-top, 0px) - .5rem);
-  width: var(--ai-preview-w);
+  width: calc(var(--ai-preview-w) + var(--ai-edge, 0px));
+  padding-inline-end: var(--ai-edge, 0px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -18346,6 +18500,10 @@ html.in-side-panel.side-panel-beside-ai .dev-request-bar:not(:has(.dev-card-menu
 #ai-screen[data-ai-drawer] { overflow: hidden; }
 .ai-drawer { position: absolute; inset: 0; overflow: hidden; touch-action: pan-y; }
 .ai-drawer-strip { position: absolute; inset: 0; will-change: transform; }
+/* touch-action stops at a scroller, so the column's chat says pan-y itself, as
+   Messages' does: left to `auto`, the browser took a sideways drag there and
+   cancelled the pointer, and the swipe back did nothing. */
+.ai-drawer .messages-thread-scroll { touch-action: pan-y; }
 .ai-drawer-list {
   position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 85%;
   overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
@@ -18355,7 +18513,7 @@ html.in-side-panel.side-panel-beside-ai .dev-request-bar:not(:has(.dev-card-menu
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--home-ground);
   border-inline-start: 1px solid var(--app-sheet-line);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: calc(-8px * var(--rtl-sign)) 0 24px rgba(0, 0, 0, 0.08);
 }
 .ai-drawer-pane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .ai-drawer-pane > .messages-layout { flex: 1 1 auto; height: auto; min-height: 0; }
@@ -18388,8 +18546,8 @@ html.in-side-panel.side-panel-beside-ai .dev-request-bar:not(:has(.dev-card-menu
    Evan, 1 Nov 2026). Its shadow would show at the list's edge, so it comes
    only with the slide. */
 .ai-drawer:not([data-peek]) .ai-drawer-list { width: 100%; }
-.ai-drawer:not([data-peek]) .ai-drawer-thread { left: 100%; }
-.ai-drawer:not([data-peek])[data-level="0"]:not([data-panning]) .ai-drawer-thread { box-shadow: none; border-left-color: transparent; }
+.ai-drawer:not([data-peek]) .ai-drawer-thread { inset-inline-start: 100%; }
+.ai-drawer:not([data-peek])[data-level="0"]:not([data-panning]) .ai-drawer-thread { box-shadow: none; border-inline-start-color: transparent; }
 /* Where the window has the room, the feed takes a project's stage width
    (720px) out of the screen's 672px column, as far as that column's own
    margins go. */
@@ -19190,11 +19348,12 @@ button.dev-ws-recent-card {
 
    Right-aligned to the button, which ends the card's first row, with the
    arrow over the button's middle. The width stops short of the viewport on
-   a phone, so the popover never meets the screen edge. */
+   a phone, so the popover never meets the screen edge, nor the Duo's
+   column (the float box, THE USABLE BOX; 1 November 2026). */
 .dev-ws-join-anchor { position: relative; margin-inline-start: auto; flex: none; }
 .dev-ws-join-pop {
   position: absolute; top: calc(100% + 12px); inset-inline-end: -6px; z-index: 7;
-  width: min(300px, calc(100vw - 56px));
+  width: min(300px, calc(var(--platform-float-w) - 56px));
   display: flex; flex-direction: column; gap: 8px;
   padding: 16px 16px 10px; box-sizing: border-box;
   border-radius: 18px; border: 1px solid var(--app-sheet-line);
@@ -19677,7 +19836,9 @@ html[data-community-tint] body:has(#app-view:not(.hidden)) #platform-header {
    scrim, on a phone. #5384: it opens UNDER the header, which stays as it
    is, undimmed and pressable, its bottom edge the offset the other layers
    under it use; it reaches down over the tab bar (z 60), under a dialog.
-   The header covers the status bar, so the list keeps only its own 16px. */
+   The header covers the status bar, so the list keeps only its own 16px.
+   At most the float box less 56px of scrim beside it (THE USABLE BOX; 1
+   November 2026), so the tray leaves a strip to tap away on the Duo too. */
 .dev-ws-tray-root {
   position: fixed; inset-inline-start: 0; inset-inline-end: 0; bottom: 0; z-index: 60;
   top: calc(var(--browser-banner-h, 0px) + var(--platform-header-h) + var(--platform-safe-top, 0px));
@@ -19685,7 +19846,7 @@ html[data-community-tint] body:has(#app-view:not(.hidden)) #platform-header {
 .dev-ws-tray-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); animation: dev-ws-tray-fade 160ms ease-out; }
 .dev-ws-tray {
   position: absolute; top: 0; bottom: 0; inset-inline-start: 0;
-  width: min(296px, calc(100vw - 56px));
+  width: min(296px, calc(var(--platform-float-w) - 56px));
   padding: 16px 12px calc(16px + var(--platform-safe-bottom, 0px));
   overflow-y: auto; overscroll-behavior: contain;
   background: var(--dc-sheet-solid, var(--bg-primary));
@@ -19743,7 +19904,7 @@ html[data-nav-drawer] #app-view { touch-action: pan-y; }
   position: absolute; top: 0; bottom: 0; inset-inline-start: 85%; width: 80%;
   overflow: hidden;
   background: var(--dc-sheet-solid, var(--bg-primary));
-  box-shadow: -1px 0 0 var(--app-sheet-line);
+  box-shadow: calc(-1px * var(--rtl-sign)) 0 0 var(--app-sheet-line);
   transition: transform 300ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 /* The search widens level 0 to the screen: the places slide off its edge. */
@@ -19771,7 +19932,7 @@ html[data-nav-drawer] #app-view { touch-action: pan-y; }
 .nav-drawer-cover {
   position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 100%;
   margin: 0; padding: 0; border: 0; background: transparent;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+  box-shadow: calc(-8px * var(--rtl-sign)) 0 24px rgba(0, 0, 0, 0.08);
   cursor: pointer; -webkit-tap-highlight-color: transparent;
   will-change: transform;
 }
@@ -19894,7 +20055,7 @@ html[data-nav-drawer] #app-view { touch-action: pan-y; }
   .messages-layout.messages-drawer > .messages-thread-pane {
     position: absolute; top: 0; bottom: 0; inset-inline-start: 0; width: 100%;
     margin-top: 0;
-    box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
+    box-shadow: calc(-8px * var(--rtl-sign)) 0 24px rgba(0, 0, 0, 0.08);
     will-change: transform;
   }
   .messages-layout.messages-drawer > .messages-thread-pane.messages-no-selection { display: none; }
@@ -21961,6 +22122,73 @@ body {
   --platform-rail-w: 0px;
   --platform-gutter: 0px;
 }
+/* THE USABLE BOX: WHERE CONTENT CAN GO, DECIDED ONCE (iPhone Duo,
+   1 November 2026). Widths summed from 100vw at each site did not know
+   about the Duo's column of system chrome: Main's room counted the column
+   twice, and a notice capped at `100vw - 24px` and centred on the window
+   ran under the clock. Every width a surface takes from the window is
+   taken from one of the two boxes below instead, and
+   tests/usable-box.test.js fails on a `100vw` anywhere else in this file,
+   and on one in a class string or an inline style under frontend/ or
+   public/js/.
+
+   WHAT IS TAKEN OFF, AND ON WHICH SIDE:
+   - the RAIL'S RESERVED WIDTH, on the left: `--platform-rail-w` above, the
+     sidebar's 212px from 768px, and 0 on a phone, folded or peeking;
+   - the DUO'S COLUMN on the side it is on (THE SIDE STRIP:
+     `data-side-strip`, `--platform-strip-w`), or the folded Duo's narrow
+     corner (THE SIDE CORNER: `data-side-corner`, `--platform-corner-w`).
+     These are the side safe-area insets as the shell honours them:
+     frontend/src/lib/side-strip.ts reads env(safe-area-inset-left/right)
+     once and publishes only what the body pads out. A phone's two-sided
+     landscape notch and a narrow camera cutout are kept clear nowhere in
+     the shell, so not here either, and the side panel's own document
+     drops the column it does not touch.
+
+   TWO BOXES, because a surface either belongs to the page or floats over
+   it:
+   - `--platform-usable-left`, `-right` and `-w`, THE PAGE'S BOX, beside
+     the rail and the column. A width for content (`--ai-room`, Main's
+     column) and a surface fixed to the window on the page's behalf (the
+     language notice) take it.
+   - `--platform-float-left`, `-right` and `-w`, A FLOATING SURFACE'S BOX:
+     a menu, a popover, a lightbox, a dialog (what `--dc-float-fill`
+     paints). It floats over the rail, so only the column is taken off.
+   Off the Duo the float box is the window; on a phone the two are one.
+
+   WHY 100vw HERE, AND NOWHERE ELSE. A custom property's `100%` would
+   resolve against each reader's own containing block, so only a viewport
+   unit names the window for every reader alike. `100vw` would count a
+   classic scrollbar on the root, and the root never draws one: `html,
+   body` are `overflow: hidden` (the bounded shell), and the one mode in
+   which the document scrolls, `html[data-browser-scroller]`, is a touch
+   browser's, whose scrollbars overlay the page and take no width. A box
+   inside a scroller that does draw one sizes against that scroller (a
+   percentage, or plain flow) instead, as the Workshop's stage pane does
+   above ("The stage pane runs edge to edge").
+
+   On body for the reason the band tokens are (the head of this section):
+   these read `--platform-rail-w` as body sets it. The column's side is
+   the attribute rules after this one, on body too. */
+body {
+  --platform-float-left: 0px;
+  --platform-float-right: 0px;
+  --platform-float-w: calc(100vw - var(--platform-float-left) - var(--platform-float-right));
+  /* The rail comes off whichever side it stands on: the left, or in Arabic
+     the right (--rtl-sign is -1 there, so one factor is 0 and the other 1). */
+  --platform-usable-left: calc(var(--platform-float-left) + var(--platform-rail-w, 0px) * (1 + var(--rtl-sign)) / 2);
+  --platform-usable-right: calc(var(--platform-float-right) + var(--platform-rail-w, 0px) * (1 - var(--rtl-sign)) / 2);
+  --platform-usable-w: calc(var(--platform-float-w) - var(--platform-rail-w, 0px));
+}
+/* The column, on the side the body pads it out: at every width for the
+   strip, and on a phone for the corner, exactly as THE SIDE STRIP and THE
+   SIDE CORNER pad the body. The two are never set together (side-strip.ts). */
+html[data-side-strip="left"] body { --platform-float-left: var(--platform-strip-w, 0px); }
+html[data-side-strip="right"] body { --platform-float-right: var(--platform-strip-w, 0px); }
+@media (max-width: 767px) {
+  html[data-side-corner="left"] body { --platform-float-left: var(--platform-corner-w, 0px); }
+  html[data-side-corner="right"] body { --platform-float-right: var(--platform-corner-w, 0px); }
+}
 /* `:not(.platform-tabs-peek)` because a PEEKING bar reserves nothing: the
    router still says the bar is hidden (see features/nav/tab-bar.tsx), the app
    under it is full width, and a rail that claimed 224px on the way in would
@@ -21988,9 +22216,17 @@ html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek)):
    `hidden` class because the class has an owner (the island) and this is a
    presentation rule, not a route fact — the bar comes back with no state to
    restore the moment the keyboard drops. The reservation above is already
-   off, because its selector excludes this state. */
-html.un-kb #platform-tabs {
-  display: none;
+   off, because its selector excludes this state.
+
+   ON A PHONE ONLY (iPhone Duo, 1 November 2026). From 768px the bar is the
+   sidebar down the left of the window, beside the page and not at its foot:
+   the keys cover its lower end and nothing rides on them. Hidden there, the
+   page took the sidebar's width back the moment a field was focused, slid
+   212px left under the reader, and slid back when the keyboard dropped. */
+@media (max-width: 767px) {
+  html.un-kb #platform-tabs {
+    display: none;
+  }
 }
 
 /* KEYBOARD UP IN THE HOMEROOM APP, BAR AND STRIP GONE THERE TOO (first-session
@@ -22678,6 +22914,56 @@ html.un-android.in-native-webview:not(.web-browser-chrome) {
    strip on the right stays on the right when the language is Arabic and the
    content is padded off the right. Mirroring these would put the content
    under the camera. Everything outside this block is reading direction. */
+/* ── THE NOTCH: insets on the sides that are not the Duo's column ─────────
+   (iPhone held sideways in Safari, 1 November 2026.) A phone on its side
+   reports the camera island's inset on BOTH sides (59px on an iPhone),
+   which side-strip.ts deliberately does not call a column. Nothing kept
+   clear of it: the layout audit (scripts/layout-audit) found the sidebar's
+   icons and labels under the island, and with the phone turned the other
+   way the page's right edge goes under it instead. From 768px, where the
+   wide layout runs, the page keeps clear of both sides the way it keeps
+   clear of the Duo's column (THE CONTENT STOPS AT THE STRIP, above): the
+   body pads, the header spans the screen and pads its controls, and the
+   fixed pieces (the sidebar, the bot tab's columns) clear it one by one.
+   Only where no column or corner is set, so the Duo's own inset is never
+   counted twice; 0 on every device without side insets. */
+body {
+  --platform-notch-left: 0px;
+  --platform-notch-right: 0px;
+}
+@media (min-width: 768px) {
+  html:not([data-side-strip]):not([data-side-corner]) body {
+    --platform-notch-left: var(--un-safe-inset-left, env(safe-area-inset-left, 0px));
+    --platform-notch-right: var(--un-safe-inset-right, env(safe-area-inset-right, 0px));
+    /* THE USABLE BOX's sides, so a menu or a popover clears it too, and the
+       bot tab's room (`--ai-room`) leaves it out. */
+    --platform-float-left: var(--platform-notch-left);
+    --platform-float-right: var(--platform-notch-right);
+    padding-left: var(--platform-notch-left);
+    padding-right: var(--platform-notch-right);
+  }
+  html:not([data-side-strip]):not([data-side-corner]) #platform-header {
+    margin-left: calc(-1 * var(--platform-notch-left));
+    margin-right: calc(-1 * var(--platform-notch-right));
+    padding-left: calc(1rem + var(--platform-notch-left));
+    padding-right: calc(1rem + var(--platform-notch-right));
+  }
+  /* The sidebar is fixed to the screen's left edge: its ground runs under
+     the island and its rows start after it. The screens beside it already
+     start after the notch (the body's padding), so what they reserve for
+     it, `--platform-rail-w`, stays its own width. */
+  html:not([data-side-strip]):not([data-side-corner]) .platform-tabs {
+    width: calc(var(--platform-rail-full) + var(--platform-notch-left));
+    padding-left: calc(6px + var(--platform-notch-left));
+  }
+  /* In Arabic the sidebar stands on the screen's right, so that is the side
+     whose island its ground runs under. */
+  html[dir="rtl"]:not([data-side-strip]):not([data-side-corner]) .platform-tabs {
+    width: calc(var(--platform-rail-full) + var(--platform-notch-right));
+    padding-left: 6px;
+    padding-right: calc(6px + var(--platform-notch-right));
+  }
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    THE SIDE STRIP — iPhone Duo's column of system chrome (24 Oct 2026)
@@ -23641,7 +23927,7 @@ html.un-kb #platform-parked {
 }
 @media (min-width: 768px) {
   /* …unless the toggle is in it, which needs both a rail and the width. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-route-hidden)) #platform-header
+  body:has(#platform-tabs:not(.hidden):not(.platform-tabs-route-hidden)) #platform-header
     .platform-header-left:has(> #back-btn.hidden) {
     display: flex;
   }
@@ -23669,7 +23955,7 @@ html.un-kb #platform-parked {
      tab-bar.tsx), so the toggle stays out of the app layer and the peek
      still works. A rail the viewer FOLDED is still the route's, so its
      toggle stays — it is how the fold comes undone. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-route-hidden)) .platform-sidebar-toggle {
+  body:has(#platform-tabs:not(.hidden):not(.platform-tabs-route-hidden)) .platform-sidebar-toggle {
     display: inline-flex;
     transition: background-color 140ms ease, color 140ms ease,
                 border-color 140ms ease;
@@ -23694,8 +23980,15 @@ html.un-kb #platform-parked {
   /* THE BAND AT THE FOOT GOES AWAY ENTIRELY. What a screen has to clear
      below it is the home-indicator inset and nothing else — on a desktop
      that is 0, and the expression keeps it correct on a tablet that has one.
-     The rail's width takes its place, as padding rather than as a band. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden)) {
+     The rail's width takes its place, as padding rather than as a band.
+
+     WITH THE KEYBOARD UP AS WELL (1 November 2026). The rail stays while a
+     field has the keys (the bar's own display rule says why), so the rules
+     in this block that give it its column, and move the page over, no
+     longer stand aside under `un-kb`. The two band-token rules below keep
+     `html:not(.un-kb)`: the home-indicator strip they reserve is behind the
+     keys, and they must match the phone rule's selector exactly. */
+  body:has(#platform-tabs:not(.hidden)) {
     --platform-rail-w: var(--platform-rail-full);
     /* The air between the rail and the content, spent again on the right —
        see the padding rule below. 1.5rem is the shell's own outer gutter
@@ -23743,7 +24036,7 @@ html.un-kb #platform-parked {
      INSIDE THE MEDIA QUERY AND NOWHERE ELSE. Below 768px the bar is the
      phone's bottom bar and the only navigation there is; the class is still
      on the element after a resize, and this is what keeps it inert there. */
-  html:not(.un-kb) body:has(#platform-tabs.platform-tabs-folded) {
+  body:has(#platform-tabs.platform-tabs-folded) {
     --platform-rail-w: 0px;
   }
 
@@ -23766,7 +24059,7 @@ html.un-kb #platform-parked {
      is not there, so the corner keeps its curve; a folded rail PEEKING is an
      overlay with the page still underneath, and the curve is right there for
      the same reason it is right over an app. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-folded)) #platform-header {
+  body:has(#platform-tabs:not(.hidden):not(.platform-tabs-folded)) #platform-header {
     border-end-start-radius: 0;
   }
   .platform-tabs:not(.platform-tabs-folded) {
@@ -23816,7 +24109,7 @@ html.un-kb #platform-parked {
      peeking and folded cases are excluded for the reason they always are: a
      rail that claimed 224px on the way in would reflow the page under the
      pointer that revealed it. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) #app-view {
+  body:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) #app-view {
     padding-inline-start: calc(var(--platform-rail-w, 0px) + var(--platform-gutter));
     padding-inline-end: var(--platform-gutter);
   }
@@ -23831,7 +24124,7 @@ html.un-kb #platform-parked {
      edge in what is left. One class more than the rule above, so it wins.
      Inside this block only — a phone never gets the class, and a window
      narrowed past 768px with it set keeps the full-screen app. */
-  html:not(.un-kb) body.rail-pinned:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) #app-view {
+  body.rail-pinned:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) #app-view {
     padding-inline-start: var(--platform-rail-w, 0px);
     padding-inline-end: 0;
   }
@@ -23889,6 +24182,19 @@ html.un-kb #platform-parked {
 
     border-top: 0;
     border-inline-end: 1px solid var(--app-sheet-line);
+
+    /* IT SCROLLS WHEN IT IS TALLER THAN THE SCREEN (layout audit, 1 November
+       2026). On an iPhone held sideways (393px) its last communities and
+       You ran off the bottom with no way to reach them, and on the iPhone
+       Duo held sideways a project's places pushed You into the home
+       indicator's strip. Me's auto margin still pins it to the foot when
+       there is room; when there is not, it follows the rest and scrolls,
+       and the padding above keeps it clear of the home indicator at the
+       end. Sideways it never scrolls: nothing in it is wider than it. */
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
   }
 
   /* ── ME SITS AT THE FOOT (#2718 review) ──────────────────────────────
@@ -24429,13 +24735,22 @@ section + .workshop-search {
   #platform-tab-me {
     padding-inline-end: 46px;
   }
+  /* IN THE FLOW, AT THE END OF YOUR ROW (1 November 2026). It was pinned to
+     the sidebar's bottom edge; once the sidebar scrolls when it is taller
+     than the screen, that edge is the bottom of what shows, and the cog
+     stayed there over other rows while You scrolled away. It takes no
+     height of its own: its line (36px, and the 1px gap) comes back as a
+     negative margin, so You, next in `order`, sits on the same line, under
+     it, and both scroll together. */
   .platform-rail-settings {
-    position: absolute;
-    inset-inline-end: 6px;
-    bottom: calc(10px + var(--platform-safe-bottom, 0px));
+    position: relative;
+    align-self: flex-end;
+    /* Never squeezed: in a sidebar that holds more than fits, a flex child
+       of no fixed basis shrank to its 20px glyph. */
+    flex: none;
     width: 36px;
     height: 36px;
-    margin: 0;
+    margin: 0 0 -37px;
     border-radius: 10px;
   }
   .platform-rail-settings-glyph {
@@ -24708,7 +25023,7 @@ section + .workshop-search {
   /* The places are in the sidebar, so the place bar's button to the tray has
      nothing to open beside it. Folded, the sidebar is away and the button
      is the way to the places again. */
-  html:not(.un-kb) body:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) .dev-ws-places-btn {
+  body:has(#platform-tabs:not(.hidden):not(.platform-tabs-peek):not(.platform-tabs-folded)) .dev-ws-places-btn {
     display: none;
   }
 
@@ -25154,38 +25469,91 @@ html.dark .messages-inbox-change-tile {
   overflow: hidden;
 }
 
-/* THE DIVIDER (#2886) — the panel's left edge, as a handle. It sits over the
-   panel's own hairline (the border-left above), inside the panel because the
-   panel clips its corner, and shows itself only under the pointer, on focus
-   and while held: a brand-coloured bar where the hairline is. The width it
+/* THE DIVIDER (#2886) — the panel's left edge, as a handle. It is the
+   panel's child and is drawn on the line between the panel and what is beside
+   it (below), and shows itself only under the pointer, on focus and while
+   held: a brand-coloured bar on that line. The width it
    sets is `--side-panel-w` on <html> (features/side-panel/resize.ts), so the
    app beside it follows through the margin rule below. */
 .side-panel-divider {
-  position: absolute;
-  top: 0;
+  /* ON THE LINE BETWEEN THE TWO HALVES (iPhone Duo, 1 November 2026), not
+     just inside the panel. Fixed, so the panel's clipping (overflow: hidden,
+     for its corner) does not reach it while it stays the panel's child, and
+     hides and shows with it; centred on `--divider-at`, the line's distance
+     from the window's right edge. Beside an app that is the panel's own edge,
+     where the two sheets meet; beside the Homeroom bot's list it is the
+     middle of the gutter between the list and Main (below). Inside the panel
+     the bar and the grip sat on the panel's side of the gap. Nothing between
+     it and the window may take a transform or a filter, which would make
+     that ancestor its frame instead. */
+  --divider-w: 10px;
+  position: fixed;
+  top: calc(var(--browser-banner-h, 0px) + var(--platform-header-h)
+    + var(--platform-safe-top, 0px) - .5rem);
   bottom: 0;
-  inset-inline-start: 0;
-  width: 10px;
-  z-index: 2;
+  inset-inline-end: calc(var(--divider-at, var(--side-panel-w)) - var(--divider-w) / 2);
+  width: var(--divider-w);
+  z-index: 21;
   cursor: col-resize;
   touch-action: none;
   outline: none;
+}
+/* Beside the bot's list: Main (and a page in Main's place) is
+   `--ai-main-w` wide plus the Duo's column it runs under, and the list's
+   16px padding is the gutter before it. Main's own handle starts where Main
+   does, which is not under the banner the side panel clears. */
+body:has(#ai-screen:not(.hidden)) :is(#side-panel-divider, #ai-main-divider) {
+  --divider-at: calc(var(--ai-main-w) + var(--ai-edge, 0px) + 8px);
+}
+#ai-main-divider {
+  top: calc(var(--platform-header-h) + var(--platform-safe-top, 0px) - .5rem);
 }
 .side-panel-divider::after {
   content: "";
   position: absolute;
   top: 0;
   bottom: 0;
-  inset-inline-start: 0;
+  inset-inline-start: calc(50% - 1.5px);
   width: 3px;
   background: var(--brand-ink);
   opacity: 0;
   transition: opacity 120ms ease;
 }
-.side-panel-divider:hover::after,
+/* Under a pointer that hovers only: a finger's tap leaves iOS holding
+   :hover on the handle, which kept the bar lit after the drag (iPhone Duo,
+   1 November 2026). */
+@media (hover: hover) {
+  .side-panel-divider:hover::after { opacity: .45; }
+}
 .side-panel-divider:focus-visible::after,
 html.side-panel-resizing .side-panel-divider::after {
   opacity: .45;
+}
+/* ON A TOUCH SCREEN, A HANDLE YOU CAN SEE AND HIT (iPhone Duo, 1 November
+   2026). The bar above shows only under a pointer, which a finger never
+   hovers over, and 10px is narrower than a fingertip, so the edge read as
+   no handle at all. With a coarse pointer the handle is 24px across the
+   line, reaching 4px into Main past the gutter (its rows and the reply box
+   begin 12 to 18px in), and a short grip on the line is drawn at rest.
+   THE GRIP IS THE WHOLE MARK. The full-height bar is a pointer's hover
+   cue; under a finger it ran the screen's height beside the grip, held or
+   focused, and read as a second divider. The grip darkens while held. */
+@media (pointer: coarse) {
+  .side-panel-divider { --divider-w: 24px; }
+  .side-panel-divider::after { display: none; }
+  .side-panel-divider::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    inset-inline-start: calc(50% - 2px);
+    width: 4px;
+    height: 40px;
+    margin-top: -20px;
+    border-radius: 999px;
+    background: var(--text-faint);
+    opacity: .5;
+  }
+  html.side-panel-resizing .side-panel-divider::before { opacity: .85; }
 }
 /* WHILE HELD: the two frames would take the pointer the moment it crossed
    them and the drag would stall, so they stand aside; and nothing under the
@@ -25222,9 +25590,16 @@ body:has(#ai-screen:not(.hidden)) .side-panel-head {
   height: auto;
   min-height: 63px;
   gap: 10px;
-  padding: 12px 18px;
+  padding-block: 12px; padding-inline: 18px calc(18px + var(--ai-edge, 0px));
   background-color: var(--dc-sheet-fill);
 }
+/* AND ITS FOOT CLEARS THE KEYBOARD (1 Nov 2026). In the Homeroom app beside
+   this page (side-panel controller canTake), a reply typed in the panel's
+   own document had the keyboard over its box: the page's composers lift
+   themselves, the frame does not know the keyboard is there. The kit
+   measures it from the screen whichever document has the focus
+   (`un-kb`, `--un-kb-inset`), so the panel ends above it. */
+html.un-kb body:has(#ai-screen:not(.hidden)) .side-panel { bottom: var(--un-kb-inset, 0px); }
 /* The topic's back chip, centred in the row rather than at its top. */
 .side-panel-head > .side-panel-main { margin: 0; align-self: center; }
 /* The column's heading, as Main's header reads (30 Oct 2026): the project's
@@ -26019,7 +26394,12 @@ button.rf-claim-row:active .rf-claim { color: var(--rf-ink); }
 
 /* The slider. The switch sits at the foot of the picture, where a thumb
    pressing it covers the least of the shot. */
-.rf-compare { position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; }
+/* direction: ltr, in Arabic too. A screenshot does not mirror, and everything
+   in here is laid out in its coordinates: the framed layers' translate and
+   scale from their left edge, the close-ups' and the veil's boxes, the seam's
+   translate and the clip behind it. compare.tsx's seam runs Before on the left,
+   After on the right; the captions and the switch say the same. */
+.rf-compare { direction: ltr; position: relative; overflow: hidden; touch-action: pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; outline: none; }
 .rf-compare:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .rf-layer, .rf-layer-clip { position: absolute; inset-inline-start: 0; top: 0; }
 .rf-layer-clip { inset: 0; }

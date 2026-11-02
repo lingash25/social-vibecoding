@@ -631,7 +631,10 @@ test('a peek over a running app never brings the sidebar toggle into the app\'s 
 test('the reservation is keyed off the bar\'s own hidden class', () => {
   // No second flag to keep in step: the island publishes `hidden` and the
   // screens read it, the same shape the wallpaper's route test uses.
-  assert.match(css, /html:not\(\.un-kb\) body:has\(#platform-tabs:not\(\.hidden\)\)/);
+  // The rail's width is keyed off it with the keyboard up as well: the
+  // keys cover the rail's foot and take nothing from it (iPhone Duo,
+  // tests/keyboard-keeps-sidebar.test.js).
+  assert.match(css, /\n  body:has\(#platform-tabs:not\(\.hidden\)\) \{/);
   // Declared on `body` in BOTH branches. A custom property's var()s are
   // substituted on the element it is declared on, so a `:root` declaration
   // would bake in `:root`'s value and never see the override — which is also

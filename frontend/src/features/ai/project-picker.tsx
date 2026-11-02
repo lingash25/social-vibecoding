@@ -178,7 +178,7 @@ function PickerMenu({ anchor, ...props }: PickerProps & { anchor: DOMRect }): Re
   return (
     <div
       ref={panel}
-      className="fixed z-[60] flex max-h-[min(70vh,560px)] w-[360px] max-w-[calc(100vw_-_16px)] flex-col rounded-2xl bg-[color:var(--dc-sheet)] p-1.5 pb-2 text-zinc-900 shadow-[0_0_0_1px_var(--app-sheet-line),0_14px_40px_rgba(0,0,0,0.18)] dark:text-zinc-100"
+      className="fixed z-[60] flex max-h-[min(70vh,560px)] w-[360px] max-w-[calc(var(--platform-float-w)_-_16px)] flex-col rounded-2xl bg-[color:var(--dc-sheet)] p-1.5 pb-2 text-zinc-900 shadow-[0_0_0_1px_var(--app-sheet-line),0_14px_40px_rgba(0,0,0,0.18)] dark:text-zinc-100"
       role="dialog"
       aria-label={t('messages:ai.filter.label')}
       style={style}

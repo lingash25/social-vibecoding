@@ -32,6 +32,8 @@ import type {
   SharedObjectReference,
   ThreadRootRef,
   UserSearchResult,
+  HomeroomBotCard,
+  HomeroomBotLooked,
 } from './types';
 import { t } from '../../lib/i18n/runtime';
 import { countOf } from './approval-words';
@@ -312,8 +314,48 @@ export function normalizeBotMeta(input: unknown): { homeroomBot: HomeroomBotMeta
       ...(makeProject ? { makeProject } : {}),
       madeSlug: optional('madeSlug'),
       madeName: optional('madeName'),
+      // Homeroom bot parity (P1-P9): the reply's card, as the server stored it
+      // (./bot-cards/ reads each type's own fields defensively).
+      ...(normalizeBotCard(pick(bot, 'card')) ? { card: normalizeBotCard(pick(bot, 'card'))! } : {}),
+      // Homeroom bot parity, P1: what the reply looked at (./bot-looked.tsx).
+      ...(normalizeBotLooked(pick(bot, 'looked')) ? { looked: normalizeBotLooked(pick(bot, 'looked'))! } : {}),
     },
   };
+}
+
+/**
+ * Homeroom bot parity, P1: what a reply looked at, when it says: at most 20
+ * things, each a line of words, and how long it took. Null for none.
+ */
+export function normalizeBotLooked(input: unknown): HomeroomBotLooked | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const items = array(pick(record(input), 'items'))
+    .map((item) => text(pick(record(item), 'what')).replace(/\s+/g, ' ').trim().slice(0, 160))
+    .filter(Boolean)
+    .slice(0, 20)
+    .map((what) => ({ what }));
+  if (!items.length) return null;
+  const ms = Number(pick(record(input), 'ms'));
+  return { items, ms: Number.isFinite(ms) && ms >= 0 ? Math.round(ms) : null };
+}
+
+/** Homeroom bot parity (P1-P9): a card, when it is one: a plain object with a string type. */
+export function normalizeBotCard(input: unknown): HomeroomBotCard | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const type = (input as { type?: unknown }).type;
+  if (typeof type !== 'string' || !/^[a-z_]{1,40}$/.test(type)) return null;
+  return input as HomeroomBotCard;
+}
+
+/**
+ * Homeroom bot parity (P1-P9): a tap on a card the bot put under a reply,
+ * decided on the server (services/homeroom-bot-cards/). Throws with the
+ * server's words when it was refused.
+ */
+export async function cardAction(messageId: number, action: string, value?: unknown): Promise<Record<string, unknown>> {
+  return record(await request<unknown>(`/api/conversations/homeroom-bot/cards/${messageId}`, {
+    method: 'POST', body: JSON.stringify(value === undefined ? { action } : { action, value }),
+  }));
 }
 
 export function normalizeMember(input: unknown): ConversationMember {

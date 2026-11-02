@@ -42,6 +42,7 @@ const {
   SERVER_VERSION,
   DELEGATED_TOKEN_PREFIX,
   DELEGATED_CLIENT_NAMES,
+  DELEGATION_KINDS,
 } = require('../services/mcp-connect-constants');
 const mcpOauth = require('../services/mcp-oauth');
 const mcpTools = require('../services/mcp-tools');
@@ -251,7 +252,7 @@ async function authenticateConnector(pool, token) {
   if (row.revoked_at) return { error: 'revoked_token' };
   if (new Date(row.now) >= new Date(row.expires_at)) return { error: 'expired_token' };
   if (row.d_grant_id) {
-    if (row.d_kind !== 'agent_mayor' && row.d_kind !== 'worker_read') return { error: 'invalid_token' };
+    if (!DELEGATION_KINDS.includes(row.d_kind)) return { error: 'invalid_token' };
     const refused = delegationRefusal(row);
     if (refused) return { error: refused };
   }

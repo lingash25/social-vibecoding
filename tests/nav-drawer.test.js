@@ -512,7 +512,7 @@ test('the Messages screen: the panes are the levels, the page drops its name, th
   assert.match(drawer, /el\.animate\(\[\{ transform: start \}, \{ transform: end \}\], \{ duration: SLIDE_MS, easing: SLIDE_EASE \}\)/);
   assert.doesNotMatch(drawer, /\.style\.transition/, 'the conversation\'s pane is the kit\'s keyboard column, whose transition the kit owns');
   assert.match(drawer, /if \(!on \|\| \(level === 0 && !peekId\)\) return undefined;\s*const from = level;\s*const takesEdge = pageTakesEdge\(\);/);
-  assert.match(drawer, /const sideways = touch\.clientX > EDGE_PX && startsOnSideways\(target, layout, window\);\s*if \(!swipeBackMayStart\(\{ x: touch\.clientX, takesEdge, sideways \}\)\) return;/,
+  assert.match(drawer, /const pastEdge = rtl \? touch\.clientX < window\.innerWidth - EDGE_PX : touch\.clientX > EDGE_PX;\s*const sideways = pastEdge && startsOnSideways\(target, layout, window\);\s*if \(!swipeBackMayStart\(\{ x: touch\.clientX, takesEdge, sideways, rtl, width: window\.innerWidth \}\)\) return;/,
     'a conversation pans back from anywhere but sideways UI, as a page does (tests/nav-drawer-swipe.test.js)');
   const header = read(`${DIR}/header-drawer.tsx`);
   assert.match(header, /if \(mode === 'messages'\) return <BackDisc mode=\{mode\} label=\{t\('core:header\.drawer\.toMessages'\)\} onBack=\{messagesBack\} \/>;/);

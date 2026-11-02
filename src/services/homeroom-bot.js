@@ -120,6 +120,9 @@ function firstVersionEarlyLook() { return require('./first-version-early-look');
 function botReview() { return require('./bot-review'); }
 // #4210: interrupted builds, kept for admins.
 function incidents() { return require('./platform-incidents'); }
+// Homeroom bot parity P6: red checks that are not the change's, worked past
+// as a person would (homeroom-bot-flaky-checks.js).
+function flakyChecks(deps) { return deps?.flakyChecks || require('./homeroom-bot-flaky-checks'); }
 // #4530: whether the new words on a request the bot already answered were
 // for the bot, so a repeat note is held back when they were not.
 function addressedMod() { return require('./homeroom-bot-addressed'); }
@@ -238,6 +241,14 @@ const KEY_PROPOSAL_CEILING = 'homeroom_bot_proposal_ceiling';
 // cache). On unless switched off: off, no watcher starts and no App tab
 // offers it.
 const KEY_LIVE_BUILD_STREAM = 'live_build_stream';
+// Homeroom bot parity, P8: the outside image model its pictures are made on
+// (services/bot-pictures.js: make_pictures in the chat, usernode-image in a
+// build), and how many pictures one person may have made in a week. Blank
+// is the default model; a cap of 0 makes none.
+const KEY_IMAGE_MODEL = 'homeroom_bot_model_image';
+const KEY_PICTURE_WEEKLY_CAP = 'homeroom_bot_picture_weekly_cap';
+const DEFAULT_IMAGE_MODEL = 'google/gemini-2.5-flash-image';
+const MAX_PICTURE_WEEKLY_CAP = 1000;
 const SETTING_KEYS = Object.freeze([
   KEY_MODE, KEY_CONCURRENCY, KEY_BATCH_SIZE, KEY_PAUSED_APPS,
   KEY_TURN_SECONDS, KEY_TURN_INPUT_TOKENS,
@@ -246,6 +257,7 @@ const SETTING_KEYS = Object.freeze([
   KEY_VOICE_SESSION, KEY_VOICE_ISSUE, KEY_VOICE_CHAT,
   KEY_CONTINUE_READS, KEY_EVERYONE_SINCE, KEY_PROPOSAL_CEILING,
   KEY_LIVE_BUILD_STREAM, KEY_DEFAULT_MODEL, KEY_HELPER_MODEL,
+  KEY_IMAGE_MODEL, KEY_PICTURE_WEEKLY_CAP,
   ...Object.values(KEY_MODELS),
 ]);
 const MAX_USER_WEEKLY_CENTS = 10_000_000;
@@ -285,6 +297,9 @@ const DEFAULTS = Object.freeze({
   everyoneSince: null,
   proposalCeiling: 0,
   liveBuildStream: true,
+  // P8: pictures (services/bot-pictures.js).
+  imageModel: DEFAULT_IMAGE_MODEL,
+  pictureWeeklyCap: 24,
 });
 const MAX_CONCURRENCY = 4;
 const MAX_BUILD_CONCURRENCY = 4;
@@ -653,11 +668,15 @@ function parseSettings(rows) {
   const everyoneSince = Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null;
   const proposalCeiling = clampInt(map.get(KEY_PROPOSAL_CEILING), DEFAULTS.proposalCeiling, 0, MAX_PROPOSAL_CEILING);
   const liveBuildStream = map.get(KEY_LIVE_BUILD_STREAM) !== 'off';
+  const storedImageModel = String(map.get(KEY_IMAGE_MODEL) || '').trim();
+  const imageModel = MODEL_ID_RE.test(storedImageModel) ? storedImageModel : DEFAULTS.imageModel;
+  const pictureWeeklyCap = clampInt(map.get(KEY_PICTURE_WEEKLY_CAP), DEFAULTS.pictureWeeklyCap, 0, MAX_PICTURE_WEEKLY_CAP);
   return {
     mode, concurrency, batchSize, pausedApps, turnSeconds, turnInputTokens,
     shadowBuilds, buildConcurrency, shadowBuildPlatform, userWeeklyCents, adminWeeklyCents,
     liveAtOnce, perPerson, dmChat, voiceSession, voiceIssue, voiceChat, continueReads, models,
     defaultModel, helperModel, everyoneSince, proposalCeiling, liveBuildStream,
+    imageModel, pictureWeeklyCap,
   };
 }
 
@@ -925,6 +944,21 @@ function validateSettingsPatch(patch) {
       return { ok: false, error: 'helperModel must be an OpenRouter model id such as deepseek/deepseek-v4.1-flash-1017, or blank for GLM 5.3 Flash' };
     }
     updates.push([KEY_HELPER_MODEL, id]);
+  }
+  // P8: the image model (blank is the default) and the weekly picture cap.
+  if (body.imageModel !== undefined) {
+    const id = body.imageModel == null ? '' : String(body.imageModel).trim();
+    if (id && !MODEL_ID_RE.test(id)) {
+      return { ok: false, error: `imageModel must be an OpenRouter model id such as ${DEFAULT_IMAGE_MODEL}, or blank for the default` };
+    }
+    updates.push([KEY_IMAGE_MODEL, id]);
+  }
+  if (body.pictureWeeklyCap !== undefined) {
+    const n = Number(body.pictureWeeklyCap);
+    if (!Number.isInteger(n) || n < 0 || n > MAX_PICTURE_WEEKLY_CAP) {
+      return { ok: false, error: `pictureWeeklyCap must be an integer from 0 (no pictures) to ${MAX_PICTURE_WEEKLY_CAP}` };
+    }
+    updates.push([KEY_PICTURE_WEEKLY_CAP, String(n)]);
   }
   let weeklyLimitCents;
   if (body.weeklyLimitCents !== undefined) {
@@ -2493,6 +2527,8 @@ async function ensureBotSession(pool, config, bot, app) {
       WHERE cs.user_id = $1 AND cs.app_id = $2 AND cs.status IN ('active', 'paused')
         AND cs.branch_name = 'main'
         AND NOT EXISTS (SELECT 1 FROM homeroom_bot_runs r WHERE r.build_session_id = cs.id)
+        -- Nor a person's look session (homeroom-bot-thread-tools/look-into.js).
+        AND NOT EXISTS (SELECT 1 FROM homeroom_bot_look_sessions l WHERE l.session_id = cs.id)
       ORDER BY cs.id DESC LIMIT 1`,
     [bot.id, app.id],
   );
@@ -2650,9 +2686,17 @@ function botProposalCeiling(settings) {
  * proposal caps before anything is built: a hold costs nothing, and the
  * cap_freed refresh brings the issue back when there is room.
  */
-async function simulateCaps(pool, bot, appId, verdict, settings = null) {
+async function simulateCaps(pool, bot, appId, verdict, settings = null, { issueNumber = null } = {}) {
   if (verdict === 'ready') {
-    if (await openBotProposalCount(pool, bot, appId) >= PROPOSALS_PER_APP_CAP) return 'proposals_per_app';
+    // Homeroom bot parity (P4): a request a running batch of its project's
+    // owner started may have up to that batch's number open (homeroom-bot-batches.js).
+    // P6: the fix for a flaky check other changes wait on is not held by its
+    // project's slots at all (homeroom-bot-flaky-checks.js exemptFromAppCap).
+    const exempt = issueNumber != null
+      && await flakyChecks().exemptFromAppCap(pool, appId, issueNumber).catch(() => false);
+    const perApp = issueNumber == null ? PROPOSALS_PER_APP_CAP
+      : await require('./homeroom-bot-batches').proposalsPerAppFor(pool, appId, issueNumber, PROPOSALS_PER_APP_CAP);
+    if (!exempt && await openBotProposalCount(pool, bot, appId) >= perApp) return 'proposals_per_app';
     if (await openBotProposalTotal(pool, bot) >= botProposalCeiling(settings)) return 'proposals_total';
   }
   if (TRIPWIRE_VERDICTS.includes(verdict)) {
@@ -3192,7 +3236,7 @@ async function reuseHeldVerdict(pool, config, {
     if (!v.complicated && await plannedWithRequester(pool, { appId: app.id, issueNumber })) {
       v = { ...v, complicated: true };
     }
-    const caps = await simulateCaps(pool, bot, app.id, 'ready', settings)
+    const caps = await simulateCaps(pool, bot, app.id, 'ready', settings, { issueNumber })
       || (v.complicated ? await planTripwire(pool, app.id) : null);
     return JSON.parse(JSON.stringify({
       held: { id: Number(held.id), model: held.model || null }, personAt, seedReadAt: new Date().toISOString(),
@@ -3303,7 +3347,7 @@ async function planFromEarly(pool, config, {
       // Its timeline has the plan from Make it already (first-version-timeline.js).
       fromMakeIt: true,
     };
-    const caps = await simulateCaps(pool, bot, app.id, 'ready', settings);
+    const caps = await simulateCaps(pool, bot, app.id, 'ready', settings, { issueNumber });
     return JSON.parse(JSON.stringify({
       plan: { model: p.model || null, questions: p.questions }, personAt, seedReadAt: new Date().toISOString(),
       fingerprint, decidedNow, parsed: v, capSuppressed: caps ?? null,
@@ -3571,6 +3615,8 @@ async function runTriage(pool, config, {
           deps: {
             github, worker, agentTurn, limits, threadContext, managedOpenRouter, sessions,
             activeWorkers, votes: deps.votes || null, dm: deps.dm || null, fixedCheckSync: deps.fixedCheckSync || null, ...liveD,
+            // P6 (homeroom-bot-flaky-checks.js), stubbed in tests.
+            ...(deps.flakyChecks ? { flakyChecks: deps.flakyChecks } : {}),
             ...(deps.voice ? { voice: deps.voice } : {}), ...(deps.voiceDeps ? { voiceDeps: deps.voiceDeps } : {}),
           },
         });
@@ -4170,7 +4216,7 @@ async function runTriage(pool, config, {
     }
     // #4488: a complicated change's plan asks its requester before it is
     // built, so it counts against the daily questions and notes as well.
-    const caps = await simulateCaps(pool, bot, app.id, v.verdict, settings)
+    const caps = await simulateCaps(pool, bot, app.id, v.verdict, settings, { issueNumber })
       || (v.complicated ? await planTripwire(pool, app.id) : null);
     // #4239: about Homeroom itself means nothing on Homeroom's own board.
     if (v.platform && (await platformAppSlugs(pool)).includes(app.slug)) v = { ...v, platform: false };
@@ -4541,6 +4587,9 @@ async function recordLostLiveBuild({ pool, config, id, error = null }) {
   );
   if (!run) return 'recorded_already';
   if (run.build_session_id) await putAwayRecoveredSession(pool, { id: run.build_session_id }, { archive: true });
+  // Homeroom bot parity (P5): stopped to be redone with its requester's
+  // note (homeroom-bot-steer.js redo): the new read says what comes next.
+  if (await require('./homeroom-bot-steer').redoAsked(pool, run.id)) return 'redo';
   const settings = await readSettings(pool);
   const said = await sayBuildLost(pool, settings, run, { reason: why }).catch((err) => {
     log.warn('homeroom-bot', 'Could not say a lost build failed', { runId: run.id, err: err.message });
@@ -5573,6 +5622,8 @@ async function runChecksFix(pool, config, {
     }
   }
   const handOff = async ({ why, verdict, extra = {}, notChange = false, cause = null }) => {
+    // P6: why the sync below did not happen, for the card's first step.
+    let syncWhy = null;
     runId = await insertRun(pool, {
       ...billingOf(item, runMode),
       readReason: readReasonOf(item),
@@ -5601,6 +5652,11 @@ async function runChecksFix(pool, config, {
         await pool.query('UPDATE homeroom_bot_runs SET build_note = $2 WHERE id = $1',
           [runId, 'Brought up to date with main before handing it over; its checks run again.']).catch(() => {});
         await note('checks_synced', { runId, text: followup.checksSyncedText({ failingCount: failing.length }) });
+        // P6: step 1 of working past a check that is not the change's, on its card.
+        if (notChange) {
+          await look.once('flakySynced', () => flakyChecks(deps).onSynced(pool, { app, session, head, failing, runId, deps })
+            .then(() => true));
+        }
         log.info('homeroom-bot', 'Synced its proposal with main before handing its failing checks to a person', {
           app: app.slug, issueNumber, sessionId: session.id, head, sha: synced.sha || null, runId,
         });
@@ -5611,6 +5667,7 @@ async function runChecksFix(pool, config, {
       // connector's run ledger show), and logs it. Before, the reason was
       // dropped, and #5193 sat red with nothing to say why.
       const fcs = deps.fixedCheckSync || require('./fixed-check-sync');
+      syncWhy = synced?.why || null;
       const words = typeof fcs.declinedWords === 'function' ? fcs.declinedWords(synced?.why) : null;
       if (words) {
         await pool.query('UPDATE homeroom_bot_runs SET build_note = $2 WHERE id = $1',
@@ -5630,6 +5687,22 @@ async function runChecksFix(pool, config, {
       });
       return { ran: true, verdict, runId, acted: 'checks_shots_left' };
     }
+    // P6: a failure that is not the change's is worked past as a person would
+    // (homeroom-bot-flaky-checks.js): its flaky check found or filed, fixed by
+    // the bot, and the change's checks run again once that is in. Only what
+    // that cannot carry on is handed over below, with what was tried.
+    let ladder = null;
+    if (notChange) {
+      ladder = await look.once('flaky', () => flakyChecks(deps).onNotChange(pool, config, {
+        app, session, head, failing, runId, syncWhy, deps,
+      }));
+      if (ladder?.carriedOn) {
+        log.info('homeroom-bot', 'Its proposal\'s failing check is not its doing; getting the check fixed', {
+          app: app.slug, issueNumber, sessionId: session.id, head, runId, acted: ladder.acted,
+        });
+        return { ran: true, verdict, runId, acted: ladder.acted };
+      }
+    }
     if (notChange) {
       // Not the change's doing: the platform's to look at. Admins are told
       // (the Unexpected events list and its digest), the group voting on the
@@ -5645,7 +5718,7 @@ async function runChecksFix(pool, config, {
         });
         return true;
       });
-      await note('checks_not_change', { runId, text: followup.checksNotChangeText({ failingCount: failing.length }) });
+      await note('checks_not_change', { runId, text: ladder?.text || followup.checksNotChangeText({ failingCount: failing.length }) });
       log.info('homeroom-bot', 'Its proposal\'s failing checks are not its doing; told admins', {
         app: app.slug, issueNumber, sessionId: session.id, head, runId,
       });
@@ -5682,6 +5755,15 @@ async function runChecksFix(pool, config, {
     // what does not work (the change machine decides on the request's answer).
     return { ran: true, verdict, runId, acted: 'checks_person' };
   };
+
+  // P6: a change already past step 1 of a check that is not its own (synced
+  // with main, or its fix just in), failing the same checks again, needs no
+  // paid turn to say so: it goes on to the next step (homeroom-bot-flaky-checks.js).
+  const carried = await look.once('flakyCarry', () => flakyChecks(deps)
+    .carriesOn(pool, { app, sessionId: session.id, failing, broken }));
+  if (carried) {
+    return handOff({ why: carried.why, verdict: 'person', notChange: true, cause: 'not_change' });
+  }
 
   // Out of revisions: no turn, one note.
   if (!canRevise) {
@@ -8330,6 +8412,9 @@ async function noteRequestMerged(pool, session, deps = {}) {
       refresh = true;
     }
     if (refresh) await (deps.platform || platform()).botRefresh(appId).catch(() => {});
+    // P6: a fix of a flaky check is in: the changes that waited on it run
+    // their checks again (homeroom-bot-flaky-checks.js; never throws).
+    await flakyChecks(deps).fixMerged(pool, null, { appId, issues, sessionId: Number(merged.id), deps });
     return out;
   } catch (err) {
     if (deps.strict) throw err;
@@ -9620,6 +9705,11 @@ async function sweep(config, pool, { deps = {} } = {}) {
   await each('unproposedLooked', () => (deps.dm || require('./homeroom-bot-dm')).sweepUnproposedBuilds?.(pool, { ws: deps.ws || null }));
   await each('strandedAsks', () => sweepStrandedAsks(pool, bot, settings, deps));
   await each('buildsOwed', () => sweepWaitingBuilds(pool, deps));
+  // Homeroom bot parity (P4, P5): batches' roll-ups, and notes whose build ended first.
+  await each('batches', () => require('./homeroom-bot-batches').sweep(pool, deps));
+  await each('buildNotes', () => require('./homeroom-bot-steer').sweep(pool, deps));
+  // P6: fixes of flaky checks merged or ended, and the changes waiting on them.
+  await each('flakyChecks', () => flakyChecks(deps).sweep(pool, config, { deps }));
   return out;
 }
 
@@ -9708,6 +9798,9 @@ module.exports = {
   KEY_MODELS,
   KEY_DEFAULT_MODEL,
   KEY_HELPER_MODEL,
+  KEY_IMAGE_MODEL,
+  KEY_PICTURE_WEEKLY_CAP,
+  DEFAULT_IMAGE_MODEL,
   MODEL_ID_RE,
   triagePromptFor,
   signalNote,

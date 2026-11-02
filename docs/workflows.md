@@ -744,6 +744,8 @@ A new machine brings the same two layers:
 | `release` | `release:<GIT_SHA>`, one per release of the platform | `adopting` → `done`, `failed` or `abandoned` | Runs the boot adoptions once per release (`release.adopt`), in that release's own processes |
 | `clock` | `clock:<job>`, one per scheduled platform job | `waiting` ⇄ `running`; `retired` | Runs each job on its schedule (`clock.<job>`), wherever the workflow runs; its old leader timers are deleted |
 | `turn` | `agent:<id>` for a conversation, `session:<id>` for a change | `idle` ⇄ `running` | A person's turn is its `turn.run` work item; the leader's turn recovery, its watchdog, the conversation lease's renewal and the process holds' mirror are deleted |
+| `bot-look` | `look:<id>`, for each look into a project's code a chat with the Homeroom bot asked for (`look_into`) | `looking` → `done` / `failed` | New: the look is its `look.run` work item, a read-only turn on durable steps |
+| `bot-investigation` | `investigation:<id>`, for each investigation the Homeroom bot runs for a person, from its Start | `checking` ⇄ `waiting` → `ended` | New: each check-in is its `investigation.checkIn` work item, the next one its deadline |
 
 ### turn
 
@@ -1701,6 +1703,46 @@ board's banner read them.
   refused, a pause included: an app paused then stays paused. Delete the
   `enabled:main-check` row of `wf_settings` after such a rollback (the same holds for every
   machine's guard).
+
+### bot-look
+
+A look into a project's code that a person's chat with the Homeroom bot asked for
+(`src/workflow/bot-look/`, the look's own code in
+`services/homeroom-bot-thread-tools/look-into.js`). One instance per look (`look:<id>`, its
+row in `homeroom_bot_looks`).
+
+- **Asked** by the chat's `look_into` tool, keyed by the look, after it wrote the look's row
+  (one running per person at a time, by the table's unique index).
+- **The look** is one resumable work item (`look.run`): a read-only scout turn of the bot's,
+  on the platform's default model, in the person's look session on the project's main, on
+  the item's steps (`services/durable-turn.js`), so a restart follows the turn rather than
+  starting another. Its end is a compare-and-set on the row.
+- **The chat waits** on the row for up to three minutes. One that stopped waiting set the
+  row's `deliver` to `post`, and the findings are posted in that chat once the look ends,
+  under the look's idempotency key. A run that fails for good is recorded and, when the
+  chat stopped waiting, said there (`look.failed`).
+
+### bot-investigation
+
+An investigation the Homeroom bot runs for a person over days
+(`src/workflow/bot-investigation/`, its rules in `rules/investigation.ts`, its work in
+`services/homeroom-bot-thread-tools/investigate.js`). One instance per investigation
+(`investigation:<id>`), created by its owner's tap on Start; while it is only offered, it is
+a row in `homeroom_bot_investigations` and a card, and nothing runs.
+
+- **A check-in** is one work item (`investigation.checkIn`, keyed by its sequence number):
+  a look into the project's code (the same turn as `bot-look`'s) asked the goal, the notes
+  so far and what changed since the last check-in, its notes written once and its short
+  update said once in the investigation's thread. The first runs at Start; each next one is
+  the instance's deadline (`CheckInDue`), one interval after the last ended.
+- **The money** is added up here from each check-in's result, against the budget it was
+  started with; every check-in also counts toward the person's weekly building time.
+- **It ends** when a check-in says the question is answered, the budget or the days run
+  out, its owner taps Stop (a check-in under way is cancelled), the bot is turned off or
+  stops working on the project, or three check-ins in a row fail. Its end is said once
+  (`investigation.ended`), and its card is drawn from every decision
+  (`investigation.card`).
+- **The row's** `state`, `spent_cents`, `next_at` and `ended_*` are its projection.
 
 ### clock
 

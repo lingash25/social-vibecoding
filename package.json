@@ -30,7 +30,8 @@
     "build:shell": "node frontend/scripts/build-shell.mjs",
     "lint:sql": "node scripts/check-sql.js",
     "check:types": "tsc -p tsconfig.server.json",
-    "build:schema": "node scripts/build-schema.js"
+    "build:schema": "node scripts/build-schema.js",
+    "audit:layout": "node scripts/layout-audit/run.mjs"
   },
   "devDependencies": {
     "@types/node": "26.1.2",

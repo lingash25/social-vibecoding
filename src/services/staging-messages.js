@@ -680,6 +680,9 @@ async function ensureBotDmFixture(pool, user) {
       },
     });
   }
+  // Homeroom bot parity (P1-P9): its three private threads, sent before the
+  // ready and activity cards below so the DM's newest messages stay theirs.
+  await ensureBotParityThreads(pool, { user, botId: bot.id, conversationId: opened.conversationId });
   // #3736: and two activity cards, each the bot's work on a request followed
   // in place: one that ended in a proposal, and one being built now, the
   // newest. Their state is homeroom-bot-activity.js demoCards', found by
@@ -885,6 +888,191 @@ async function ensureBotDmStory(pool, { botId, conversationId, cardKey }) {
       },
     },
   });
+}
+
+// Homeroom bot parity (P1-P9): three private threads with Homeroom bot, as a
+// conversation there looks once it has its new cards, which a staging copy
+// cannot reach any other way (the bot's model never runs there). Each is a
+// thread from the bot's "+" (its line in Main, kind 'opened_thread', and its
+// private_threads row), named by the viewer's first words in it, with the
+// bot's replies carrying the cards as stored messages:
+//   1. talking it through: the "Looked at" line and options to pick from,
+//      then a question set (bot-cards/options.tsx, questions.tsx);
+//   2. a batch of requests worked through at once, with its roll-up, and a
+//      note added to a build that is running (batch.tsx, build-note.tsx);
+//   3. an investigation that checks in for days (investigation.tsx).
+// Obviously fake ("Staging demo"), with no project, batch, note or
+// investigation behind the cards: a tap on one decides nothing (the demo's
+// card route answers { demo }), and nothing rings (notify: false). Each
+// thread is sent once, keyed on its root's idempotency key.
+const PARITY_THREADS = Object.freeze([
+  {
+    key: 'staging-hrbot-parity-talk',
+    lines: [
+      { me: true, content: 'Staging demo: older notifications are grouped by day now. Could we group them another way?' },
+      {
+        content: 'Staging demo: today one busy change can show up in four day groups. Here are three other ways. '
+          + 'Tap Show to see one, or Pick the one you want.',
+        meta: {
+          looked: {
+            items: [
+              { what: 'Read Staging demo app request #21' },
+              { what: 'Read 23 files in Staging demo app' },
+              { what: 'Read your last 200 notifications' },
+            ],
+            ms: 100000,
+          },
+          card: {
+            type: 'options', v: 1, title: 'Ways to group older notifications', picked: null,
+            options: [
+              { key: 'A', title: 'By change', detail: 'One row per change, newest activity first.' },
+              { key: 'B', title: 'By project, then change', detail: 'A heading per project, its changes under it.' },
+              { key: 'C', title: 'Day, then change', detail: 'Days stay; a change\'s lines fold into one row.' },
+            ],
+          },
+        },
+      },
+      { me: true, content: 'Staging demo: let\'s do B. Ask me anything you need first.' },
+      {
+        content: 'Staging demo: four things to settle before I write the request. My guess is picked; change any.',
+        meta: {
+          card: {
+            type: 'questions', v: 1, title: 'Before I write the request', answered: null,
+            questions: [
+              { question: 'Where should grouping happen?', answers: ['The bell only', 'The bell and Messages'], guess: 0 },
+              { question: 'A request and its change: one row?', answers: ['One row', 'Two rows'], guess: 0 },
+              { question: 'A folded row shows', answers: ['The newest line', 'The newest line and who', 'A count'], guess: 1 },
+              { question: 'Opening a row marks', answers: ['All of it read', 'Only what you saw'], guess: 0 },
+            ],
+          },
+        },
+      },
+    ],
+  },
+  {
+    key: 'staging-hrbot-parity-batch',
+    lines: [
+      { me: true, content: 'Staging demo: work through my unclaimed requests on Staging demo app. Ask me about anything unclear first.' },
+      {
+        content: 'Staging demo: I read all nine and started the ready ones. This card follows them until they are live.',
+        meta: {
+          looked: { items: [{ what: 'Read 9 Staging demo app requests' }], ms: 180000 },
+          card: {
+            type: 'batch', v: 1, state: 'running', batchId: 0,
+            project: 'staging-demo-app', projectName: 'Staging demo app',
+            requests: [
+              { number: 21, title: 'Staging demo, diagrams on proposals', read: 'ready', note: null, why: null },
+              { number: 22, title: 'Staging demo, cards use the space better', read: 'ready', note: null, why: null },
+              { number: 23, title: 'Staging demo, checks as a progress bar', read: 'ready', note: null, why: null },
+              { number: 24, title: 'Staging demo, chat keeps its scroll', read: 'ready', note: null, why: null },
+              { number: 25, title: 'Staging demo, comment bar stays put', read: 'question', note: 'Should it stay open while you scroll?', why: null },
+              { number: 26, title: 'Staging demo, screenshots on the request page', read: 'ready', note: null, why: null },
+            ],
+            counts: { total: 6, ready: 5, question: 1, person: 0, done: 0, reading: 0, underway: 0, unread: 0 },
+            label: '6 requests · 5 ready · 1 question',
+            raise: { perPerson: 6, proposalsPerApp: 10, as: 'owner' },
+            started: [21, 22, 23, 24, 26],
+            refused: [],
+            rollup: { live: 1, ready: 1, checks: 1, building: 2, waiting: 0, stopped: 0, total: 5 },
+            progress: [
+              { number: 21, state: 'live', title: 'Staging demo, diagrams on proposals' },
+              { number: 22, state: 'ready', title: 'Staging demo, cards use the space better' },
+              { number: 23, state: 'checks', title: 'Staging demo, checks as a progress bar' },
+              { number: 24, state: 'building', title: 'Staging demo, chat keeps its scroll' },
+            ],
+          },
+        },
+      },
+      { me: true, content: 'Staging demo: for the scroll one, keep the reply box pinned too.' },
+      {
+        content: 'Staging demo: added to that build. It reads your note before it finishes, so it goes up for a vote with everything else.',
+        meta: {
+          card: {
+            type: 'build_note', v: 1, state: 'delivered', noteId: 0,
+            project: 'staging-demo-app', projectName: 'Staging demo app', number: 24,
+            title: 'Staging demo, chat keeps its scroll', note: 'Keep the reply box pinned too.',
+            deliveredAt: null,
+          },
+        },
+      },
+    ],
+  },
+  {
+    key: 'staging-hrbot-parity-investigation',
+    lines: [
+      { me: true, content: 'Staging demo: keep an eye on why the sync check fails now and then, over the next few days.' },
+      {
+        content: 'Staging demo: day 2 update. So far it only fails when two saves land in the same second.',
+        meta: {
+          card: {
+            type: 'investigation', v: 1, investigationId: 0, state: 'running',
+            goal: 'Staging demo: find out why the sync check fails now and then.',
+            project: { slug: 'staging-demo-app', name: 'Staging demo app' },
+            everyHours: 6, days: 5, budgetCents: 300, spentCents: 38, model: 'DeepSeek V4.1 Flash',
+            checkinsDone: 3,
+            checkins: [
+              { hoursAgo: 14, line: 'It failed once overnight, when two saves landed in the same second.' },
+              { hoursAgo: 8, line: 'Nothing new: no failures since.' },
+              { hoursAgo: 2, line: 'It failed again at 3 AM, the same way.' },
+            ],
+            notes: 'Staging demo notes.\nCheck-in 1: the sync check fails when two saves land in the same second.',
+          },
+        },
+      },
+    ],
+  },
+]);
+
+/** Pure: a parity card with its times made real, relative to `now`. */
+function parityCardAt(card, now = Date.now()) {
+  if (!card) return card;
+  const hours = (h) => new Date(now + h * 3600 * 1000).toISOString();
+  if (card.type === 'investigation') {
+    const { checkins = [], ...rest } = card;
+    return {
+      ...rest,
+      startedAt: hours(-26), endsAt: hours(94), nextAt: hours(2),
+      checkins: checkins.map(({ hoursAgo, line }) => ({ at: hours(-hoursAgo), line })),
+    };
+  }
+  if (card.type === 'build_note') return { ...card, deliveredAt: hours(-0.2) };
+  return card;
+}
+
+async function ensureBotParityThreads(pool, { user, botId, conversationId }) {
+  const now = Date.now();
+  for (const thread of PARITY_THREADS) {
+    const sent = await pool.query(
+      `SELECT id FROM conversation_messages WHERE conversation_id = $1 AND sender_id = $2 AND idempotency_key = $3`,
+      [conversationId, botId, `${thread.key}-root`]
+    );
+    if (sent.rows.length) continue;
+    const root = await conversations.sendMessage(pool, { id: botId }, conversationId, {
+      content: 'New thread.', idempotency_key: `${thread.key}-root`,
+    }, { notify: false, metadata: { homeroomBot: { kind: 'opened_thread', changeKind: 'any' } } });
+    const rootId = root?.messageId ?? root?.message?.id;
+    if (!rootId) continue;
+    await pool.query(
+      `INSERT INTO private_threads (user_id, conversation_id, root_message_id, app_id, kind, state)
+       VALUES ($1, $2, $3, NULL, 'ask', 'open') ON CONFLICT (root_message_id) DO NOTHING`,
+      [user.id, conversationId, rootId]
+    );
+    let index = 0;
+    for (const line of thread.lines) {
+      index += 1;
+      const key = `${thread.key}-${index}`;
+      if (line.me) {
+        await conversations.sendMessage(pool, user, conversationId, {
+          content: line.content, idempotency_key: key, thread_root_id: rootId,
+        }, { notify: false });
+        continue;
+      }
+      const meta = { kind: 'chat', ...line.meta, ...(line.meta?.card ? { card: parityCardAt(line.meta.card, now) } : {}) };
+      await conversations.sendMessage(pool, { id: botId }, conversationId, {
+        content: line.content, idempotency_key: key, thread_root_id: rootId,
+      }, { notify: false, metadata: { homeroomBot: meta } });
+    }
+  }
 }
 
 // The demo of a card joining work already under way: what opening the bot's

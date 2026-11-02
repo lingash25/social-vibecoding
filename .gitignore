@@ -9,6 +9,8 @@ node_modules
 /public/shell/assets/
 /public/shell/release.json
 /public/shell/worker.js
+# The layout audit's report and screenshots (npm run audit:layout).
+/layout-audit-report/
 .env
 # Host-managed deployment state; in particular, never stage the CNPG secret.
 runtime/cnpg-replication.env*

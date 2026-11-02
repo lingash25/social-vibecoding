@@ -1,0 +1,117 @@
+#!/usr/bin/env node
+'use strict';
+
+// usernode-image (Homeroom bot parity, P8): a picture for the app this build
+// is changing, written into the working tree.
+//
+//   usernode-image "<what it shows>" --out public/img/hero.png [--aspect square|wide|tall] [--variant light|dark]
+//       makes a picture on Homeroom bot's picture model, paid from the
+//       building time of whoever pays for this build (and their weekly
+//       number of pictures), under the platform's content rules.
+//   usernode-image --from <link to a request's picture, or its id> --out <path>
+//       saves a picture a request links (https://…/issue-images/<id>).
+//
+// Build mode only: it authenticates with WORKER_JWT, which a scout turn
+// does not have. The platform makes, bills and checks the picture
+// (POST /api/internal/sessions/$SESSION_ID/pictures, services/bot-pictures.js);
+// this only writes the file, and never outside the working tree. It prints
+// one line of JSON ({ ok, path, contentType, bytes, ... } or { ok: false,
+// message }) and exits 0 when the file was written.
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+const USAGE = 'usage: usernode-image "<what it shows>" --out <path> [--aspect square|wide|tall] [--variant light|dark]'
+  + ' | usernode-image --from <link or id> --out <path>';
+const EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp' };
+
+function say(out, code) {
+  process.stdout.write(`${JSON.stringify(out)}\n`);
+  process.exit(code);
+}
+
+function parse(argv) {
+  const out = { prompt: null, out: null, aspect: null, variant: null, from: null };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === '--out' || arg === '--aspect' || arg === '--variant' || arg === '--from') {
+      const value = argv[i + 1];
+      if (value == null) return null;
+      out[arg.slice(2)] = value;
+      i += 1;
+    } else if (arg.startsWith('--')) {
+      return null;
+    } else if (out.prompt == null) {
+      out.prompt = arg;
+    } else {
+      out.prompt = `${out.prompt} ${arg}`;
+    }
+  }
+  return out;
+}
+
+/** The file to write, inside the working tree, or null. */
+function target(out) {
+  if (!out || path.isAbsolute(out) || out.startsWith('-')) return null;
+  const root = process.cwd();
+  const full = path.resolve(root, out);
+  const rel = path.relative(root, full);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel) || rel.split(path.sep).includes('.git')) return null;
+  return { full, rel };
+}
+
+async function main() {
+  const args = parse(process.argv.slice(2));
+  if (!args || !args.out || (!args.prompt && !args.from) || (args.prompt && args.from)) say({ ok: false, message: USAGE }, 2);
+  const file = target(args.out);
+  if (!file) say({ ok: false, message: '--out must be a path inside this repository, such as public/img/hero.png' }, 2);
+  const token = process.env.WORKER_JWT || '';
+  const session = process.env.SESSION_ID || '';
+  if (!token || !/^\d+$/.test(session)) say({ ok: false, message: 'usernode-image works only in a build turn.' }, 1);
+  const base = `${String(process.env.PLATFORM_URL || 'http://usernode:3000').replace(/\/$/, '')}/api/internal/sessions/${session}`;
+  let url;
+  let init;
+  if (args.from) {
+    const id = /([a-f0-9]{32})(?![a-f0-9])/.exec(String(args.from))?.[1];
+    if (!id) say({ ok: false, message: '--from takes a request picture\'s link (…/issue-images/<id>) or its id.' }, 2);
+    url = `${base}/request-pictures/${id}`;
+    init = { method: 'GET', headers: { Authorization: `Bearer ${token}` } };
+  } else {
+    if (args.aspect && !['square', 'wide', 'tall'].includes(args.aspect)) say({ ok: false, message: '--aspect is square, wide or tall.' }, 2);
+    if (args.variant && !['light', 'dark'].includes(args.variant)) say({ ok: false, message: '--variant is light or dark.' }, 2);
+    url = `${base}/pictures`;
+    init = {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: args.prompt, ...(args.aspect ? { aspect: args.aspect } : {}), ...(args.variant ? { variant: args.variant } : {}) }),
+    };
+  }
+  let res;
+  try {
+    res = await fetch(url, { ...init, signal: AbortSignal.timeout(240_000) });
+  } catch {
+    say({ ok: false, message: 'The platform could not be reached. No picture was written.' }, 1);
+  }
+  const data = Buffer.from(await res.arrayBuffer());
+  if (!res.ok) {
+    let message = `The platform refused (HTTP ${res.status}).`;
+    try { message = JSON.parse(data.toString('utf8')).message || message; } catch { /* not JSON */ }
+    say({ ok: false, message: `${message} No picture was written.` }, 1);
+  }
+  const contentType = String(res.headers.get('content-type') || '').split(';')[0].trim();
+  if (!EXT[contentType] || !data.length) say({ ok: false, message: 'What came back is not a picture. No picture was written.' }, 1);
+  fs.mkdirSync(path.dirname(file.full), { recursive: true });
+  const part = `${file.full}.part-${process.pid}`;
+  fs.writeFileSync(part, data);
+  fs.renameSync(part, file.full);
+  const ext = path.extname(file.rel).toLowerCase();
+  const fits = ext === EXT[contentType] || (contentType === 'image/jpeg' && ext === '.jpeg');
+  say({
+    ok: true, path: file.rel, contentType, bytes: data.length,
+    ...(res.headers.get('x-picture-width') ? { width: Number(res.headers.get('x-picture-width')), height: Number(res.headers.get('x-picture-height')) } : {}),
+    ...(res.headers.get('x-pictures-left') ? { picturesLeftThisWeek: Number(res.headers.get('x-pictures-left')) } : {}),
+    ...(fits ? {} : { note: `It is a ${contentType} picture: rename the file to end in ${EXT[contentType]}.` }),
+  }, 0);
+}
+
+main().catch((err) => say({ ok: false, message: `usernode-image failed: ${String(err && err.message || err).slice(0, 200)}` }, 1));

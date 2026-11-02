@@ -216,7 +216,7 @@ export function MakeRuleLine({ preset, onPick, who }: { preset: PresetKey; onPic
             id="make-rule-tip"
             role="note"
             data-make-rule-tip=""
-            className="absolute bottom-full end-0 z-10 mb-1.5 w-[min(20rem,calc(100vw-2rem))] rounded-2xl bg-white px-3.5 py-3 text-start shadow-[inset_0_0_0_1px_var(--app-sheet-line),0_8px_24px_rgba(0,0,0,0.14)] dark:bg-zinc-900"
+            className="absolute bottom-full end-0 z-10 mb-1.5 w-[min(20rem,calc(var(--platform-float-w)-2rem))] rounded-2xl bg-white px-3.5 py-3 text-start shadow-[inset_0_0_0_1px_var(--app-sheet-line),0_8px_24px_rgba(0,0,0,0.14)] dark:bg-zinc-900"
           >
             <p className="text-[15px] font-[650] text-zinc-900 dark:text-zinc-100">{t('onboarding:firstSession.make.next.title')}</p>
             <ul className="mt-1.5 list-disc ps-4 text-[13px] leading-[1.4] text-zinc-600 dark:text-zinc-300">

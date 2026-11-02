@@ -89,12 +89,17 @@ const repoRef = require('./repo-ref');
 const { labelledAsPullRequest } = require('./request-mentions');
 
 const MAX_HISTORY = 24;
-const MAX_ROUNDS = 6;
-const MAX_OUTPUT_TOKENS = 900;
+// Homeroom bot parity, P1 (room to answer): a conversation with the bot gets
+// the room a coding agent's chat has, on the same cheap model. Sixteen
+// rounds of lookups (the transport's limit on messages is kept by compacting
+// the turn's oldest lookups, compactRounds), and room for a long, structured
+// answer when they ask for one. It was 6 rounds and 900 tokens.
+const MAX_ROUNDS = 16;
+const MAX_OUTPUT_TOKENS = 4000;
 // A round cut off at its output limit is asked again with this much room: a
 // reasoning model spends its thinking from the same allowance, and a long
 // answer about their work is where it ran out.
-const RETRY_OUTPUT_TOKENS = 1800;
+const RETRY_OUTPUT_TOKENS = 8000;
 // #3733: a failed model request is asked again on a fresh route (a new
 // provider session), up to MAX_ATTEMPTS times in all, while the turn is
 // RETRY_WITHIN_MS young (retryPlan). These are the failures of a provider
@@ -105,11 +110,13 @@ const RETRYABLE_MODEL_ERRORS = new Set([
   'rate_limited', 'response_too_large', 'empty_answer',
 ]);
 const MAX_ATTEMPTS = 3;
-const RETRY_WITHIN_MS = 90_000;
-// #3772: one model request's clock. The DM's requests are not streamed, so
-// the transport's default 25 seconds timed a whole reasoning answer out on
-// 2 October.
-const REQUEST_TIMEOUT_MS = 45_000;
+// P1: a turn of sixteen rounds runs for minutes, and its later requests are
+// worth asking again too (it was 90 seconds, when a turn had six).
+const RETRY_WITHIN_MS = 240_000;
+// #3772: one model request's clock. The transport's default 25 seconds timed
+// a whole reasoning answer out on 2 October. P1: a long answer of 4000
+// tokens, streamed or not, takes this long at worst.
+const REQUEST_TIMEOUT_MS = 90_000;
 // The longest a provider's Retry-After is waited for within a turn.
 const MAX_RETRY_AFTER_WAIT_MS = 20_000;
 // #3772: a turn no model request could answer is asked again on its own,
@@ -131,7 +138,7 @@ const RETRY_WAITS_MS = [0, 1_500];
 const KEY_ERRORS = new Set(['no_key', 'authentication', 'billing']);
 // When the rounds could not answer, one plain request (plainAnswer) while the
 // turn is this young, from this many of the conversation's newest messages.
-const PLAIN_WITHIN_MS = 150_000;
+const PLAIN_WITHIN_MS = 300_000;
 const PLAIN_HISTORY = 8;
 // A round answers at most this many of the model's calls, so a turn always
 // fits the transport's limit on messages.
@@ -152,7 +159,8 @@ const MAX_CARDS = 3;
 // label (the client keeps 60 characters of one).
 const MAX_SUGGESTIONS = 3;
 const MAX_SUGGESTION_CHARS = 60;
-const MAX_REPLY_CHARS = 2500;
+// P1: a long answer fits (a message holds 8000, conversations.js).
+const MAX_REPLY_CHARS = 8000;
 const MAX_TOOL_RESULT_CHARS = 12_000;
 const MAX_TITLE_CHARS = 200;
 const MAX_DETAILS_CHARS = 3000;
@@ -356,6 +364,7 @@ function dmModule(deps) { return deps.dmSvc || require('./homeroom-bot-dm'); }
 function activityModule(deps) { return deps.activitySvc || require('./homeroom-bot-activity'); }
 function botModule(deps) { return deps.botSvc || require('./homeroom-bot'); }
 function liveModule(deps) { return deps.liveSvc || require('./homeroom-bot-live'); }
+function threadToolsOf(deps) { return deps?.threadTools || require('./homeroom-bot-thread-tools'); }
 
 // ── One person's turns, one after another ─────────────────────────────────
 //
@@ -380,6 +389,15 @@ function platformRules() {
     .join('\n\n');
 }
 
+// 1 Nov 2026: in a thread, a status question is about that thread. The
+// general rule (systemPrompt: "status?" is answered from my_work's
+// onYourPage) is for the main chat.
+const THREAD_STATUS_LINES = Object.freeze([
+  '- Here, "status?", "how is it going?" or "where are we?" means what they asked for in this thread: say what you',
+  '  are doing for it right now, or that nothing is under way yet and what happens next. Do not list the rest of',
+  '  their page (my_work) unless they ask about everything.',
+]);
+
 /**
  * Pure (31 Oct 2026): what a turn written in a thread that is no request's
  * is told: that the conversation below is that thread, and for a draft's
@@ -393,6 +411,9 @@ function otherThreadLines(thread) {
     'THIS CONVERSATION',
     '- They are writing in a thread of this chat, and the conversation below is that thread. Answer their newest',
     '  message here, in this thread.',
+    // 1 Nov 2026: "Status? How is it going?" in a "+" design thread was
+    // answered with their whole page (my_work), and none of it this thread.
+    ...THREAD_STATUS_LINES,
   ];
   const d = thread.draft;
   if (d?.kind === 'ask' && d.about) {
@@ -416,8 +437,16 @@ function otherThreadLines(thread) {
     // 1 Nov 2026: a screen is drawn here, in this thread (draw_screen).
     lines.push(
       `- They started this thread with your "+", ${what}${d.appSlug ? ` on ${d.appName || d.appSlug} (project "${d.appSlug}")` : ', on any project'}.`,
-      '  Help them say what they want, then offer it as a request with offer_request. When they want to see how a',
+      // 1 Nov 2026 (Evan): File it is under the bot's offer alone, not at
+      // the thread's foot, so the offer comes once it is ready, unasked.
+      '  Help them say what they want. Once it is clear enough to build, offer it as a request with offer_request:',
+      '  File it shows only under that offer, so make it then, without waiting to be asked. When they want to see how a',
       '  screen could look, call draw_screen: it is drawn here, in this thread, and changed at their word.',
+    );
+  } else if (!d) {
+    lines.push(
+      '- Nothing in this thread is filed until you offer it. Once what they want is clear enough to build, offer it as',
+      '  a request with offer_request: File it shows only under that offer.',
     );
   } else if (d?.appSlug) {
     const name = d.appName || d.appSlug;
@@ -457,11 +486,14 @@ function threadLines(request) {
     `- They are writing in the thread of ${what}. Everything they say here is about it: answer about it, in this`,
     `  thread, and never ask which request they mean. For your records of it, call request_detail with project`,
     `  "${request.appSlug}" and number ${Number(request.issueNumber)}.`,
+    '- Here, "status?", "how is it going?" or "where are we?" means this request: say where it stands right now,',
+    '  from request_detail or progress, and what happens next. Do not list the rest of their page (my_work) unless',
+    '  they ask about everything.',
     '',
   ];
 }
 
-function systemPrompt({ username, perPerson = 2, today = new Date(), platform = true, request = null, thread = null }) {
+function systemPrompt({ username, perPerson = 2, today = new Date(), platform = true, request = null, thread = null, extra = [] }) {
   return [
     `You are Homeroom bot, talking with @${username} in a direct message on Homeroom. Homeroom is a platform where`,
     'people build small web apps together. Every change to a project is voted on by the project\'s group.',
@@ -529,7 +561,9 @@ function systemPrompt({ username, perPerson = 2, today = new Date(), platform = 
     '- Draw a screen with them when they want to see how something could look, or to change how a screen looks or is',
     '  laid out (draw_screen): your designer draws it from their words, the project\'s code and any picture they sent, in',
     '  a private thread (from Main Chat, a new one, which it says), and changes it at their word there. Call it alone,',
-    '  and do not reply: the designer answers them.',
+    '  and do not reply: the designer answers them. When they have asked you to draw, render, show or mock up a',
+    '  screen, call draw_screen in that turn: never answer with what you are about to do, and never ask whether to',
+    '  start it.',
     '- Read the code of a project they can build on, as it is on main, when they ask how something works or what',
     '  the code does (list_source to find files by path or name, then read_source). Answer from what the code says,',
     '  in plain words, and say which file you read. Never quote secrets, and say plainly when the code you read does',
@@ -537,7 +571,9 @@ function systemPrompt({ username, perPerson = 2, today = new Date(), platform = 
     '- Tell the Homeroom team about a problem they hit that nothing above fixes, when they ask you to or say yes',
     '  when you offer (report_problem). It is filed as a report from them where the team tracks problems, which',
     '  anyone can read; the last few messages of this chat go only to the team, privately. Say so.',
-    'Finish every turn by calling reply exactly once: short plain text, cards for up to 3 requests,',
+    // Homeroom bot parity (P1-P9): what the thread tools add this turn (homeroom-bot-thread-tools/).
+    ...extra,
+    'Finish every turn by calling reply exactly once: plain text (short unless they asked for more), cards for up to 3 requests,',
     'changes or projects you mention, and up to 3 suggestions: short things they might say next, in their own',
     'words ("How long will it take?"), each something you can do or answer from this chat. Offer at least one',
     'unless the conversation has plainly ended.',
@@ -583,7 +619,10 @@ function systemPrompt({ username, perPerson = 2, today = new Date(), platform = 
     '  to tell. English only when you cannot tell.',
     '- When something they ask for already exists, say where they find it, in the words they see on screen: the',
     '  screen or tab and the button to tap. Only when the tools or the code you read show it.',
-    '- Keep a reply under 120 words unless they ask for detail.',
+    // P1: room for a real answer when they ask for one, still short for small talk.
+    '- Keep small talk and quick answers short: a few sentences. When they ask for analysis, options, a plan, a',
+    '  comparison or detail, take the room it needs: a longer answer laid out with short headings, lists or a',
+    '  table (Markdown), still in plain words, and lead with the answer itself.',
     '- Never write an em dash. Use a comma, a colon or a full stop instead.',
     '- From this chat you cannot build, merge, vote, close requests yourself or change settings, or change anybody else\'s',
     '  change. Changes come from requests, and your own changes are updated through',
@@ -882,7 +921,7 @@ const TOOLS = [
       parameters: {
         type: 'object',
         properties: {
-          text: { type: 'string', description: 'Your reply, plain and short.' },
+          text: { type: 'string', description: 'Your reply in plain words: short for small talk, longer and laid out when they ask for analysis, options or detail.' },
           cards: {
             type: 'array',
             maxItems: MAX_CARDS,
@@ -1392,6 +1431,19 @@ async function canFile(pool, app, user) {
 // withdrawal, a report), and "the team has been told" or "I withdrew it" only
 // when report_problem or withdraw_proposal did it.
 
+// 1 Nov 2026: says a screen is being drawn: the `drawing` claim below, and
+// what design-bot.js reads as a design it says it made and did not.
+const DRAWING_CLAIM = new RegExp(
+  '\\bI(?:\'m| am)\\s+(?:now\\s+|just\\s+)?(?:drawing|sketching|designing|rendering|mocking (?:it |this |that )?up|laying (?:it |this |that )?out)\\b'
+  + '|\\b(?:I(?:\'ll| will)|let me)\\s+(?:now\\s+|just\\s+|go ahead and\\s+)?(?:draw|sketch|design|render|mock(?: it| this| that)? up|lay (?:it |this |that )?out)\\b'
+  + '(?![^.!?\\n]*\\b(?:if|when|once|after|as soon as) you\\b)'
+  // "Drawing it now…", "Drawing the main screen next"; not "Rendering the list as cards would fit".
+  + '|(?:^|[.!\\n]\\s*)(?:drawing|rendering|sketching|designing|mocking up)\\s+'
+  + '(?:it|this|that|them|(?:the|your|a|an)\\s+(?:[\\w\'-]+\\s+){0,2}(?:screens?|designs?|pages?|versions?|mock-?ups?|layouts?))\\b'
+  + '|\\b(?:drawing|rendering|sketching) (?:it|this|that|them) (?:now|up)\\b',
+  'i',
+);
+
 const CLAIMS = Object.freeze([
   {
     kind: 'filed',
@@ -1422,14 +1474,17 @@ const CLAIMS = Object.freeze([
   {
     kind: 'posted',
     re: /\bI(?:'ve| have)?(?: just| now)? (?:posted|added|put|passed|left|sent|shared)\b[^.!?\n]{0,80}\b(?:discussion|comment|request|proposal|board|issue|thread)\b/i,
-    backed: (ctx) => !!(ctx.posted || ctx.revised || ctx.commented),
+    // P8: pictures make_pictures put under this reply ("I've put them in this thread").
+    // Homeroom bot parity (P5): a note sent to a running build (add_to_build).
+    backed: (ctx) => !!(ctx.posted || ctx.revised || ctx.commented || ctx.pictures || ctx.steered),
     said: 'says something was posted',
     instead: 'I haven\'t posted that anywhere yet.',
   },
   {
     kind: 'started',
     re: /\bI(?:'m| am)\s+(?:now\s+)?(?:starting|working on (?:it|that|this|#\d+)|building (?:it|that|this|#\d+)|on it)\b|\bI(?:'ve| have)\s+started\b|\bI(?:'ll| will) (?:start(?: on)?|look at|pick up) (?:it|that|this|#\d+) (?:now|right away|right now)\b/i,
-    backed: (ctx) => !!(ctx.started || ctx.posted || ctx.revised || ctx.commented || ctx.workBusy),
+    // Homeroom bot parity (P4): reads a batch queued this turn (work_through).
+    backed: (ctx) => !!(ctx.started || ctx.posted || ctx.revised || ctx.commented || ctx.workBusy || ctx.batchQueued),
     said: 'says you started work on something',
     instead: 'I haven\'t started on it yet.',
   },
@@ -1475,13 +1530,38 @@ const CLAIMS = Object.freeze([
     instead: 'I haven\'t told the team yet.',
   },
   {
+    kind: 'drawing',
+    // 1 Nov 2026: "Drawing it now from the app's own markup and styles." was
+    // the whole answer, and nothing was drawn: only draw_screen hands a
+    // screen to the designer. "I'm drawing", "I'll draw it", "rendering it
+    // now"; not "I can draw it" or "I'll draw it once you say which".
+    re: DRAWING_CLAIM,
+    backed: (ctx) => !!ctx.drawScreen,
+    said: 'says you are drawing a screen',
+    instead: 'I haven\'t drawn it yet. Ask me to draw it and I\'ll start on it.',
+  },
+  {
     kind: 'promised',
     // "I'll look into it", "I'll follow up", "let me sort that out", "I'll
     // get back to you": nothing brings the bot back to it later.
     re: /\b(?:I(?:'ll| will|'m going to| am going to)|let me|we(?:'ll| will))\s+(?:(?:now|also|then|definitely|personally|quickly|go and|try to|make sure to|be sure to)\s+)*(?:follow(?:ing)?[ -]up|look(?:ing)? into|sort(?:ing)? (?:\w+ ){0,2}out|investigate|dig into|get back to|check into|chase (?:\w+ ){0,2}up|escalate)\b/i,
-    backed: (ctx) => !!(ctx.revised || ctx.commented || ctx.started || ctx.withdrew || ctx.reported),
+    // Homeroom bot parity (P3): a look this turn started that is still
+    // running does come back (look_into posts what it finds here). P4, P5: a
+    // batch's reads, a note sent to a build.
+    backed: (ctx) => !!(ctx.revised || ctx.commented || ctx.started || ctx.withdrew || ctx.reported || ctx.lookRunning
+      || ctx.batchQueued || ctx.steered),
     said: 'promises to come back to something later',
     instead: CANT_LOOK_TEXT,
+  },
+  {
+    kind: 'report_back',
+    // Homeroom bot parity (P3): "I'll post what I find here", "I'll let you
+    // know what it turns up", "I'll report back": only a look this turn
+    // started, still running, posts anything here later.
+    re: /\b(?:I(?:'ll| will|'m going to| am going to)|we(?:'ll| will))\s+(?:(?:then|also|soon|just)\s+)?(?:post|share|send|report|tell you|let you know|come back|update you|write)\b[^.!?\n]{0,60}?(?:\bwhat (?:I|it|they|we|the helper) (?:finds?|turns? up|comes? up)\b|\b(?:the |my |its )?findings\b|\b(?:the |its )?results?\b|\bback\b|\bwhen (?:it|I|the look|the helper)(?:'s| is|'m| am)? (?:done|finished|back)\b)/i,
+    backed: (ctx) => !!ctx.lookRunning,
+    said: 'says it will post findings here later',
+    instead: 'Nothing I started is still looking into it, so nothing will be posted here later.',
   },
 ]);
 
@@ -1562,6 +1642,10 @@ function checkNote(problems) {
   const drafted = problems.some((p) => p.kind === 'drafted')
     ? ' Your reply says a draft with File it and Not now is under it, but you did not call offer_request in this turn, so nothing is under it. Call offer_request now with the project, title and details, then reply. If offer_request is refused, say why plainly and do not mention File it.'
     : '';
+  // 1 Nov 2026: a screen said to be drawing with no draw_screen behind it.
+  const drawing = problems.some((p) => p.kind === 'drawing')
+    ? ' Your reply says you are drawing a screen, but you did not call draw_screen in this turn, so nothing is being drawn. If they asked for a screen, call draw_screen now with what to draw and its title, and do not reply. If you cannot, say so plainly.'
+    : '';
   return [
     `[Homeroom check, not from them: your reply ${list}.`,
     'No tool you called in this turn did that.',
@@ -1569,7 +1653,7 @@ function checkNote(problems) {
     'offer_request drafts a request for them to file, comment_on_request posts on a request, start_request starts',
     'one, revise_proposal changes your proposal, withdraw_proposal withdraws one of your proposals, report_problem',
     'tells the Homeroom team. Otherwise say plainly that it has not been done.',
-    `${promised}${drafted}${unknown} Then call reply again.]`,
+    `${promised}${drafted}${drawing}${unknown} Then call reply again.]`,
   ].join(' ').replace(/\s+/g, ' ').trim();
 }
 
@@ -1597,6 +1681,462 @@ function stripClaims(text, problems) {
 const NO_OFFER_NOTE = '[Homeroom: their newest message reads like a decision on a draft request, but no draft is '
   + 'waiting for them, so nothing has been filed. If they want something filed, call offer_request so they can tap '
   + 'File it under it, and never say it was filed.]';
+
+// ── A turn that stopped on what it would do next (1 Nov 2026) ──────────────
+//
+// In a private design thread Evan asked for a screen, and the whole answer
+// was "Let me look at how the app builds its main screen so the design
+// matches it.": the model wrote what it would do next and called no tool,
+// and both loops (this one and design-bot.js) take words with no tool call
+// as the answer, so the turn ended there and nothing came after. Unlike
+// `promised` above (coming back to something LATER, which no tool keeps),
+// this is work it can do NOW. So while rounds remain, words that only
+// announce the next step go back as its own, with PREAMBLE_NOTE, and the
+// loop goes on. Narrow on purpose: a real answer, however short, is sent.
+
+// What it says it will do: look, read, check, draw... Not "let me know",
+// "I'll let you know", "I'll make sure", "I'll update you".
+const PREAMBLE_VERBS = 'look|have a look|take a look|check|read|open|pull up|find|search|see|review|go through|dig|'
+  + 'explore|inspect|scan|examine|fetch|grab|draw|sketch|design|mock|put together|work out|figure out|start|draft|'
+  + 'write|build|make(?! sure)|edit|change|update(?! you)|fix|try|compare|render|lay out';
+const PREAMBLE_DOING = 'looking|checking|reading|opening|pulling up|searching|reviewing|going through|digging|'
+  + 'exploring|drawing|sketching|designing|drafting|rendering|mocking up|laying out|working on|starting on';
+const PREAMBLE_ACK = '(?:(?:ok(?:ay)?|sure|great|alright|all right|got it|right|perfect|good idea|good question|nice|'
+  + 'sounds good|yes|yep|will do)[,.!]*\\s+)?';
+// "Sure, let me …", "First, I'll …", "Now I'm going to …", "I'm reading …".
+const PREAMBLE_SENTENCE = new RegExp(
+  `^${PREAMBLE_ACK}`
+  + '(?:(?:first|next|now|then|so|ok(?:ay)?)[,]?\\s+)?'
+  + '(?:'
+  + '(?:let me|let\'s|I\'ll|I will|I\'m going to|I am going to|I\'m gonna)\\s+'
+  + '(?:(?:now|first|just|quickly|also|then|go ahead and|go and|start by|begin by)\\s+)*'
+  + `(?:${PREAMBLE_VERBS})\\b`
+  + '|'
+  + `I(?:'m| am)\\s+(?:(?:now|just|currently|first)\\s+)?(?:${PREAMBLE_DOING})\\b`
+  + ')',
+  'i',
+);
+// With no "I": "Drawing it now from the app's own markup and styles.",
+// "Reading the code…", "Looking at how it is built.", "On it.", "Starting on
+// that now". Not "Looking good!", and not a sentence that goes on to say a
+// fact ("Reading request #12, it's waiting for your vote."): PREAMBLE_FACT.
+const PREAMBLE_BARE = new RegExp(
+  `^${PREAMBLE_ACK}(?:(?:now|first)[,]?\\s+)?`
+  + '(?:(?:drawing|sketching|designing|rendering|mocking up|laying out|reading|checking|opening|pulling up|searching|'
+  + 'reviewing|going through|digging|exploring|drafting|working on|starting on|getting started)\\b'
+  + '|looking (?:at|into|through|over|for)\\b|on it\\b)',
+  'i',
+);
+const PREAMBLE_FACT = /\b(?:is|are|was|were|has|have|had|isn't|aren't|wasn't|it's|there's|that's|you're|they're|can|could|will|won't|would|needs?|waits?|shows?|says?|takes?|took|means?|seems?|done|ready|live)\b/i;
+// Waiting on them, or for later: a promise or a condition, not a next step.
+const PREAMBLE_NOT = /\b(?:later|tomorrow|tonight|soon|next week|get back to|let you know|keep you posted|keep an eye|(?:if|when|once|as soon as|after) you)\b/i;
+const MAX_PREAMBLE_CHARS = 300;
+
+/**
+ * Pure: whether `text` (a model's words with no tool call) only announces
+ * what it will do next ("Let me look at how the app builds its main screen
+ * so the design matches it."), rather than answering. Every sentence is a
+ * next step or a short acknowledgement ("Good idea."), the last a next step;
+ * no question, nothing for later, and short.
+ */
+function announcesOnly(text) {
+  const body = String(text || '').replace(/[*_`#>]+/g, '').replace(/\s+\n/g, '\n').trim();
+  if (!body || body.length > MAX_PREAMBLE_CHARS || body.includes('?') || PREAMBLE_NOT.test(body)) return false;
+  const sentences = body.split(/(?<=[.!…:])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (!sentences.length || sentences.length > 3) return false;
+  // A bare one says a fact after a comma: "Looking at your page, nothing is being built."
+  const step = (s) => PREAMBLE_SENTENCE.test(s)
+    || (PREAMBLE_BARE.test(s) && !PREAMBLE_FACT.test(s.split(/[,;]/).slice(1).join(',')));
+  const ack = (s) => s.split(/\s+/).length <= 6 && !/[\d#]/.test(s);
+  return step(sentences[sentences.length - 1]) && sentences.slice(0, -1).every((s) => step(s) || ack(s));
+}
+
+/** What a turn that stopped on its next step is told (role user, as checkNote is). */
+const PREAMBLE_NOTE = '[Homeroom check, not from them: you said what you would do next but did not do it. '
+  + 'Do it now with your tools, or give your answer with reply.]';
+// The most times one turn is told so, inside its rounds.
+const MAX_PREAMBLE_NUDGES = 2;
+
+/**
+ * Pure: whether a loop that just got `text` and no tool call goes on rather
+ * than ending its turn on it: words that only announce the next step, a
+ * round left (`rounds` of `limit`), fewer than MAX_PREAMBLE_NUDGES already,
+ * and room in the transport's message limit for the round.
+ */
+function goesOnAfter(text, { rounds, limit, nudged = 0, messages = 0 }) {
+  return rounds < limit && nudged < MAX_PREAMBLE_NUDGES
+    && messages + 2 + MAX_CALLS_PER_ROUND <= MAX_MESSAGES && announcesOnly(text);
+}
+
+// ── What the bot says it is doing (1 Nov 2026) ─────────────────────────────
+//
+// While a turn runs, the bot's typing event says what it is doing
+// (homeroom-bot-dm.js typingDoing), for the working card the Messages
+// screen draws: a kind and what it names, worded on the screen. Each tool
+// call sets it, and it stays until the next one does: the round after a
+// read is spent reading what came back. A tool with no kind here sets none
+// ("Thinking"). Shared with the design bot's tools.
+
+/**
+ * Pure: what the bot is doing while it runs tool `name` with `args`
+ * ({ kind, number?, project? }), or null for "thinking", or undefined for
+ * a call that changes nothing (reply ends the turn). `project` is the
+ * project's name when the caller knows it.
+ */
+function doingFor(name, args = {}, { project = null } = {}) {
+  switch (name) {
+    case 'progress':
+    case 'my_work':
+      return { kind: 'progress' };
+    case 'request_detail':
+    case 'get_request':
+    case 'get_discussion': {
+      const number = Number(name === 'get_discussion' ? args?.ref : args?.number);
+      return Number.isSafeInteger(number) && number > 0 ? { kind: 'request', number } : null;
+    }
+    case 'list_source':
+    case 'read_source':
+      return project ? { kind: 'code', project: String(project) } : { kind: 'code' };
+    // Homeroom bot parity (P3): "Looking into it in <project>".
+    case 'look_into':
+      return project ? { kind: 'looking', project: String(project) } : { kind: 'looking' };
+    case 'draw_screen':
+    case 'write_screen':
+      return { kind: 'drawing' };
+    case 'edit_design':
+      return { kind: 'designing' };
+    case 'offer_request':
+      return { kind: 'drafting' };
+    case 'reply':
+      return undefined;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Says what this turn does now (deps.doing: the typing's stop.doing, from
+ * homeroom-bot-dm.js whileTyping), for tool `name`. A project is named by
+ * its name when this person can see it. Best-effort and in the background:
+ * the tool never waits for it, and each says goes after the one before
+ * (ctx.saying). Never rejects; resolves once it is said.
+ */
+function sayDoing(pool, ctx, name, args = {}) {
+  const doing = ctx?.deps?.doing;
+  if (typeof doing !== 'function') return Promise.resolve();
+  const say = async () => {
+    let project = null;
+    if ((name === 'list_source' || name === 'read_source' || name === 'look_into') && typeof args?.project === 'string' && args.project.trim()) {
+      ctx.projectNames ||= new Map();
+      const asked = args.project.trim();
+      if (!ctx.projectNames.has(asked)) {
+        const app = await findApp(pool, asked).catch(() => null);
+        ctx.projectNames.set(asked, app && await canView(pool, app, ctx.user) ? app.name || app.slug : null);
+      }
+      project = ctx.projectNames.get(asked);
+    }
+    const what = doingFor(name, args, { project });
+    if (what !== undefined) await doing(what);
+  };
+  ctx.saying = (ctx.saying || Promise.resolve()).then(say).catch((err) => {
+    log.warn('homeroom-bot-mayor', 'Could not say what the bot is doing', { tool: clip(name, 40), err: clip(err?.message, 200) });
+  });
+  return ctx.saying;
+}
+
+// ── The answer as it is written (Homeroom bot parity, P1) ──────────────────
+//
+// While the model writes its answer, the person sees it appear: the working
+// card (homeroom-bot-dm.js typingDoing, kind 'writing') shows the words so
+// far. The answer almost always arrives as the reply tool's `text`, so the
+// round's request is streamed (openrouter.js streamChat's onDelta) and that
+// argument is read as it grows (partialTextField); words with no tool call
+// are shown once they are longer than a preamble can be (announcesOnly), so
+// "Let me look at the code." never flashes up and goes. At most one update
+// every DRAFT_EVERY_MS, the newest words each time, in order with what the
+// card says the bot is doing (ctx.saying). What is shown is only a preview:
+// the message sent at the end (checked, and cut where it claimed too much)
+// takes the card's place, as it always has.
+
+const DRAFT_EVERY_MS = 250;
+
+/**
+ * Pure: the value of `key` in a JSON object that has only partly arrived,
+ * as far as it has, or null when that key's string has not started. Only a
+ * top-level key is found; an escape cut off at the end is left for the next
+ * read.
+ */
+function partialTextField(json, key = 'text') {
+  const raw = String(json || '');
+  const re = new RegExp(`(?:^|[{,])\\s*"${key}"\\s*:\\s*"`, 'g');
+  const found = re.exec(raw);
+  if (!found) return null;
+  let out = '';
+  for (let i = found.index + found[0].length; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '"') return out;
+    if (ch !== '\\') { out += ch; continue; }
+    const next = raw[i + 1];
+    if (next === undefined) return out;
+    if (next === 'u') {
+      const hex = raw.slice(i + 2, i + 6);
+      if (!/^[0-9a-fA-F]{4}$/.test(hex)) return out;
+      out += String.fromCharCode(parseInt(hex, 16));
+      i += 5;
+      continue;
+    }
+    out += { n: '\n', t: '\t', r: '', b: '', f: '', '"': '"', '\\': '\\', '/': '/' }[next] ?? next;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Pure: the words of the answer in a round's response so far, from what the
+ * transport has received ({ content, toolCalls }): the reply tool's text
+ * when it is being called, '' when another tool is (no answer this round),
+ * the words themselves once they are longer than a preamble, else null
+ * (nothing to show yet).
+ */
+function draftOf({ content = '', toolCalls = [] } = {}) {
+  const calls = Array.isArray(toolCalls) ? toolCalls : [];
+  const reply = calls.find((c) => c?.function?.name === 'reply');
+  if (reply) {
+    const text = partialTextField(reply.function.arguments, 'text');
+    return text == null ? null : cleanReply(text);
+  }
+  if (calls.some((c) => c?.function?.name)) return '';
+  const text = String(content || '');
+  return text.trim().length > MAX_PREAMBLE_CHARS ? cleanReply(text) : null;
+}
+
+/**
+ * What shows the answer as it is written, for one turn: `onDelta` for the
+ * transport, `clear()` before a pass that writes it again, `close()` once
+ * the turn's own message is on its way. Null when nothing can show it (no
+ * working card: deps.doing). Never rejects.
+ */
+function draftWriter(ctx, { every = DRAFT_EVERY_MS, wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms).unref?.(); }) } = {}) {
+  const doing = ctx?.deps?.doing;
+  if (typeof doing !== 'function') return null;
+  let latest = '';
+  let shown = '';
+  let queued = false;
+  let closed = false;
+  let lastAt = 0;
+  const run = async () => {
+    const gap = lastAt + every - Date.now();
+    if (gap > 0) await wait(gap);
+    queued = false;
+    if (closed || latest === shown) return;
+    shown = latest;
+    lastAt = Date.now();
+    await doing(shown ? { kind: 'writing', text: shown } : null);
+  };
+  const set = (text) => {
+    if (closed) return;
+    latest = text;
+    if (queued || latest === shown) return;
+    queued = true;
+    ctx.saying = (ctx.saying || Promise.resolve()).then(run).catch((err) => {
+      log.warn('homeroom-bot-mayor', 'Could not show the answer as it was written', { err: clip(err?.message, 200) });
+    });
+  };
+  return {
+    onDelta(state) {
+      const text = draftOf(state);
+      if (text !== null) set(text);
+    },
+    clear() { set(''); },
+    // `clear`: what was shown goes too (the turn found no answer to send).
+    close({ clear = false } = {}) {
+      if (closed) return;
+      closed = true;
+      if (clear && shown) {
+        shown = '';
+        ctx.saying = (ctx.saying || Promise.resolve()).then(() => doing(null)).catch(() => {});
+      }
+    },
+  };
+}
+
+// ── What the turn looked at (Homeroom bot parity, P1) ─────────────────────
+//
+// Above the reply's words, one quiet line: "Looked at 5 things · 40 s",
+// which opens to the list (frontend features/messages/bot-looked.tsx). The
+// list is the turn's own lookups that answered (noteLookup), in plain words,
+// then whatever the thread tools added (ctx.looked: { what }), and the time
+// is how long the turn took to answer (or, when a thread tool says it spent
+// longer, ctx.lookedMs). Sent as the reply's metadata `looked`. No money,
+// no ids; a turn that looked at nothing says nothing.
+
+const MAX_LOOKED_ITEMS = 20;
+const MAX_LOOKED_CHARS = 120;
+// The tools whose lookups are listed (what the bot itself read), by name.
+const LOOKUP_TOOLS = new Set([
+  'progress', 'my_work', 'my_projects', 'request_detail', 'list_source', 'read_source', ...PLATFORM_TOOLS,
+]);
+
+/** Note one tool call of this turn that read something, when it answered (not an error). */
+function noteLookup(ctx, name, args = {}, result = null) {
+  if (!ctx || !LOOKUP_TOOLS.has(name)) return;
+  if (!result || typeof result !== 'object' || result.error || result.ok === false) return;
+  const a = args && typeof args === 'object' ? args : {};
+  const number = Number(a.number ?? a.ref ?? a.prNumber);
+  ctx.lookups ||= [];
+  ctx.lookups.push({
+    tool: name,
+    project: typeof result.project === 'string' ? result.project
+      : (typeof a.slug === 'string' ? a.slug.trim().toLowerCase() : (typeof a.project === 'string' ? a.project.trim() : null)),
+    ...(typeof result.projectName === 'string' ? { projectName: result.projectName } : {}),
+    ...(Number.isSafeInteger(number) && number > 0 ? { number } : {}),
+    ...(typeof result.path === 'string' ? { path: result.path } : {}),
+    ...(name === 'get_discussion' && typeof a.threadType === 'string' ? { threadType: a.threadType } : {}),
+  });
+}
+
+/**
+ * Pure: the turn's lookups (noteLookup) and the thread tools' own entries
+ * (`extra`, ctx.looked) as the line's list: [{ what }], in the order first
+ * done, each said once, a project's code reads as one ("Read 3 files in Gym
+ * Tracker"). `names` maps a project's slug to its name.
+ */
+function lookedItems(lookups = [], { names = new Map(), extra = [] } = {}) {
+  const named = (slug) => (slug && names.get(slug)) || slug || 'a project';
+  const order = [];
+  const code = new Map();
+  for (const l of Array.isArray(lookups) ? lookups : []) {
+    const where = l.projectName || named(l.project);
+    const request = l.number ? `${where} request #${l.number}` : null;
+    switch (l.tool) {
+      case 'progress': order.push('Checked how your work is going'); break;
+      case 'my_work': order.push('Read your list of requests'); break;
+      case 'my_projects': order.push('Read your list of projects'); break;
+      case 'request_detail': if (request) order.push(`Read my notes on ${request}`); break;
+      case 'get_request': if (request) order.push(`Read ${request}`); break;
+      case 'get_discussion':
+        order.push(request && (!l.threadType || l.threadType === 'issue') ? `Read the discussion on ${request}` : `Read a discussion in ${where}`);
+        break;
+      case 'get_proposal': order.push(l.project ? `Read a proposed change in ${where}` : 'Read a proposed change'); break;
+      case 'get_change': order.push(l.project ? `Read a change in ${where}` : 'Read a change'); break;
+      case 'list_my_proposals': order.push('Read your proposed changes'); break;
+      case 'list_apps': order.push('Looked through the projects on Homeroom'); break;
+      case 'get_app': order.push(`Read about ${where}`); break;
+      case 'list_requests': order.push(`Looked through the requests of ${where}`); break;
+      case 'get_message': order.push('Read a message'); break;
+      case 'get_platform_conventions': order.push('Read how apps are built on Homeroom'); break;
+      case 'list_source':
+      case 'read_source': {
+        const key = l.project || '';
+        if (!code.has(key)) { code.set(key, { where, files: new Set() }); order.push({ code: key }); }
+        if (l.tool === 'read_source' && l.path) code.get(key).files.add(l.path);
+        break;
+      }
+      default: break;
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  const add = (words) => {
+    const what = clip(withoutEmDashes(String(words || '').replace(/\s+/g, ' ')), MAX_LOOKED_CHARS);
+    if (!what || seen.has(what) || out.length >= MAX_LOOKED_ITEMS) return;
+    seen.add(what);
+    out.push({ what });
+  };
+  for (const entry of order) {
+    if (typeof entry === 'string') { add(entry); continue; }
+    const { where, files } = code.get(entry.code);
+    add(files.size ? `Read ${files.size} ${files.size === 1 ? 'file' : 'files'} in ${where}` : `Looked through the files of ${where}`);
+  }
+  for (const entry of Array.isArray(extra) ? extra : []) add(entry && typeof entry === 'object' ? entry.what : entry);
+  return out;
+}
+
+/**
+ * The reply's `looked` metadata ({ items, ms }), or null when the turn
+ * looked at nothing. Projects are named by their names (one read, of the
+ * projects whose lookups answered, so the person could see them). Never throws.
+ */
+async function lookedMeta(pool, ctx, ms) {
+  try {
+    const lookups = Array.isArray(ctx?.lookups) ? ctx.lookups : [];
+    const extra = Array.isArray(ctx?.looked) ? ctx.looked : [];
+    if (!lookups.length && !extra.length) return null;
+    const slugs = [...new Set(lookups.filter((l) => !l.projectName && l.project).map((l) => l.project))].slice(0, 20);
+    const names = new Map();
+    if (slugs.length) {
+      try {
+        const { rows } = await pool.query('SELECT slug, name FROM apps WHERE slug = ANY($1::text[])', [slugs]);
+        for (const row of rows || []) if (row?.slug && row.name) names.set(String(row.slug), String(row.name));
+      } catch {
+        // Named by their short names instead.
+      }
+    }
+    const items = lookedItems(lookups, { names, extra });
+    if (!items.length) return null;
+    const spent = Math.max(Number(ms) || 0, Number(ctx?.lookedMs) || 0);
+    return { items, ms: Math.max(0, Math.round(spent)) };
+  } catch (err) {
+    log.warn('homeroom-bot-mayor', 'Could not say what a turn looked at', { err: clip(err?.message, 200) });
+    return null;
+  }
+}
+
+// ── Room in one turn (Homeroom bot parity, P1) ────────────────────────────
+//
+// The transport takes at most MAX_MESSAGES messages (openrouter.js), and
+// sixteen rounds of up to MAX_CALLS_PER_ROUND calls would pass it; a turn
+// that read many files grows long too. Before a round that would not fit,
+// or once the turn's own lookups pass MAX_TURN_CHARS, its oldest rounds
+// (each a call and its results, whole) are folded into one note of what
+// they returned, shortened, and the newest KEEP_ROUNDS stay as they were.
+// When even that does not make room, the round is the last: it replies.
+
+const MAX_TURN_CHARS = 240_000;
+const COMPACT_RESULT_CHARS = 700;
+const COMPACT_NOTE_CHARS = 24_000;
+const KEEP_ROUNDS = 2;
+const COMPACT_LEAD = '[Homeroom, not from them: what your earlier lookups in this turn returned, shortened to fit. Look one up again if you need it in full.]';
+
+function messageChars(m) {
+  if (!m) return 0;
+  const content = Array.isArray(m.content)
+    ? m.content.reduce((n, part) => n + (part?.type === 'text' ? String(part.text || '').length : 1000), 0)
+    : String(m.content || '').length;
+  return content + (Array.isArray(m.tool_calls) ? JSON.stringify(m.tool_calls).length : 0);
+}
+
+/**
+ * Fold the oldest rounds of a turn's messages (from index `from`, where the
+ * turn's own rounds begin) into one note, in place, when the next round
+ * (`room` more messages) would not fit or the rounds are too long. Returns
+ * whether it folded anything.
+ */
+function compactRounds(messages, { from, room = MAX_CALLS_PER_ROUND + 2, maxMessages = MAX_MESSAGES, maxChars = MAX_TURN_CHARS } = {}) {
+  if (!Array.isArray(messages) || !(from >= 0) || from >= messages.length) return false;
+  const chars = messages.slice(from).reduce((n, m) => n + messageChars(m), 0);
+  if (messages.length + room <= maxMessages && chars <= maxChars) return false;
+  const starts = [];
+  for (let i = from; i < messages.length; i += 1) if (messages[i]?.role === 'assistant') starts.push(i);
+  if (starts.length <= KEEP_ROUNDS) return false;
+  const cut = starts[starts.length - KEEP_ROUNDS];
+  const calls = new Map();
+  const lines = [];
+  for (const m of messages.slice(from, cut)) {
+    if (m?.role === 'user' && typeof m.content === 'string' && m.content.startsWith(COMPACT_LEAD)) {
+      lines.push(...m.content.slice(COMPACT_LEAD.length).split('\n').filter(Boolean));
+    } else if (m?.role === 'assistant') {
+      for (const call of m.tool_calls || []) calls.set(call.id, call.function);
+    } else if (m?.role === 'tool') {
+      const fn = calls.get(m.tool_call_id);
+      const args = fn ? clip(String(fn.arguments || '{}'), 200) : '{}';
+      lines.push(`- ${fn?.name || 'a lookup'} ${args}: ${clip(String(m.content || '').replace(/\s+/g, ' '), COMPACT_RESULT_CHARS)}`);
+    }
+  }
+  const note = { role: 'user', content: clip(`${COMPACT_LEAD}\n${lines.join('\n')}`, COMPACT_NOTE_CHARS) };
+  messages.splice(from, cut - from, note);
+  return true;
+}
 
 // 31 Oct 2026: their earlier messages whose answer this turn took over (the
 // bot-dm machine's `also`, deps.alsoUnanswered): a promised answer used to be
@@ -1763,8 +2303,14 @@ async function historyMessages(pool, {
     });
     const card = fromBot && kind === 'activity' ? cardNow.get(Number(m.id)) : null;
     if (card) lines.push(`[Homeroom: this activity card now reads "${card}".]`);
+    // Homeroom bot parity (P1-P9): a card it put under this reply, as the
+    // model reads it back (homeroom-bot-cards/ historyLine): what it offered,
+    // and what they picked or answered.
+    const richCard = fromBot ? require('./homeroom-bot-cards').historyLine(meta?.card) : null;
+    if (richCard) lines.push(richCard);
     if (!fromBot && !m.moderation_hidden_at) lines.push(...(sharedLines.get(Number(m.id)) || []));
-    const text = [`${about}${clip(m.content, 2000)}`, ...lines].filter(Boolean).join('\n') || '(attachment)';
+    // P1: its own long answers are read back whole.
+    const text = [`${about}${clip(m.content, fromBot ? MAX_REPLY_CHARS : 2000)}`, ...lines].filter(Boolean).join('\n') || '(attachment)';
     const role = fromBot ? 'assistant' : 'user';
     return parts.length ? { role, content: [{ type: 'text', text }, ...parts] } : { role, content: text };
   });
@@ -2197,7 +2743,11 @@ async function runTool(pool, ctx, name, args) {
         ctx.reply = { text: clip(args.text, MAX_REPLY_CHARS), cards: args.cards, suggestions: args.suggestions };
         return { ok: true };
       }
-      default: return { error: `Unknown tool ${name}` };
+      default: {
+        // Homeroom bot parity (P1-P9): a tool of one of the thread tool modules.
+        const out = await threadToolsOf(deps).run(pool, ctx, name, args);
+        return out === undefined ? { error: `Unknown tool ${name}` } : out;
+      }
     }
   } catch (err) {
     log.warn('homeroom-bot-mayor', 'A DM tool failed', { tool: name, userId: user.id, err: err.message });
@@ -2340,6 +2890,8 @@ async function askModel(t, { messages, tools, toolChoice, where, attempts = MAX_
         // person's, and a retry moves to a fresh one.
         sessionId: `hrbot-dm-${t.user.id}-${t.message.id}${t.route > 1 ? `-r${t.route}` : ''}`,
         ...(Array.isArray(t.avoid) && t.avoid.length ? { ignoreProviders: t.avoid } : {}),
+        // P1: streamed, so the answer shows as it is written (draftWriter).
+        ...(typeof t.onDelta === 'function' ? { onDelta: t.onDelta } : {}),
         ...rest,
         ...overrides,
       });
@@ -2529,8 +3081,14 @@ async function answerLater(pool, config, { bot, user, conversationId, message, d
   const where = typeof dm.threadDeps === 'function'
     ? await dm.threadDeps(pool, { userId: user.id, conversationId, message }).catch(() => ({}))
     : {};
-  const run = () => runDmTurn(pool, config, {
-    bot, user, settings, conversationId, message, deps: { ...deps, ...where, deferAttempt: attempt },
+  // 1 Nov 2026: and says what it is doing as it goes (sayDoing).
+  const run = (typing) => runDmTurn(pool, config, {
+    bot, user, settings, conversationId, message,
+    deps: {
+      ...deps, ...where, deferAttempt: attempt,
+      ...(typing?.doing ? { doing: typing.doing } : {}),
+      ...(typing?.moveTo ? { moveTyping: typing.moveTo } : {}),
+    },
   });
   return typeof dm.whileTyping === 'function'
     ? dm.whileTyping(pool, {
@@ -2616,6 +3174,9 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
     // (avoidProviders); null once a request was refused as it was built.
     avoid: [],
   };
+  // P1: the answer, shown on the working card as the model writes it.
+  const draft = deps.streamDraft === false ? null : draftWriter(ctx);
+  if (draft) t.onDelta = draft.onDelta;
   // 31 Oct 2026: earlier messages of theirs this answer owes too (owedNote).
   ctx.owed = await owedNote(pool, { conversationId, userId: user.id, ids: deps.alsoUnanswered });
   const toolsUsed = [];
@@ -2667,7 +3228,12 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
           (platform.modelTools || []).filter((tool) => PLATFORM_TOOLS.includes(tool.name)),
         )
         : [];
-      const tools = [...TOOLS, ...platformTools];
+      // Homeroom bot parity (P1-P9): the thread tools this turn has
+      // (homeroom-bot-thread-tools/), between its own and the platform's.
+      ctx.platformTools = platformTools.length > 0;
+      const threadTools = threadToolsOf(deps);
+      const extraTools = threadTools.toolsFor(ctx);
+      const tools = [...TOOLS, ...extraTools, ...platformTools];
       // #3733: the conversation could not be read: their message alone is
       // still answered.
       try {
@@ -2701,6 +3267,7 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
             username: user.username, perPerson: settings.perPerson, platform: platformTools.length > 0,
             request: deps.threadRequest || null,
             thread: !deps.threadRequest && deps.threadRootId ? { draft: deps.threadDraft || null } : null,
+            extra: threadTools.promptLines(ctx),
           }),
         },
         ...(about ? [{ role: 'system', content: about }] : []),
@@ -2715,11 +3282,17 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
       if (ctx.owed) messages.push({ role: 'system', content: ctx.owed });
       const ids = new Set();
       let limit = MAX_ROUNDS;
+      let preambles = 0;
+      // P1: where the turn's own rounds begin, for compactRounds.
+      const turnFrom = messages.length;
       const runRounds = async () => {
         while (rounds < limit && !ctx.reply && !ctx.drawScreen) {
           rounds += 1;
           state.rounds = rounds;
-          const last = rounds === limit;
+          // P1: room for this round's calls and the next request, or this
+          // round replies (the transport's limit on messages).
+          compactRounds(messages, { from: turnFrom });
+          const last = rounds === limit || messages.length + MAX_CALLS_PER_ROUND + 2 > MAX_MESSAGES;
           // #3685: one failed request used to end the turn with "I couldn't
           // answer just now", whatever the round had already read.
           const res = await askModel(t, {
@@ -2727,17 +3300,33 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
             toolChoice: last ? { type: 'function', function: { name: 'reply' } } : 'auto',
           });
           const calls = normalizeCalls(res.toolCalls, rounds, ids);
-          if (!calls.length) { finalText = res.content || ''; break; }
+          if (!calls.length) {
+            // 1 Nov 2026: words that only say what it will do next are not
+            // the answer while it can still do it (announcesOnly).
+            if (goesOnAfter(cleanReply(res.content), { rounds, limit, nudged: preambles, messages: messages.length })) {
+              preambles += 1;
+              t.failures.push(`r${rounds}:preamble`);
+              messages.push({ role: 'assistant', content: String(res.content) });
+              messages.push({ role: 'user', content: PREAMBLE_NOTE });
+              continue;
+            }
+            finalText = res.content || '';
+            break;
+          }
           messages.push({ role: 'assistant', content: res.content || null, tool_calls: calls });
           const pictures = [];
           for (const call of calls) {
             const name = call.function.name;
             toolsUsed.push(name.slice(0, 40));
             const args = parseArgs(call.function.arguments);
+            // 1 Nov 2026: the working card's words, as the call starts.
+            sayDoing(pool, ctx, name, args);
             const result = platform && PLATFORM_TOOLS.includes(name)
               ? await platformCall(platform, name, args, pictures)
               : await runTool(pool, ctx, name, args);
             if (!(platform && PLATFORM_TOOLS.includes(name))) noteRequests(ctx, result);
+            // P1: what it read, for the reply's "Looked at" line.
+            noteLookup(ctx, name, args, result);
             messages.push({ role: 'tool', tool_call_id: call.id, content: clip(JSON.stringify(result), MAX_TOOL_RESULT_CHARS) });
           }
           const shown = picturesMessage(takeImages({ images: pictures }));
@@ -2759,6 +3348,8 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
         });
         const first = ctx.reply ? { ...ctx.reply } : { text: finalText, cards: [] };
         messages.push({ role: 'user', content: checkNote(problems) });
+        // P1: the answer shown as it was written goes; the next pass writes it again.
+        draft?.clear();
         ctx.reply = null;
         finalText = '';
         // One round for a tool (offer_request, say) and one for the reply,
@@ -2784,6 +3375,8 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
     }
   }
   let text = clip(cleanReply(ctx.reply?.text || finalText), MAX_REPLY_CHARS);
+  // P1: nothing more is shown as it is written; the message takes the card's place.
+  draft?.close({ clear: !text });
   // Whatever the second pass still claimed with nothing behind it is cut.
   if (text && ctx.checkedProblems?.length) {
     log.info('homeroom-bot-mayor', 'Cut what a DM reply still claimed', {
@@ -2851,12 +3444,18 @@ async function answer(pool, config, { bot, user, settings, conversationId, messa
   const next = suggestionLabels(ctx.reply?.suggestions);
   const prompts = next.length ? require('./homeroom-bot-dm').promptActions(next) : [];
   const actions = prompts.slice(0, 3);
+  // P1: what the turn looked at, as one line above the words (lookedMeta).
+  const looked = await lookedMeta(pool, ctx, Date.now() - t.startedMs);
   const project = named.project ? { appSlug: named.project } : {};
   return say(text, {
     objects: unique,
     metadata: {
       kind: 'chat', ...project,
       ...(actions.length ? { actions, status: 'open' } : {}),
+      ...(looked ? { looked } : {}),
+      // Homeroom bot parity (P1-P9): a card a thread tool put under the reply
+      // (homeroom-bot-cards/, frontend features/messages/bot-cards/).
+      ...(ctx.card && typeof ctx.card === 'object' && typeof ctx.card.type === 'string' ? { card: ctx.card } : {}),
     },
     // C2.4: a new project's thread opened this turn: the answer is its first reply.
     ...(ctx.projectThread ? { replyToId: null, threadRootId: ctx.projectThread.rootId } : {}),
@@ -5025,6 +5624,28 @@ module.exports = {
   claimProblems,
   checkNote,
   stripClaims,
+  DRAWING_CLAIM,
+  announcesOnly,
+  goesOnAfter,
+  PREAMBLE_NOTE,
+  MAX_PREAMBLE_NUDGES,
+  doingFor,
+  sayDoing,
+  // Homeroom bot parity, P1
+  MAX_OUTPUT_TOKENS,
+  MAX_REPLY_CHARS,
+  MAX_MESSAGES,
+  RETRY_WITHIN_MS,
+  DRAFT_EVERY_MS,
+  partialTextField,
+  draftOf,
+  draftWriter,
+  noteLookup,
+  lookedItems,
+  lookedMeta,
+  compactRounds,
+  COMPACT_LEAD,
+  KEEP_ROUNDS,
   commentText,
   commentOnRequest,
   startRequest,

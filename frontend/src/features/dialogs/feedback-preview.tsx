@@ -93,8 +93,13 @@ export function FeedbackPreview({ item, onClose }: { item: FeedbackPreviewItem; 
     // card it sits in, and the lifted modal card is z-index 9992 (native.css:
     // backdrop 9990, sheet 9991, popover 9992). Host's own cut-out uses the
     // same number for the same reason (features/home/tour/index.tsx).
+    // The black runs to the screen's edges; what it shows is centred in the
+    // float box (app.css THE USABLE BOX), padded off the Duo's column, and
+    // the image is at most that box wide.
     <div
       className="fixed inset-0 z-[9993] flex items-center justify-center bg-black/90"
+      // Sides of the hardware (THE USABLE BOX), so they do not mirror in Arabic.
+      style={{ paddingLeft: 'var(--platform-float-left)', paddingRight: 'var(--platform-float-right)' }}
       role="dialog"
       aria-modal="true"
       aria-label={name}
@@ -120,7 +125,7 @@ export function FeedbackPreview({ item, onClose }: { item: FeedbackPreviewItem; 
           <img
             src={item.src}
             alt={name}
-            className="block max-w-[100vw] max-h-[100dvh] object-contain select-none"
+            className="block max-w-[var(--platform-float-w)] max-h-[100dvh] object-contain select-none"
             draggable={false}
             data-feedback-preview-image=""
           />

@@ -693,7 +693,10 @@ test('the Homeroom bot DM against the full PostgreSQL schema', { timeout: 180000
       // One story: and, after them, a request whose card is its thread's
       // root, with its question also shown in the main chat (its quiet
       // lines stay in the thread).
-      assert.equal(messages.length, 16, 'one question, one ask, one offer, a built plan and its card, a plan and its card, two questions, a complicated change\'s plan, a stuck build, a first version live, a ready card and two cards, then a story\'s card and its question, not one per visit');
+      // Homeroom bot parity (P1-P9): and, after the complicated change's plan,
+      // three private threads' lines in the main chat (their replies, with the
+      // new cards, stay in the threads: tests/bot-parity-staging-seed-postgres.test.js).
+      assert.equal(messages.length, 19, 'one question, one ask, one offer, a built plan and its card, a plan and its card, two questions, a complicated change\'s plan, three private threads, a stuck build, a first version live, a ready card and two cards, then a story\'s card and its question, not one per visit');
       const sorted = [...messages].sort((a, b) => a.id - b.id);
       const [storyCard, storyQuestion] = sorted.slice(-2);
       assert.equal(storyCard.metadata.homeroomBot.kind, 'activity');
@@ -703,7 +706,11 @@ test('the Homeroom bot DM against the full PostgreSQL schema', { timeout: 180000
       const storyThread = await conversations.listThread(pool, viewer, first, storyCard.id, {});
       assert.deepEqual(storyThread.messages.slice(0, 2).map((m) => m.content),
         ['You suggested this on Staging demo app\'s page. It\'s request #18.', 'Reading it.']);
-      const [question, ask, offer, built, building, planCard, plan, two, complicated, stuck, firstLive, ready, ...cards] = sorted.slice(0, -2);
+      const [question, ask, offer, built, building, planCard, plan, two, complicated, ...afterPlan] = sorted.slice(0, -2);
+      const threads = afterPlan.slice(0, 3);
+      const [stuck, firstLive, ready, ...cards] = afterPlan.slice(3);
+      assert.deepEqual(threads.map((m) => [m.content, m.metadata.homeroomBot.kind, m.thread?.replyCount]),
+        [['New thread.', 'opened_thread', 4], ['New thread.', 'opened_thread', 4], ['New thread.', 'opened_thread', 2]]);
       assert.deepEqual([complicated.metadata.homeroomBot.kind, complicated.metadata.homeroomBot.firstVersion, complicated.metadata.homeroomBot.plan.complicated],
         ['plan', false, true]);
       assert.match(complicated.content, /^Before I build \*\*Staging demo app\*\* request #17, here's my plan:/);

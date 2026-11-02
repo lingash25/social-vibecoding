@@ -25,22 +25,23 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 import { pushDismissible, type Release } from '../../../lib/back-stack';
+import { dirSign } from '../../../lib/i18n/direction';
 
-/** How far from the left edge a swipe must start to open the tray. */
+/** How far from the inline-start edge a swipe must start to open the tray. */
 export const EDGE_PX = 24;
 /** How far it must travel, mostly sideways, to count. */
 export const SWIPE_PX = 48;
 
-/** Whether a swipe that started at `x0,y0` and ended at `x1,y1` is the edge's: right, from the edge, mostly flat. Pure. */
-export function isEdgeSwipe(x0: number, y0: number, x1: number, y1: number): boolean {
-  const dx = x1 - x0;
+/** Whether a swipe that started at `x0,y0` and ended at `x1,y1` is the edge's: inward, from the edge, mostly flat (from the right edge in Arabic, `width` being the screen's). Pure. */
+export function isEdgeSwipe(x0: number, y0: number, x1: number, y1: number, rtl = false, width = 0): boolean {
+  const dx = rtl ? x0 - x1 : x1 - x0;
   const dy = Math.abs(y1 - y0);
-  return x0 <= EDGE_PX && dx >= SWIPE_PX && dy < dx * 0.6;
+  return (rtl ? x0 >= width - EDGE_PX : x0 <= EDGE_PX) && dx >= SWIPE_PX && dy < dx * 0.6;
 }
 
-/** Whether a swipe from `x0,y0` to `x1,y1` closes the tray: left, mostly flat. Pure. */
-export function isCloseSwipe(x0: number, y0: number, x1: number, y1: number): boolean {
-  const dx = x0 - x1;
+/** Whether a swipe from `x0,y0` to `x1,y1` closes the tray: back toward its edge, mostly flat. Pure. */
+export function isCloseSwipe(x0: number, y0: number, x1: number, y1: number, rtl = false): boolean {
+  const dx = rtl ? x1 - x0 : x0 - x1;
   const dy = Math.abs(y1 - y0);
   return dx >= SWIPE_PX && dy < dx * 0.6;
 }
@@ -92,11 +93,13 @@ export function useEdgeSwipe(enabled: boolean, onOpen: () => void): void {
     let start: { x: number; y: number } | null = null;
     const down = (e: TouchEvent) => {
       const t = e.touches[0];
-      start = t && e.touches.length === 1 && t.clientX <= EDGE_PX ? { x: t.clientX, y: t.clientY } : null;
+      const rtl = dirSign() === -1;
+      const atEdge = t && (rtl ? t.clientX >= window.innerWidth - EDGE_PX : t.clientX <= EDGE_PX);
+      start = t && e.touches.length === 1 && atEdge ? { x: t.clientX, y: t.clientY } : null;
     };
     const up = (e: TouchEvent) => {
       const t = e.changedTouches[0];
-      if (start && t && isEdgeSwipe(start.x, start.y, t.clientX, t.clientY)) openRef.current();
+      if (start && t && isEdgeSwipe(start.x, start.y, t.clientX, t.clientY, dirSign() === -1, window.innerWidth)) openRef.current();
       start = null;
     };
     const cancel = () => { start = null; };
@@ -244,7 +247,7 @@ export function PlacesTray({ id, label, onClose, closing, onClosed, returnTo, na
           const t = e.changedTouches[0];
           const s = start.current;
           start.current = null;
-          if (s && t && isCloseSwipe(s.x, s.y, t.clientX, t.clientY)) closeRef.current();
+          if (s && t && isCloseSwipe(s.x, s.y, t.clientX, t.clientY, dirSign() === -1)) closeRef.current();
         }}
       >
         {children}

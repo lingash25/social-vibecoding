@@ -200,14 +200,15 @@ const FLOAT_MOTION = 'transition-[opacity,transform] duration-200 ease-out motio
  * string, and nothing is drawn inside it. The box passes taps through; the
  * control inside takes its own.
  *
- * The banner is centred over the top. Jump to latest sits at the RIGHT edge
- * of the foot, low, just above the composer, as iMessage puts it (run six,
- * 14 Oct 2026): centred, it sat in the middle of the conversation on top of
- * a message's words, where a line of text is widest.
+ * The banner is centred over the top, and Jump to latest over the foot,
+ * low, just above the composer (1 Nov 2026, Evan's call). From run six
+ * (14 Oct 2026) it sat at the right edge, so as not to cover the middle of
+ * a message's words; it is up only while the reader is up the transcript,
+ * and centred it is the same control in a chat and on a change's page.
  */
 const OVERLAY_EDGE = {
   top: 'top-2 justify-center px-4',
-  foot: 'bottom-2 justify-end px-3',
+  foot: 'bottom-2 justify-center px-3',
 } as const;
 
 export function TranscriptOverlay({ edge, children }: { edge: 'top' | 'foot'; children?: React.ReactNode }) {
@@ -246,9 +247,8 @@ export function NewMessagesBanner({
 
 /**
  * Jump to latest: a round disc with a down chevron at the transcript's
- * foot, up whenever the reader is not at the bottom. Floating, it sits at
- * the right edge (above); in a docked strip it is centred (#5702). The
- * disc is the language's floating control, white on the sheet; `dot` is the
+ * foot, up whenever the reader is not at the bottom, centred over it
+ * (TranscriptOverlay, above). The disc is the language's floating control, white on the sheet; `dot` is the
  * accent, for messages that arrived while the reader was up the
  * transcript, and the button's name says how many.
  */
@@ -274,6 +274,86 @@ export function JumpToLatestButton({
       ) : null}
     </button>
   );
+}
+
+/*
+ * ── A chat's foot ─────────────────────────────────────────────────────
+ *
+ * Under every transcript with a reply box (a conversation and its reply
+ * threads in Messages, a project's channel, a topic's thread, a request's
+ * page and a change's), the same four things, in this order, as siblings
+ * in one flex column:
+ *
+ *   1. the transcript's scroller, wearing the class `chat-transcript`;
+ *   2. Jump to latest, hung from that scroller's foot (TranscriptOverlay
+ *      edge="foot", above);
+ *   3. the status line, `ChatStatusLine`: who is typing, or the group
+ *      chat's "Reconnecting…";
+ *   4. the composer bar, `ChatComposerBar`, around the composer's card.
+ *
+ * Two implementations drew them (features/messages and features/group-chat),
+ * and each spacing fix landed in one and missed the other (1 November 2026).
+ * So the measurements are app.css's, written once against these three
+ * classes (its own "A chat's foot" section):
+ *
+ *   * the transcript ends 12px inside its scroller, and the scroller's
+ *     bottom edge is the composer card's top edge: the air under the newest
+ *     message scrolls away with it, rather than being a band of bare page
+ *     the messages are cut off above;
+ *   * the status line is 13px and muted, and takes no room while it is
+ *     empty. It stays in the page at zero height, so its live region is
+ *     there to announce the first name;
+ *   * the bar is padded 0 12px 8px, with the home-indicator and tab-bar
+ *     clearance (`platform-safe-bar`) added under it;
+ *   * Jump to latest floats 8px above the scroller's foot, centred. Hung
+ *     there rather than over the status line, it rises with the transcript
+ *     when a name appears and never covers it.
+ *
+ * A class and two thin components, not one wrapper round the four, because
+ * they have to stay siblings: the keyboard reservation is the column's
+ * (`platform-kb-column`), app.css finds the bar after the scroller with
+ * `~`, and two of the scrollers are hosts public/js/group-chat.js renders
+ * into, which React must not put a node of its own around. The scroller's
+ * class is written into its className as a literal: the kit adds
+ * `un-kb-avoid` to that node at runtime, and a className that is plainly
+ * the same on every render is one React never rewrites over it.
+ */
+
+/**
+ * Three dots that breathe in turn: the ellipsis after what someone is doing
+ * while their reply is on its way (1 November 2026, the Homeroom bot's
+ * working card). Opacity only, on one slow clock offset per dot, so it is
+ * calm and stays on the compositor; under reduced motion they stand still.
+ * Decoration: the words before it are what is read out.
+ */
+export function WorkingDots({ className }: { className?: string }) {
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-[3px] ps-[3px]', className)} aria-hidden="true" data-working-dots="">
+      <span className="block h-[3px] w-[3px] rounded-full bg-current motion-safe:animate-pulse" />
+      <span className="block h-[3px] w-[3px] rounded-full bg-current motion-safe:animate-pulse motion-safe:[animation-delay:300ms]" />
+      <span className="block h-[3px] w-[3px] rounded-full bg-current motion-safe:animate-pulse motion-safe:[animation-delay:600ms]" />
+    </span>
+  );
+}
+
+/**
+ * Who is typing, between the transcript and the composer. Always rendered,
+ * empty when nobody is: app.css gives it no height then, and a live region
+ * that is already in the page is the one a screen reader announces.
+ */
+export function ChatStatusLine({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div {...props} className={cn(className, 'chat-status')} aria-live="polite" />;
+}
+
+/**
+ * The bar the composer's card sits in, at the foot of the column. `as`
+ * is for a composer that is its own form (a blank thread with Homeroom
+ * bot); every other one is a div around its form.
+ */
+export function ChatComposerBar({
+  as: Tag = 'div', className, ...props
+}: { as?: 'div' | 'form' } & React.FormHTMLAttributes<HTMLElement>) {
+  return <Tag {...props} className={cn(className, 'chat-composer-bar platform-safe-bar')} />;
 }
 
 /**

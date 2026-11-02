@@ -278,9 +278,10 @@ test('desktop keeps the card\'s padding and row, and is the app channel\'s heigh
 test('the bar\'s tab-bar, home-indicator and keyboard clearances are not the phone block\'s', () => {
   for (const block of [MESSAGES, GC]) {
     assert.doesNotMatch(block, /platform-safe|platform-kb|platform-tabs-h|un-kb|padding-bottom: calc/);
-    assert.doesNotMatch(block, /\n\s*\.messages-composer \{|\n\s*\.messages-composer,/, 'the bar round the card keeps its padding');
+    assert.doesNotMatch(block, /\n\s*\.messages-composer \{|\n\s*\.messages-composer,|\.chat-composer-bar/, 'the bar round the card keeps its padding');
   }
-  assert.match(COMPOSER, /messages-composer platform-safe-bar/);
+  // The bar is the chat foot's (1 November 2026), which brings the class.
+  assert.match(composerHtml(), /^<div class="messages-composer chat-composer-bar platform-safe-bar">/);
   assert.match(rule('.platform-safe-bar'),
     /padding-bottom: calc\(0\.5rem \+ max\(var\(--platform-tabs-h, 0px\), var\(--platform-safe-bottom\)\)\) !important;/);
   assert.match(CSS, /html\.un-kb \.platform-safe-bar \{\n\s*padding-bottom: 0\.5rem !important;\n\}/);

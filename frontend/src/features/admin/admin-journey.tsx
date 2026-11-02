@@ -615,6 +615,43 @@ const STEP_FILL: Record<string, string> = {
   not_yet: 'bg-zinc-200 dark:bg-zinc-700',
 };
 
+// The mail column in three shades (#6138): opened is the step's done fill,
+// sent but not opened is the staircase's plain fill, and a mail sent before
+// tracking began is striped, because nothing is known about it either way.
+const MAIL_FILL = {
+  opened: 'bg-violet-500',
+  unopened: 'bg-violet-300 dark:bg-violet-400/50',
+  untracked: 'bg-[repeating-linear-gradient(135deg,theme(colors.violet.500)_0_2px,theme(colors.violet.100)_2px_5px)] dark:bg-[repeating-linear-gradient(135deg,theme(colors.violet.500)_0_2px,theme(colors.violet.900)_2px_5px)]',
+};
+
+/** A person's mail cell: what its tracking saw, once the mail is past. */
+function mailFill(p: MilePerson, state: string): string {
+  if (state !== 'done' && state !== 'skipped' && state !== 'unknown') return STEP_FILL[state] || STEP_FILL.not_yet;
+  return !p.mail ? MAIL_FILL.untracked : p.mail.opened ? MAIL_FILL.opened : MAIL_FILL.unopened;
+}
+
+/**
+ * One cohort's admit mail, said on its line: "3 of 5 opened", then how
+ * many sit unopened and for how long (the oldest of them: a cohort's mail
+ * goes out on its admit day, so they are usually all the same). Empty when
+ * nobody in the cohort was mailed (they came in another way).
+ */
+function cohortMail(people: MilePerson[], nowMs: number): string {
+  const mailed = people.filter((p) => p.steps.some((st) => st.key === 'mail_sent' && st.state !== 'stuck' && st.state !== 'not_yet'));
+  if (!mailed.length) return '';
+  const tracked = mailed.filter((p) => p.mail);
+  if (!tracked.length) return ' · mail not tracked';
+  const unopened = tracked.filter((p) => !p.mail!.opened);
+  let said = ` · ${tracked.length - unopened.length} of ${tracked.length} opened`;
+  if (unopened.length) {
+    const sentAt = unopened.map((p) => p.steps.find((st) => st.key === 'mail_sent')?.at).filter((at): at is string => !!at);
+    const oldest = sentAt.length ? Math.min(...sentAt.map((at) => new Date(at).getTime())) : null;
+    // In the tracks' own unit, "4 d", like the days column beside them.
+    said += ` · ${unopened.length} sent, not opened${oldest != null ? `, ${Math.floor((nowMs - oldest) / 86_400_000)} d` : ''}`;
+  }
+  return said;
+}
+
 const MILE_KEYS = Object.keys(MILE_STEPS);
 
 // What each column counts, said where its label is tapped. Plain words and
@@ -622,7 +659,7 @@ const MILE_KEYS = Object.keys(MILE_STEPS);
 // "mail" is the provider taking the message, not the inbox getting it.
 const MILE_HELP: Record<string, string> = {
   admitted: 'Let in from the waitlist.',
-  mail_sent: 'Our mail provider accepted the \u201cYou\u2019re in\u201d mail. Since 7 Oct it is tracked: a person\u2019s panel says whether they opened it or clicked its link, and that is kept after the mail log\u2019s 30 days. An open is approximate, and no open is not proof it went unread.',
+  mail_sent: 'Our mail provider accepted the \u201cYou\u2019re in\u201d mail. Dark: opened. Light: sent, not opened. Striped: sent before tracking began on 7 Oct, so there is no record either way. The number over the bar is opened of tracked. An open is approximate, and no open is not proof it went unread.',
   code_asked: 'The mail\u2019s button was followed: its one-time sign-in link was used, or a sign-in code was asked for after the admit (the page asks for one when the link no longer works). A used link counts as a click on the mail even where opens are not tracked.',
   account: 'Account created and finished.',
   access: 'The account has platform access.',
@@ -718,15 +755,19 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
   }).length;
   const label = (cohort: string) => (cohort === 'other_way' ? 'Came in another way' : `Admitted ${weekLabel(cohort)}`);
   const onboarded = people.filter((p) => p.onboard && p.onboard.complete).length;
-  // The admit mail's tracking, on the card's own meta line: counts over the
-  // people whose mail was tracked, the gap said as a gap, and nothing when
-  // nobody here was sent one (all came in another way).
-  const mailed = people.filter((p) => p.steps.some((st) => st.key === 'mail_sent'));
-  const tracked = mailed.flatMap((p) => (p.mail ? [p.mail] : []));
-  const mailNote = !mailed.length ? ''
-    : tracked.length
-      ? ` \u00b7 mail: ${tracked.filter((m) => m.opened).length} opened \u00b7 ${tracked.filter((m) => m.clicked).length} clicked of ${tracked.length} tracked`
-      : ' \u00b7 mail opens not tracked';
+  const nowMs = Date.now();
+  // The mail bar in the three shades of its cells, and its count as opened
+  // of tracked; with nothing tracked it is a plain bar with a plain count.
+  const mailPast = people.filter((p) => {
+    const st = cellOf(p, 'mail_sent');
+    return st && (st.state === 'done' || st.state === 'skipped' || st.state === 'unknown');
+  });
+  const mailParts = {
+    opened: mailPast.filter((p) => p.mail && p.mail.opened).length,
+    unopened: mailPast.filter((p) => p.mail && !p.mail.opened).length,
+    untracked: mailPast.filter((p) => !p.mail).length,
+  };
+  const mailTracked = mailParts.opened + mailParts.unopened;
   // One column note open at a time, and how it opened: a tap keeps it until
   // the next tap, a hover only while the mouse stays.
   const [help, setHelp] = useState<{ id: string; how: 'tap' | 'hover' } | null>(null);
@@ -748,7 +789,7 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
       onOpen={(how) => setHelp({ id, how })} onClose={() => setHelp(null)} />
   );
   return (
-    <Card id="admin-journey-mile" title="First mile" note={`admit mail to first act · ${scope.cohort ? 'this cohort' : 'every cohort'}, any week${mailNote}`}>
+    <Card id="admin-journey-mile" title="First mile" note={`admit mail to first act · ${scope.cohort ? 'this cohort' : 'every cohort'}, any week`}>
       {miles ? (n ? (
         <>
           {/* One grid for the staircase and every track, so each bar stands
@@ -756,13 +797,23 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
               of its own and the nine columns keep the full width. */}
           <div className={JUI.mileGrid}>
             <span className="hidden sm:block" />
-            {MILE_KEYS.map((key, i) => (
+            {MILE_KEYS.map((key, i) => (key === 'mail_sent' && mailTracked ? (
+              <div key={key} className="flex flex-col items-stretch justify-end h-16" data-journey-mile-step={key}>
+                <span className="text-center text-[11px] leading-none mb-0.5 font-semibold text-violet-700 dark:text-violet-400">{mailParts.opened}/{mailTracked}</span>
+                <div className="flex flex-col-reverse rounded-sm overflow-hidden"
+                  style={{ height: `${Math.max(4, Math.round((passed(key) / n) * 100))}%` }}>
+                  {(['opened', 'unopened', 'untracked'] as const).map((part) => (mailParts[part]
+                    ? <div key={part} className={`basis-0 min-h-0 ${MAIL_FILL[part]}`} style={{ flexGrow: mailParts[part] }} />
+                    : null))}
+                </div>
+              </div>
+            ) : (
               <div key={key} className="flex flex-col items-stretch justify-end h-16" data-journey-mile-step={key}>
                 <span className="text-center text-[11px] leading-none mb-0.5 text-zinc-500 dark:text-zinc-400">{passed(key)}</span>
                 <div className={`rounded-sm ${i === MILE_KEYS.length - 1 ? 'bg-emerald-500' : 'bg-violet-300 dark:bg-violet-400/50'}`}
                   style={{ height: `${Math.max(4, Math.round((passed(key) / n) * 100))}%` }} />
               </div>
-            ))}
+            )))}
             <div className="flex flex-col items-stretch justify-end h-16" data-journey-mile-step="onboard">
               <span className="text-center text-[11px] leading-none mb-0.5 text-zinc-500 dark:text-zinc-400">{onboarded}</span>
               <div className="rounded-sm bg-violet-300 dark:bg-violet-400/50"
@@ -775,7 +826,7 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
             <span />
             {groups.map((m) => (
               <div key={m.cohort} className="contents">
-                <span className={`col-span-full mt-2 ${JUI.label}`}>{label(m.cohort)} · {m.people.length}</span>
+                <span className={`col-span-full mt-2 ${JUI.label}`}>{label(m.cohort)} · {m.people.length}{cohortMail(m.people, nowMs)}</span>
                 {m.people.map((p, i) => {
                   const done = p.steps.every((st) => st.state === 'done' || st.state === 'skipped' || st.state === 'unknown');
                   return (
@@ -784,7 +835,7 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
                       {MILE_KEYS.map((key) => {
                         const st = cellOf(p, key);
                         return st
-                          ? <span key={key} className={`h-2.5 rounded-sm ${STEP_FILL[st.state] || STEP_FILL.not_yet}`} />
+                          ? <span key={key} className={`h-2.5 rounded-sm ${key === 'mail_sent' ? mailFill(p, st.state) : STEP_FILL[st.state] || STEP_FILL.not_yet}`} />
                           : <span key={key} className="h-2.5 rounded-sm border border-dashed border-zinc-300 dark:border-zinc-600" />;
                       })}
                       <OnboardCell onboard={p.onboard} />
@@ -797,7 +848,8 @@ function FirstMileCard({ cohorts, scope, onOpen }: { cohorts: Cohorts | null; sc
               </div>
             ))}
           </div>
-          <Legend items={[[STEP_FILL.done, 'done'], [STEP_FILL.stuck, 'stuck, days since'], [STEP_FILL.not_yet, 'not yet']]} />
+          <Legend items={[[STEP_FILL.done, 'done, mail opened'], [MAIL_FILL.unopened, 'mail sent, not opened'],
+            [MAIL_FILL.untracked, 'mail not tracked'], [STEP_FILL.stuck, 'stuck, days since'], [STEP_FILL.not_yet, 'not yet']]} />
         </>
       ) : <Empty>Nobody here yet.</Empty>) : days ? <Loading failed={failed} what="the first mile" /> : null}
     </Card>

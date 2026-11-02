@@ -218,8 +218,10 @@ function FadeRail({ className = '', children, ...props }: React.ComponentProps<'
     const el = ref.current;
     if (!el) return undefined;
     const sync = () => {
-      const start = el.scrollLeft > 1;
-      const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+      // scrollLeft runs negative from the start in a right-to-left scroller.
+      const at = Math.abs(el.scrollLeft);
+      const start = at > 1;
+      const end = at + el.clientWidth < el.scrollWidth - 1;
       setEdges((e) => (e.start === start && e.end === end ? e : { start, end }));
     };
     sync();

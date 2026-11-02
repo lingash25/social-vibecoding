@@ -893,10 +893,10 @@ test('the expand CSS: closed it is the same block, open a window-sized card over
   const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/css/app.css'), 'utf8');
   assert.match(css, /\.shots-viewer\[popover\] \{ display: block; position: relative; inset: auto; margin: 0; padding: 0; border: 0; width: auto; height: auto;\n  overflow: hidden;/,
     'closed, the UA popover box is neutralised and the viewer is the block it always was');
-  assert.match(css, /\.shots-viewer:popover-open \{ position: fixed; inset: 0; margin: auto; height: fit-content;[^}]*width: min\(calc\(100vw - 48px\), calc\(\(100vh - 200px\) \* 1\.6\)\); max-height: calc\(100vh - 48px\);/,
-    'open, it is nearly the window, in the top layer so a backdrop-filter ancestor cannot trap it');
+  assert.match(css, /\.shots-viewer:popover-open \{ position: fixed; inset: 0 var\(--platform-float-right\) 0 var\(--platform-float-left\); margin: auto; height: fit-content;[^}]*width: min\(calc\(var\(--platform-float-w\) - 48px\), calc\(\(100vh - 200px\) \* 1\.6\)\); max-height: calc\(100vh - 48px\);/,
+    'open, it is nearly the window less the Duo\'s column (the float box, centred in it), in the top layer so a backdrop-filter ancestor cannot trap it');
   assert.match(css, /\.shots-viewer::backdrop \{ background: rgba\(0, 0, 0, 0\.55\); \}/);
-  assert.match(css, /@supports \(height: 100dvh\) \{\n  \.shots-viewer:popover-open \{ width: min\(calc\(100vw - 48px\), calc\(\(100dvh - 200px\) \* 1\.6\)\); max-height: calc\(100dvh - 48px\); \}/);
+  assert.match(css, /@supports \(height: 100dvh\) \{\n  \.shots-viewer:popover-open \{ width: min\(calc\(var\(--platform-float-w\) - 48px\), calc\(\(100dvh - 200px\) \* 1\.6\)\); max-height: calc\(100dvh - 48px\); \}/);
   assert.match(css, /\.shots-expand-in \{ display: none; \}/);
   assert.match(css, /\.shots-viewer:popover-open \.shots-expand-out \{ display: none; \}/);
   assert.match(css, /\.shots-viewer:popover-open \.shots-expand-in \{ display: inline-flex; \}/);

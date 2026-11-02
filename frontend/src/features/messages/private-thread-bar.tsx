@@ -1,17 +1,16 @@
 /**
  * #6019 (stage 5): a private thread, one the viewer started in their chat
  * with Homeroom bot (the AI tab). Everything in it is theirs alone until
- * they press one of two doors:
+ * they take it public:
  *
  *   Only you can see this thread.                    ← its head (PrivateThreadNote)
  *   …the thread…
- *   [File it] [New project]                          ← its foot (PrivateThreadDoors)
+ *   [New project]                                    ← its foot (PrivateThreadDoors)
  *
- * File it files its words as a request on a project they pick; Post it posts
- * them in an existing thread, by its number, as their own message
- * (routes/conversations.js, services/private-threads.js). Either opens a
- * small form with the words to go public, which they can change first. Once
- * one has been done the head says where the thread went.
+ * File it files its words as a request on a project; Post it posts them in
+ * an existing thread as their own message. Since 1 Nov 2026 both are the
+ * bot's to offer (below). Once one has been done the head says where the
+ * thread went.
  *
  * An idea for no project yet has a third door (#6019 follow-up, plan v3:
  * "an idea with no community yet: Who is it for? starts a new project"):
@@ -26,21 +25,25 @@
  * question has nothing to take public. A door opens already pointed at the
  * thread's project, and at the thread a reply answers.
  *
+ * 1 Nov 2026 (Evan): File it is not at the foot of every thread either. It
+ * is Homeroom bot's to offer once there is something ready to file: its
+ * offer (homeroom-bot-mayor.js offer_request, a draft's own card) carries
+ * File it and Not now, and Post it under a drafted reply. The foot keeps
+ * New project alone, for an idea in no project yet: the bot offers a
+ * project only from a design (design-bot.js offer_project), so a design
+ * thread has no door either. The routes the old doors wrote to stay
+ * (routes/conversations.js, services/private-threads.js fileIt, postIt).
+ *
  * The first render is nothing: where the thread stands is read in an effect
  * (`usePrivateThread`, held by the thread's pane for its head and its foot).
  */
 
 import { useEffect, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { useMessages } from '../../lib/i18n/react';
 import { t as translate } from '../../lib/i18n/runtime';
-import { useStoreState } from '../../lib/use-store-state';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { communityScopeStore, warmCommunities } from '../workshop/community-scope';
 
 export interface PrivateThreadState {
   state: 'open' | 'filed' | 'posted' | 'dropped';
@@ -59,22 +62,21 @@ export interface PrivateThreadState {
   href?: string | null;
 }
 
-export type Door = 'file' | 'post' | 'new';
+export type Door = 'new';
 
 /**
- * Pure: the doors a private thread offers, in order. None until Homeroom bot
- * has answered in it (there is nothing shaped to take public yet), and none
- * once it went somewhere.
+ * Pure: the doors a private thread offers at its foot. None until Homeroom
+ * bot has answered in it (there is nothing shaped to take public yet), and
+ * none once it went somewhere. File it and Post it are never here: they are
+ * the bot's to offer, under its own reply, once something is ready. An idea
+ * in no project (a thread they started, a "+" thread for any project) can
+ * start one.
  */
 export function doorsFor(where: PrivateThreadState | null, botReplied: boolean): Door[] {
   if (!where || where.state !== 'open' || !botReplied || where.mine === false) return [];
-  switch (where.kind) {
-    case 'draft_request': return ['file'];
-    case 'draft_reply': return ['post'];
-    // 1 Nov 2026: a thread from the bot's "+" (and a design thread) is an
-    // idea until it is something more: filed, or a project of its own.
-    default: return where.app ? ['file'] : ['file', 'new'];
-  }
+  // A design thread's bot offers the project itself (design-bot.js offer_project).
+  if (where.kind === 'draft_request' || where.kind === 'draft_reply' || where.kind === 'design' || where.app) return [];
+  return ['new'];
 }
 
 interface ThreadMessage {
@@ -187,85 +189,32 @@ export function PrivateThreadNote({ where }: { where: PrivateThreadState | null 
   return <div className="messages-bot-note px-4 py-2" data-private-thread="open">{t('messages:privateThread.label')}</div>;
 }
 
-/** The thread's foot: the doors that apply, and the form a door opens. */
-export function PrivateThreadDoors({ rootId, text, where, onWhere, botReplied }: {
+/** The thread's foot: New project, for an idea in no project yet, and who it is for. */
+export function PrivateThreadDoors({ rootId, text, where, botReplied }: {
   rootId: number;
   text: string;
   where: PrivateThreadState | null;
-  onWhere: (next: PrivateThreadState) => void;
   /** Homeroom bot has answered in the thread. */
   botReplied: boolean;
 }): ReactNode {
   const t = useMessages('messages');
-  const scope = useStoreState(communityScopeStore);
   const [door, setDoor] = useState<Door | null>(null);
-  const [project, setProject] = useState('');
-  const [title, setTitle] = useState('');
-  const [number, setNumber] = useState('');
-  const [words, setWords] = useState(text);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const setWhere = onWhere;
 
   useEffect(() => { setDoor(null); }, [rootId]);
-  // The projects to pick from are read once a door is opened.
-  useEffect(() => (door && door !== 'new' ? warmCommunities(0) : undefined), [door]);
 
   const doors = doorsFor(where, botReplied);
-  if (!where || (!doors.length && !door)) return null;
+  if (!where || !doors.length) return null;
 
-  const choices = projectChoices(scope);
   const startProject = (audience: Audience) => {
     const app = typeof window !== 'undefined' ? (window as any).App : null;
     app?.showCreateModal?.({ idea: text, audience });
-  };
-  const opening = (next: Door) => {
-    setDoor(next);
-    setError(null);
-    setWords(text);
-    setTitle(text.split('\n')[0].slice(0, 120));
-    // Pointed where the thread is for: its project, the thread a reply answers.
-    setProject(where.app?.slug || '');
-    setNumber(where.target ? String(where.target) : '');
-  };
-  const send = async (event: FormEvent) => {
-    event.preventDefault();
-    if (busy || !door || !project) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/conversations/homeroom-bot/threads/${rootId}/${door}`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(door === 'file'
-          ? { project, title, text: words }
-          : { project, number: Number(number), text: words }),
-      });
-      const data = await res.json().catch(() => null);
-      if (res.ok && data) { setWhere(data); setDoor(null); return; }
-      // Already done elsewhere: say where it went.
-      if (res.status === 409 && data && typeof data.state === 'string') { setWhere(data); setDoor(null); return; }
-      setError(data && typeof data.error === 'string' && data.error !== 'join_required'
-        ? data.error : t('messages:privateThread.failed'));
-    } catch {
-      setError(t('messages:privateThread.failed'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const label: Record<Door, string> = {
-    file: t('messages:privateThread.fileIt'),
-    post: t('messages:privateThread.postIt'),
-    new: t('messages:privateThread.newProject'),
   };
   return (
     <div className="px-4 py-2" data-private-doors={doors.join(' ')}>
       <div className="flex flex-wrap items-center gap-2">
         {doors.map((d) => (
-          <Button key={d} type="button" variant="pillNeutral" size="sm" ink="neutral" data-private-door={d} aria-pressed={door === d} onClick={() => opening(d)}>
-            {label[d]}
+          <Button key={d} type="button" variant="pillNeutral" size="sm" ink="neutral" data-private-door={d} aria-pressed={door === d} onClick={() => setDoor(d)}>
+            {t('messages:privateThread.newProject')}
           </Button>
         ))}
       </div>
@@ -278,29 +227,6 @@ export function PrivateThreadDoors({ rootId, text, where, onWhere, botReplied }:
             <button type="button" className="messages-bot-secondary" data-private-audience="open" onClick={() => startProject('open')}><span>{t('messages:privateThread.forCommunity')}</span></button>
           </div>
         </div>
-      ) : null}
-      {door === 'file' || door === 'post' ? (
-        <form className="mt-2 flex flex-col gap-2" onSubmit={(event) => { void send(event); }} data-private-form={door}>
-          <Select aria-label={t('messages:privateThread.project')} value={project} onChange={(e) => setProject(e.currentTarget.value)} required>
-            <option value="">{t('messages:privateThread.chooseProject')}</option>
-            {choices.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-          </Select>
-          {door === 'file' ? (
-            <Input aria-label={t('messages:privateThread.title')} placeholder={t('messages:privateThread.title')} value={title} maxLength={120} onChange={(e) => setTitle(e.currentTarget.value)} />
-          ) : (
-            <Input aria-label={t('messages:privateThread.number')} placeholder={t('messages:privateThread.number')} inputMode="numeric" value={number} onChange={(e) => setNumber(e.currentTarget.value.replace(/[^0-9]/g, ''))} required />
-          )}
-          <Textarea aria-label={t('messages:privateThread.words')} value={words} rows={3} maxLength={3500} onChange={(e) => setWords(e.currentTarget.value)} />
-          {error ? <p role="alert" className="messages-bot-note">{error}</p> : null}
-          <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={busy || !project || (door === 'post' && !number)}>
-              {door === 'file' ? t('messages:privateThread.sendFile') : t('messages:privateThread.sendPost')}
-            </Button>
-            <Button type="button" variant="pillNeutral" size="sm" ink="neutral" onClick={() => setDoor(null)}>
-              {t('messages:privateThread.cancel')}
-            </Button>
-          </div>
-        </form>
       ) : null}
     </div>
   );

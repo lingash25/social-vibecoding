@@ -344,9 +344,17 @@ function go(route: string, hint: PanelHint | null): void {
  * the AI tab's page is up (features/ai/: the panel takes the place of Main,
  * the chat docked beside the list, so a request opened from the list keeps
  * the list), only at desktop width, and not in chromeless mode or the native
- * app — the Homeroom app's WebView owns its own back stack and bridge relay,
- * and the panel is a desktop arrangement. Everywhere else every one of these
- * links navigates exactly as it always has.
+ * app beside an app — the Homeroom app's WebView owns its own back stack and
+ * bridge relay, and the panel is a desktop arrangement. Everywhere else every
+ * one of these links navigates exactly as it always has.
+ *
+ * BESIDE THE HOMEROOM BOT TAB, THE NATIVE APP TOO (1 Nov 2026). Unfolded and
+ * held sideways, iPhone Duo draws the tab's page with Main docked, and a
+ * request opened from its list took the whole screen instead of Main's
+ * place. That page is a root with no back arrow, so the WebView's back swipe
+ * is off there already (header/native-back-navigation.ts), and the column's
+ * own ‹ Main Chat is the way back. Beside an app the native app keeps the
+ * whole screen.
  */
 export function canTake(): boolean {
   if (typeof window === 'undefined' || isEmbeddedPanel()) return false;
@@ -357,7 +365,7 @@ export function canTake(): boolean {
   const besideAi = typeof A._isScreenVisible === 'function' && A._isScreenVisible('ai-screen');
   if (!besideApp && !besideAi) return false;
   try {
-    if (document.documentElement.classList.contains('in-native-webview')) return false;
+    if (besideApp && document.documentElement.classList.contains('in-native-webview')) return false;
     return window.matchMedia(besideApp ? DESKTOP_QUERY : BESIDE_AI_QUERY).matches;
   } catch {
     return false;

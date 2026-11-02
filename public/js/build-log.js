@@ -124,7 +124,8 @@ const BuildLog = {
         },
       });
       if (BuildLog._modal && BuildLog._modal.el) {
-        BuildLog._modal.el.style.width = 'min(672px, calc(100vw - 32px))';
+        // The float box (app.css THE USABLE BOX) less the kit's 16px a side.
+        BuildLog._modal.el.style.width = 'min(672px, calc(var(--platform-float-w) - 32px))';
       }
     } else {
       overlay.addEventListener('pointerdown', (e) => {

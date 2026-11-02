@@ -737,7 +737,9 @@ async function sendDm(pool, {
 // handling is still doing, so the bot is never left typing forever: once
 // nothing renews it, every reader clears the line on its own.
 const TYPING_RENEW_MS = 4000;
-const TYPING_MAX_MS = 3 * 60 * 1000;
+// Homeroom bot parity, P1: a turn of sixteen rounds can run for minutes (it
+// was three, when a turn had six).
+const TYPING_MAX_MS = 8 * 60 * 1000;
 
 // Where the bot types: a conversation's main chat, or one thread in it
 // (31 Oct 2026: an answer to a message written in a thread lands in that
@@ -745,21 +747,78 @@ const TYPING_MAX_MS = 3 * 60 * 1000;
 // alone, which a phone does not show while a thread is open).
 const typingPlace = (conversationId, threadRootId) => `${conversationId}:${threadRootId || 0}`;
 
-// place -> { holders: Map<holder, deadline>, timer }. A person can write
-// again while the bot still answers their last message (the model's turns
-// run one after another): the line stays up until the last answer is out,
-// rather than going off between them.
+// place -> { holders: Map<holder, deadline>, timer, doing }. A person can
+// write again while the bot still answers their last message (the model's
+// turns run one after another): the line stays up until the last answer is
+// out, rather than going off between them.
 const typingNow = new Map();
 // place -> the send in flight: a place's typing events go out in order, so
 // a quick answer's "stopped" never overtakes its "typing".
 const typingSends = new Map();
 
-async function pushTyping(pool, botId, conversationId, typing, ws, threadRootId = null) {
+// 1 Nov 2026: what the bot is doing while it types, said on its typing event
+// as `doing` so the Messages screen draws a working card ("Reading request
+// #12", "Drawing the screen") instead of a bare "is typing" line. A kind and
+// what it names, never words: the screen says them in the reader's language
+// (frontend/locales/en/messages.json `thread.botWorking.*`), as the agent
+// session's activity line does from a tool's name. No `doing` is "Thinking".
+// A person's typing event (routes/conversations.js) never carries one.
+// Homeroom bot parity, P1: 'writing' carries the answer as it is written
+// (homeroom-bot-mayor.js draftWriter), its own words and the only `text`
+// a typing event has: the newest MAX_DRAFT_CHARS of it, so the event fits
+// the bus between servers (ws-bus.js: 8000 bytes, or it becomes a nudge to
+// reload) and the card stays a card. The message sent takes its place.
+// 'looking': a helper sent to look into a project's code (P3, look_into).
+const DOING_KINDS = Object.freeze(['progress', 'request', 'code', 'drawing', 'designing', 'drafting', 'writing', 'looking']);
+const MAX_DOING_PROJECT = 60;
+const MAX_DRAFT_CHARS = 1800;
+const MAX_DRAFT_BYTES = 5600;
+
+/** Pure: the end of an answer being written, as a typing event carries it: '…' and the newest words, when it is long. */
+function draftTail(text) {
+  let out = String(text || '').replace(/\r/g, '').trim();
+  if (!out) return '';
+  const fits = (value) => Buffer.byteLength(JSON.stringify(value), 'utf8') <= MAX_DRAFT_BYTES;
+  if (out.length <= MAX_DRAFT_CHARS && fits(out)) return out;
+  let keep = MAX_DRAFT_CHARS;
+  let tail = out.slice(-keep);
+  while (keep > 100 && !fits(`… ${tail}`)) {
+    keep = Math.floor(keep * 0.8);
+    tail = out.slice(-keep);
+  }
+  // From a word, not the middle of one.
+  const space = tail.search(/\s/);
+  if (space > 0 && space < 40) tail = tail.slice(space + 1);
+  return `… ${tail.trimStart()}`;
+}
+
+/** Pure: `what` as a typing event carries it ({ kind, number?, project? }), or null for "thinking". */
+function typingDoing(what) {
+  if (!what || typeof what !== 'object' || !DOING_KINDS.includes(what.kind)) return null;
+  if (what.kind === 'request') {
+    const number = Number(what.number);
+    return Number.isSafeInteger(number) && number > 0 ? { kind: 'request', number } : null;
+  }
+  if (what.kind === 'code' || what.kind === 'looking') {
+    const project = typeof what.project === 'string' ? clip(what.project.replace(/\s+/g, ' ').trim(), MAX_DOING_PROJECT) : '';
+    return project ? { kind: what.kind, project } : { kind: what.kind };
+  }
+  if (what.kind === 'writing') {
+    const text = typeof what.text === 'string' ? draftTail(what.text) : '';
+    return text ? { kind: 'writing', text } : null;
+  }
+  return { kind: what.kind };
+}
+
+const sameDoing = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
+
+async function pushTyping(pool, botId, conversationId, typing, ws, threadRootId = null, doing = null) {
   try {
     await conversations.withLockedAudience(pool, { id: botId }, conversationId, (audience) => {
       ws.pushConversationEvent(audience, {
         type: 'conversation_typing', conversationId, userId: botId, typing,
         ...(threadRootId ? { threadRootId } : {}),
+        ...(typing && doing ? { doing } : {}),
       }, { excludeUserId: botId, actorUserId: botId });
     });
   } catch (err) {
@@ -768,10 +827,10 @@ async function pushTyping(pool, botId, conversationId, typing, ws, threadRootId 
   }
 }
 
-function sendTyping(pool, botId, conversationId, typing, ws, threadRootId = null) {
+function sendTyping(pool, botId, conversationId, typing, ws, threadRootId = null, doing = null) {
   const place = typingPlace(conversationId, threadRootId);
   const prior = typingSends.get(place) || Promise.resolve();
-  const next = prior.then(() => pushTyping(pool, botId, conversationId, typing, ws, threadRootId));
+  const next = prior.then(() => pushTyping(pool, botId, conversationId, typing, ws, threadRootId, doing));
   typingSends.set(place, next);
   next.then(() => { if (typingSends.get(place) === next) typingSends.delete(place); });
   return next;
@@ -779,17 +838,23 @@ function sendTyping(pool, botId, conversationId, typing, ws, threadRootId = null
 
 /**
  * Show the bot typing in one conversation until the returned stop() is
- * called, or TYPING_MAX_MS passes. Never throws.
+ * called, or TYPING_MAX_MS passes. Never throws. `stop.doing(what)` says
+ * what it is doing now (typingDoing; null: thinking): at once, if it
+ * changed, and on every renewal after.
  */
 function startTyping(pool, { botId, conversationId, threadRootId = null, ws = null }) {
   const id = Number(conversationId);
-  if (!botId || !Number.isSafeInteger(id) || id <= 0) return async () => {};
+  if (!botId || !Number.isSafeInteger(id) || id <= 0) {
+    const none = async () => {};
+    none.doing = async () => {};
+    return none;
+  }
   const root = Number.isSafeInteger(Number(threadRootId)) && Number(threadRootId) > 0 ? Number(threadRootId) : null;
   const place = typingPlace(id, root);
   const io = ws || require('./ws');
   let entry = typingNow.get(place);
   if (!entry) {
-    const created = { holders: new Map(), timer: null };
+    const created = { holders: new Map(), timer: null, doing: null, doingBy: null };
     created.end = () => {
       clearInterval(created.timer);
       if (typingNow.get(place) === created) typingNow.delete(place);
@@ -804,7 +869,7 @@ function startTyping(pool, { botId, conversationId, threadRootId = null, ws = nu
         return;
       }
       // One renewal at a time: a slow database never queues them up.
-      if (!typingSends.has(place)) sendTyping(pool, botId, id, true, io, root);
+      if (!typingSends.has(place)) sendTyping(pool, botId, id, true, io, root, created.doing);
     }, TYPING_RENEW_MS);
     created.timer.unref?.();
     typingNow.set(place, created);
@@ -815,20 +880,42 @@ function startTyping(pool, { botId, conversationId, threadRootId = null, ws = nu
   entry.holders.set(holder, Date.now() + TYPING_MAX_MS);
   const stop = async () => {
     // Already timed out, or another answer is still being written.
-    if (!entry.holders.delete(holder) || entry.holders.size) return;
+    if (!entry.holders.delete(holder)) return;
+    if (entry.holders.size) {
+      // What this answer was doing is not what the one still going is.
+      if (entry.doingBy === holder) { entry.doing = null; entry.doingBy = null; }
+      return;
+    }
     await entry.end();
   };
   // Settles once "typing" has gone out (whileTyping waits for it).
   stop.ready = entry.first || Promise.resolve();
+  stop.doing = (what) => {
+    const next = typingDoing(what);
+    // Stopped already, or saying what it already said.
+    if (!entry.holders.has(holder) || typingNow.get(place) !== entry || sameDoing(next, entry.doing)) return Promise.resolve();
+    entry.doing = next;
+    entry.doingBy = next ? holder : null;
+    return sendTyping(pool, botId, id, true, io, root, next);
+  };
   return stop;
 }
 
 // The longest the answer waits for its "typing" to go out first.
 const TYPING_FIRST_WAIT_MS = 2000;
 
-/** Run `work` with the bot typing in the conversation, and stop when it settles. */
+/**
+ * Run `work` with the bot typing in the conversation, and stop when it
+ * settles. `work` is handed { doing, moveTo }: `doing` says what it is
+ * doing now (startTyping's stop.doing); `moveTo(threadRootId)` carries the
+ * typing, and what it last said it was doing, to another thread of the
+ * same conversation where the answer goes on (null: the main chat).
+ */
 async function whileTyping(pool, { botId, conversationId, threadRootId = null, ws = null }, work) {
-  const stop = startTyping(pool, { botId, conversationId, threadRootId, ws });
+  let stop = startTyping(pool, { botId, conversationId, threadRootId, ws });
+  let here = Number(threadRootId) || null;
+  // What it last said it is doing, for the place it moves to.
+  let said = null;
   // "typing" goes out before anything the answer does: a quick answer's own
   // events (its quote answered, its message) used to reach the reader first
   // when the typing event's audience lookup was slower than the answer.
@@ -838,8 +925,25 @@ async function whileTyping(pool, { botId, conversationId, threadRootId = null, w
     new Promise((resolve) => { waited = setTimeout(resolve, TYPING_FIRST_WAIT_MS); waited.unref?.(); }),
   ]);
   clearTimeout(waited);
+  const typing = {
+    doing: (what) => { said = what; return stop.doing(what); },
+    // 1 Nov 2026: a screen asked for in Main Chat is drawn in a thread the
+    // designer opens (design-bot.js draw), so the working card waited in
+    // Main Chat while the new thread looked idle. The typing goes there:
+    // started in the thread first, saying what it was doing, then stopped
+    // here, so the card is never gone from both.
+    moveTo: async (rootId) => {
+      const there = Number(rootId) || null;
+      if (there === here) return;
+      const was = stop;
+      stop = startTyping(pool, { botId, conversationId, threadRootId: there, ws });
+      here = there;
+      if (said) await stop.doing(said);
+      await was();
+    },
+  };
   try {
-    return await work();
+    return await work(typing);
   } finally {
     await stop();
   }
@@ -1036,11 +1140,19 @@ async function requestStart(pool, { userId, appId, issueNumber }) {
  * platform does (limits.weekStartUtc) and as weekKey reads it.
  */
 async function weeklySpentCents(pool, userId) {
+  // Homeroom bot parity (P3, P9): and the looks into code they asked for,
+  // an investigation's check-ins among them (homeroom_bot_looks). P8: and the
+  // pictures it made for them (services/bot-pictures.js), in the chat or for a
+  // build they pay for.
   const { rows } = await pool.query(
-    `SELECT COALESCE(SUM(COALESCE(r.cost_usd, 0) + COALESCE(r.build_cost_usd, 0)), 0) AS usd
+    `SELECT COALESCE((SELECT SUM(COALESCE(r.cost_usd, 0) + COALESCE(r.build_cost_usd, 0))
        FROM homeroom_bot_runs r
        LEFT JOIN homeroom_bot_requesters q ON q.app_id = r.app_id AND q.issue_number = r.issue_number
-      WHERE r.charged AND COALESCE(r.payer_user_id, q.user_id) = $1 AND r.created_at >= $2`,
+      WHERE r.charged AND COALESCE(r.payer_user_id, q.user_id) = $1 AND r.created_at >= $2), 0)
+      + COALESCE((SELECT SUM(l.cost_usd) FROM homeroom_bot_looks l
+      WHERE l.charged AND l.user_id = $1 AND l.created_at >= $2), 0)
+      + COALESCE((SELECT SUM(p.cost_usd) FROM homeroom_bot_pictures p
+      WHERE p.payer_user_id = $1 AND p.created_at >= $2), 0) AS usd`,
     [userId, require('./limits').weekStartUtc()],
   );
   return Math.round((Number(rows[0]?.usd) || 0) * 100);
@@ -2730,6 +2842,8 @@ async function tellReady(pool, sessionId, { epoch, broken: brokenClaims = [], de
   );
   if (!rows[0]) return null;
   const run = rows[0];
+  // Homeroom bot parity (P4): ready for its yes; a batch's roll-up says so.
+  require('./homeroom-bot-batches').noteRequestChanged(pool, run.id, Number(run.issue_number));
   const broken = brokenWords(brokenClaims);
   const bot = deps.bot || await botAccount(pool);
   if (!bot) return null;
@@ -2784,6 +2898,9 @@ async function tellReady(pool, sessionId, { epoch, broken: brokenClaims = [], de
   await require('./homeroom-bot-chat').noteRequestStatus(pool, {
     appId: run.id, issueNumber: Number(run.issue_number), status: 'ready', sessionId: id, deps: { strict: true },
   });
+  // Homeroom bot parity P6: a change that was working past a check that is
+  // not its own passes now; its card says so (never throws).
+  await require('./homeroom-bot-flaky-checks').noteGreen(pool, id, { deps });
   return told;
 }
 
@@ -4248,8 +4365,12 @@ async function noteUserMessage(pool, config, { user, conversationId, message, de
   // #3684: typing from here until the answer is sent (whileTyping above).
   // In the thread they wrote in, where the answer lands (sendDm's threadRootFor).
   const threadRootId = Number(message.threadRootId ?? message.thread_root_id) || null;
+  // 1 Nov 2026: and what it is doing as it works (deps.doing: typing's
+  // stop.doing), for the working card the screen draws in its place.
   return whileTyping(pool, { botId: bot.id, conversationId, threadRootId, ws: deps.ws },
-    () => answerUserMessage(pool, config, { bot, user, settings, conversationId, message, deps }));
+    (typing) => answerUserMessage(pool, config, {
+      bot, user, settings, conversationId, message, deps: { ...deps, doing: typing.doing, moveTyping: typing.moveTo },
+    }));
 }
 
 /**
@@ -5988,6 +6109,8 @@ module.exports = {
   messageThread,
   threadDeps,
   noteStep,
+  // Homeroom bot parity P6: a request's card in a person's chat with the bot.
+  cardShown,
   waitingPhrase,
   BUILT_TESTING_TEXT,
   PREVIEW_RETRY_TEXT,
@@ -6054,6 +6177,11 @@ module.exports = {
   TYPING_MAX_MS,
   startTyping,
   whileTyping,
+  typingDoing,
+  draftTail,
+  MAX_DRAFT_CHARS,
+  MAX_DRAFT_BYTES,
+  DOING_KINDS,
   recordRequester,
   requesterOf,
   requestTitleFor,

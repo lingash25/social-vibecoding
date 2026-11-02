@@ -94,7 +94,8 @@ test('a complicated plan counts against the daily questions and notes; a small c
   assert.equal(await bot.planTripwire(counting(9), 2), null);
   assert.ok(seen.some(([sql]) => /verdict = ANY\(\$2::text\[\]\) OR complicated IS TRUE/.test(sql)), 'plans asked count as questions do');
   const src = read('src/services/homeroom-bot.js');
-  assert.match(src, /const caps = await simulateCaps\(pool, bot, app\.id, v\.verdict, settings\)\n\s+\|\| \(v\.complicated \? await planTripwire\(pool, app\.id\) : null\);/,
+  // (Homeroom bot parity, P4: the request it decides for, which a batch may raise the hold for.)
+  assert.match(src, /const caps = await simulateCaps\(pool, bot, app\.id, v\.verdict, settings, \{ issueNumber \}\)\n\s+\|\| \(v\.complicated \? await planTripwire\(pool, app\.id\) : null\);/,
     'only a complicated change: a small one is not asked about');
   assert.match(live.heldText({ cap: 'question_tripwire', verdict: 'plan', limit: 10, project: 'Chores' }),
     /^Homeroom bot has a plan for this request, but it has already posted 10 questions and notes on Chores today\./);

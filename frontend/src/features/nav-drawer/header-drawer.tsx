@@ -72,8 +72,15 @@ function useHeaderFrame(
   }, [mode]);
 }
 
+/** A box's start edge as a figure that grows in reading direction, for the slot's distance. */
+function inlineStart(el: Element): number {
+  const box = el.getBoundingClientRect();
+  return dirSign() === -1 ? -box.right : box.left;
+}
+
+/** `x` is in reading direction: headerFrame's sums are the same in Arabic, drawn the other way. */
 function translate(x: number, y = 0): string {
-  return x || y ? `translate3d(${x}px, ${y}px, 0)` : '';
+  return x || y ? `translate3d(${x * dirSign()}px, ${y}px, 0)` : '';
 }
 
 /** A place's words in the header: a channel by its #handle. */
@@ -139,8 +146,8 @@ export function DrawerTitles(): ReactNode {
       const left = el?.closest('#platform-header')?.querySelector('.platform-header-left');
       if (!el || !left) return;
       const at = titleSlot(
-        { laidOut: el.getClientRects().length > 0, left: el.getBoundingClientRect().left },
-        { laidOut: left.getClientRects().length > 0, left: left.getBoundingClientRect().left },
+        { laidOut: el.getClientRects().length > 0, left: inlineStart(el) },
+        { laidOut: left.getClientRects().length > 0, left: inlineStart(left) },
       );
       if (at !== null && at !== slot.current) {
         slot.current = at;

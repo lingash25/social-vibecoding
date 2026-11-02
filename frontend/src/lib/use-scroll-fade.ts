@@ -47,8 +47,10 @@ export function useScrollFade(
     if (!el) return undefined;
     const measure = () => {
       const max = el.scrollWidth - el.clientWidth;
-      const start = max > 1 && el.scrollLeft > 1;
-      const end = max > 1 && el.scrollLeft < max - 1;
+      // scrollLeft runs negative from the start in a right-to-left scroller.
+      const at = Math.abs(el.scrollLeft);
+      const start = max > 1 && at > 1;
+      const end = max > 1 && at < max - 1;
       setEdges((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
     };
     measure();

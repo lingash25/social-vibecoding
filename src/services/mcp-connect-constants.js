@@ -31,10 +31,12 @@ const REFRESH_PREFIX = 'svmcr_';
 const DELEGATED_TOKEN_PREFIX = 'svmcd_';
 
 // Who a delegated grant is for. `agent_mayor` is the Mayor of an agent
-// session; `worker_read` is the coding agent inside one change's worker. The
-// server picks the kind when it issues the grant; nothing a client sends can
-// name one.
-const DELEGATION_KINDS = Object.freeze(['agent_mayor', 'worker_read']);
+// session; `worker_read` is the coding agent inside one change's worker;
+// `bot_admin` is Homeroom bot answering a full platform admin in their own
+// conversation with it, reaching the connector's admin tools (Homeroom bot
+// parity P7, homeroom-bot-thread-tools/admin.js). The server picks the kind
+// when it issues the grant; nothing a client sends can name one.
+const DELEGATION_KINDS = Object.freeze(['agent_mayor', 'worker_read', 'bot_admin']);
 
 // The synthetic client id each kind's tokens carry. Deliberately NOT the
 // `svmc_…` shape CLIENT_ID_RE accepts, so loadClient refuses them and the
@@ -43,12 +45,14 @@ const DELEGATION_KINDS = Object.freeze(['agent_mayor', 'worker_read']);
 const DELEGATED_CLIENT_IDS = Object.freeze({
   agent_mayor: 'homeroom:agent_mayor',
   worker_read: 'homeroom:worker_read',
+  bot_admin: 'homeroom:bot_admin',
 });
 
 // Shown where a connector's name is (whoami's `connectedFrom`, logs).
 const DELEGATED_CLIENT_NAMES = Object.freeze({
   agent_mayor: 'Homeroom agent session',
   worker_read: 'Homeroom coding agent',
+  bot_admin: 'Homeroom bot (admin tools)',
 });
 
 // Upper bounds on a delegated grant's life. A Mayor's read token lasts one
@@ -58,6 +62,8 @@ const DELEGATED_CLIENT_NAMES = Object.freeze({
 const DELEGATION_MAX_TTL_SECONDS = Object.freeze({
   agent_mayor: 15 * 60,
   worker_read: 2 * 60 * 60,
+  // One read in a turn, or one confirmed write.
+  bot_admin: 5 * 60,
 });
 
 const AUTH_CODE_TTL_SECONDS = 60;

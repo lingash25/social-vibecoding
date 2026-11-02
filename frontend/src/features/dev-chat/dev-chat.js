@@ -12027,8 +12027,9 @@ const DevChat = {
   // wide viewports.
   //
   // Width is persisted to localStorage so it sticks across reloads.
-  // The CSS rule `min-width: 280px; max-width: calc(100vw - 320px)`
-  // clamps stale or hostile values so the chat pane is always usable.
+  // The CSS rule `min-width: 280px; max-width: calc(100% - 320px)` (of
+  // the session body, the row this drag measures) clamps stale or hostile
+  // values so the chat pane is always usable.
 
   _SPEC_VIEWER_WIDTH_KEY: 'dc-spec-viewer-width-v1',
   // The viewer's open/closed state is persisted per-session, not

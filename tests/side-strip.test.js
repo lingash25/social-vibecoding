@@ -249,6 +249,21 @@ test('the strip follows the inset itself, not only a resize (the tabs left at th
   assert.equal(page.listeners.size, 0);
 });
 
+// 1 Nov 2026: WebKit hands the side panel's frame the screen's insets, and
+// beside the Homeroom bot tab on the Duo held sideways its page padded itself
+// an 84px column it does not touch. The panel is a column inside the page.
+test('the side panel\'s own document takes no strip, band or corner, whatever the frame is handed', () => {
+  const page = fakePage();
+  page.root.classList = { contains: (c) => c === 'in-side-panel' };
+  page.insets.right = 84;
+  page.insets.top = 84;
+  watchSideStrip(page.doc, page.win);
+  assert.equal(page.attrs.get(STRIP_ATTR), undefined, 'no column');
+  assert.equal(page.attrs.get(BAND_ATTR), undefined, 'no band');
+  page.listeners.get('resize')();
+  assert.equal(page.attrs.get(STRIP_ATTR), undefined, 'and none on the next read either');
+});
+
 test('with no ResizeObserver, the window\'s resize still reads the inset', () => {
   const page = fakePage({ withObserver: false });
   watchSideStrip(page.doc, page.win);

@@ -19,7 +19,9 @@
 //     message (last_activity_at);
 //   - the failure was not one the bot judged the platform's (a
 //     checks_not_change incident on it): that is the platform's to fix, and
-//     withdrawing would throw a good change away.
+//     withdrawing would throw a good change away. Nor one the bot is getting
+//     fixed for it (a checks_fixing_flake step on it, homeroom-bot-flaky-
+//     checks.js): it waits on that fix, which has its own clock.
 // It goes the way the bot's other withdrawals go, the system archive with a
 // line in the change's own thread (session-lifecycle.js, reason
 // 'red-checks'), plus one line on each request it was built for. The request
@@ -34,6 +36,8 @@ const BOT_USERNAME = 'homeroom_bot';
 const REASON = 'red-checks';
 const STALE_DAYS = 3;
 const NOT_CHANGE_KIND = 'checks_not_change';
+// Homeroom bot parity P6: a change waiting on a fix of a flaky check.
+const FLAKE_KIND = 'checks_fixing_flake';
 
 const STALE_RED_SQL = `
   SELECT cs.id, cs.app_id, cs.linked_issues,
@@ -55,7 +59,7 @@ const STALE_RED_SQL = `
      AND cs.last_activity_at < NOW() - make_interval(days => $3)
      AND NOT EXISTS (
        SELECT 1 FROM events e
-        WHERE e.session_id = cs.id AND e.event_type = 'platform_incident' AND e.metadata->>'kind' = $4)
+        WHERE e.session_id = cs.id AND e.event_type = 'platform_incident' AND e.metadata->>'kind' = ANY($4::text[]))
    ORDER BY cs.id`;
 
 /** Pure: the line a withdrawal leaves on each request the change was built for. */
@@ -76,7 +80,7 @@ function numbersOf(list) {
 async function sweepStaleRedChanges(pool, { appId, deps = {} } = {}) {
   const withdrawn = [];
   try {
-    const { rows } = await pool.query(STALE_RED_SQL, [Number(appId), BOT_USERNAME, STALE_DAYS, NOT_CHANGE_KIND]);
+    const { rows } = await pool.query(STALE_RED_SQL, [Number(appId), BOT_USERNAME, STALE_DAYS, [NOT_CHANGE_KIND, FLAKE_KIND]]);
     const lifecycle = deps.sessionLifecycle || require('./session-lifecycle');
     const ws = deps.ws || require('./ws');
     for (const session of rows) {

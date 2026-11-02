@@ -44,7 +44,50 @@ interface PendingSend {
  * the stand-in for a member with no username; it is worked out from who is
  * typing under the word now, so it leaves with that person.
  */
-export interface Typist { name: string; unnamed: boolean }
+export interface Typist {
+  name: string;
+  unnamed: boolean;
+  /**
+   * 1 Nov 2026: the Homeroom bot, whose typing is drawn as its working card
+   * at the transcript's foot (./bot-working.tsx), not as a name on the line.
+   */
+  bot?: boolean;
+  /** What the bot says it is doing now (its typing event's `doing`); null while it thinks. */
+  doing?: BotDoing | null;
+}
+
+/**
+ * 1 Nov 2026: what the Homeroom bot is doing as it answers, as its typing
+ * event carries it (services/homeroom-bot-dm.js typingDoing): a kind and
+ * what it names. The words are this screen's (./bot-working.tsx).
+ */
+export interface BotDoing {
+  kind: string;
+  number?: number;
+  project?: string;
+  /** Homeroom bot parity, P1: the answer so far, while it is written (kind 'writing'). */
+  text?: string;
+}
+
+/** The longest answer-so-far a working card shows (the server sends its newest 1800 characters). */
+export const MAX_BOT_DRAFT_CHARS = 2000;
+
+/** The `doing` of a typing event, or null: only a kind word, a request number, a short name, and the answer being written. */
+export function botDoingOf(raw: unknown): BotDoing | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  const kind = typeof value.kind === 'string' && /^[a-z_]{1,32}$/.test(value.kind) ? value.kind : null;
+  if (!kind) return null;
+  const number = Number(value.number);
+  const project = typeof value.project === 'string' ? value.project.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+  const text = kind === 'writing' && typeof value.text === 'string' ? value.text.trim().slice(-MAX_BOT_DRAFT_CHARS) : '';
+  return {
+    kind,
+    ...(Number.isSafeInteger(number) && number > 0 ? { number } : {}),
+    ...(project ? { project } : {}),
+    ...(text ? { text } : {}),
+  };
+}
 
 interface InternalState extends MessagesSnapshot {
   // By composer scope (scopeKey): a conversation's main stream under its id,
@@ -2530,7 +2573,11 @@ export function handleEvent(raw: ConversationEvent): void {
         holders.set(userId, !botPeer && !!typist?.unnamed);
         typingHolders.set(holdersKey, holders);
         // The stand-in only while every holder is nameless: a real account under the same word is named.
-        const entry: Typist = { name: shown, unnamed: [...holders.values()].every(Boolean) };
+        // 1 Nov 2026: the bot, with what it says it is doing (its card's words);
+        // nobody else's event carries that.
+        const entry: Typist = botPeer
+          ? { name: shown, unnamed: false, bot: true, doing: botDoingOf(event.doing) }
+          : { name: shown, unnamed: [...holders.values()].every(Boolean) };
         next = isShown ? current.map((each) => (each.name === shown ? entry : each)) : [...current, entry];
       }
       publish({ typing: { ...state.typing, [scope]: next } });

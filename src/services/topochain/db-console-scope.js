@@ -332,6 +332,9 @@ const CONSOLE_CREDENTIAL_COLUMNS = {
   // columns stay readable for diagnosis; the sealed input and its
   // fingerprint do not.
   agent_session_actions: ['input_hash', 'sealed_input'],
+  // The same for an admin's confirm cards in their chat with Homeroom bot
+  // (homeroom-bot-thread-tools/admin.js).
+  homeroom_bot_admin_actions: ['input_hash', 'sealed_input'],
 };
 
 // Columns denied per table: the prod-debug list, the topochain export's

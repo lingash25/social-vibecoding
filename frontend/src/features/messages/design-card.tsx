@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 
 import { useMessages } from '../../lib/i18n/react';
 import { currentSheets, designFrameDoc, DESIGN_SANDBOX } from '../design/frame';
+import { inlinePictures } from '../design/pictures';
 import { openPreview } from '../ai/preview';
 import * as api from './api';
 import type { DesignThread } from './api';
@@ -51,7 +52,7 @@ export function cardBox(design: { width: number; height: number } | null): { wid
 const designs = new Map<number, { latest: number; read: Promise<DesignThread> }>();
 const versions = new Map<string, Promise<{ version: number; html: string }>>();
 
-function readDesign(rootId: number, version: number): Promise<DesignThread> {
+export function readDesign(rootId: number, version: number): Promise<DesignThread> {
   const had = designs.get(rootId);
   if (had && had.latest >= version) return had.read;
   const read = api.getDesign(rootId);
@@ -61,7 +62,7 @@ function readDesign(rootId: number, version: number): Promise<DesignThread> {
   return read;
 }
 
-function readVersion(rootId: number, version: number): Promise<{ version: number; html: string }> {
+export function readVersion(rootId: number, version: number): Promise<{ version: number; html: string }> {
   const at = `${rootId}:${version}`;
   let read = versions.get(at);
   if (!read) {
@@ -95,10 +96,11 @@ export function DesignVersionCard({ conversationId, rootId, version, title = nul
     readDesign(rootId, version).then((found) => {
       if (!live) return;
       setDesign(found);
-      return readVersion(rootId, version).then((v) => {
+      // P8: the pictures it names, written in (../design/pictures.ts).
+      return readVersion(rootId, version).then((v) => inlinePictures(v.html)).then((html) => {
         if (!live) return;
         const sheets = found.surface === 'platform' ? currentSheets() : [];
-        setDoc(designFrameDoc(v.html, { origin: window.location.origin, sheets }));
+        setDoc(designFrameDoc(html, { origin: window.location.origin, sheets }));
       });
     }).catch(() => { if (live) setFailed(true); });
     return () => { live = false; };

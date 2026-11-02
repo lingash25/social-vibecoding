@@ -64,7 +64,8 @@ test('delegated tokens have their own shape and a client id no OAuth endpoint ac
   assert.equal(mcpOauth.isCanonicalSecret(token, constants.DELEGATED_TOKEN_PREFIX), true);
   assert.equal(mcpOauth.isCanonicalSecret(token, constants.TOKEN_PREFIX), false);
 
-  assert.deepEqual([...constants.DELEGATION_KINDS], ['agent_mayor', 'worker_read']);
+  // bot_admin: Homeroom bot's admin tools in an admin's own conversation with it (P7).
+  assert.deepEqual([...constants.DELEGATION_KINDS], ['agent_mayor', 'worker_read', 'bot_admin']);
   for (const kind of constants.DELEGATION_KINDS) {
     const clientId = constants.DELEGATED_CLIENT_IDS[kind];
     assert.ok(clientId, `${kind} has a synthetic client id`);

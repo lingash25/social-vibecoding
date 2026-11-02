@@ -75,7 +75,8 @@ test('the markup: the section sits between Home and the Communities tab, its hea
 test('the presses: a row switches in place, the lit one climbs to its Hub and stops', () => {
   const src = read(RAIL);
   // From its app, the row goes to its page; on its page, up the page.
-  assert.match(src, /if \(onPage === slug\) pressLitTab\(screen, \{ stopAtCommunity: true \}\);\s*else goToCommunity\(slug\);/);
+  // A press is a place switch, a cut like the tabs (pressPlace, 1 Nov 2026).
+  assert.match(src, /if \(onPage === slug\) pressLitTab\(screen, \{ stopAtCommunity: true \}\);\s*else pressPlace\(\(\) => goToCommunity\(slug\)\);/);
   assert.match(src, /const href = `#app\/\$\{encodeURIComponent\(slug\)\}\/workshop`;[\s\S]*?href=\{href\}/, 'a modified click opens its page');
   assert.match(src, /onPage: screen === 'app-view' && tab === 'workshop' \? scoped : null,/);
   // The ladder's root step is All communities; the row stops short of it.

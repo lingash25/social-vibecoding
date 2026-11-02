@@ -219,13 +219,17 @@ test('a filename reaches the DOM as text, in every slot it appears in', () => {
 });
 
 test('the status line is one slot with two owners, and both publish', () => {
+  // 1 November 2026: the chat foot's status line (ChatStatusLine), sized by
+  // app.css's `.chat-status` rather than by each caller's Tailwind, and a
+  // live region, as Messages' typing line is.
   const html = renderComponent(COMPOSER, 'StatusLineView', {
-    scope: 'general', className: 'px-3 h-5', status: 'bob is typing...',
+    scope: 'general', status: 'bob is typing...',
   });
-  assert.equal(html, '<div id="gc-typing" class="px-3 h-5">bob is typing...</div>');
-  assert.match(
-    renderComponent(COMPOSER, 'StatusLineView', { scope: 'thread', className: 'x', status: '' }),
-    /<div id="gc-thread-typing" class="x"><\/div>/,
+  assert.equal(html, '<div id="gc-typing" class="chat-status" aria-live="polite">bob is typing...</div>');
+  // Empty, it has no child at all, so `.chat-status:empty` takes its room.
+  assert.equal(
+    renderComponent(COMPOSER, 'StatusLineView', { scope: 'thread', status: '' }),
+    '<div id="gc-thread-typing" class="chat-status" aria-live="polite"></div>',
   );
 
   const code = stripped(gcJs);

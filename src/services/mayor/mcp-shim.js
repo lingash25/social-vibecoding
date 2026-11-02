@@ -143,9 +143,14 @@ async function openMayorMcp({
   // the tools fetch any (get_request's screenshots): for a text-only model
   // they would be megabytes moved to be thrown away.
   imageInput = false,
+  // The grant's kind, which decides the tool list (services/mcp-audiences.js).
+  // `bot_admin`: Homeroom bot's admin tools for a full admin (P7,
+  // homeroom-bot-thread-tools/admin.js), which checks they are one first.
+  kind = 'agent_mayor',
 }) {
+  const grantKind = kind === 'bot_admin' ? 'bot_admin' : 'agent_mayor';
   const issued = await mcpOauth.issueDelegatedAccess(pool, {
-    userId, kind: 'agent_mayor', agentSessionId, appId, changeId, scopes, ttlSeconds,
+    userId, kind: grantKind, agentSessionId, appId, changeId, scopes, ttlSeconds,
   });
   let server = null;
   let client = null;
@@ -175,7 +180,7 @@ async function openMayorMcp({
 
     server = new McpServer(
       { name: SERVER_NAME, version: SERVER_VERSION },
-      { instructions: mcpTools.instructionsFor('agent_mayor') }
+      { instructions: mcpTools.instructionsFor(grantKind) }
     );
     mcpTools.registerTools(server, {
       accessToken: issued.accessToken,

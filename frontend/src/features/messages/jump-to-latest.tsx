@@ -14,15 +14,13 @@ import { jumpLabel, useUnreadAffordances, type UnreadRow } from './unread-anchor
  * listener takes the reader as following again. It writes nothing inside the
  * scroller.
  *
- * `docked` (#4553) is for a page whose cards would sit under the disc — a
- * change's or a request's page, a project topic: there the button docks into
- * its own thin strip between the scroller and the composer instead of
- * floating over the transcript's foot, and the strip goes with it at the
- * bottom, so the page gets its full height back. Docked, the button is
- * centred in that strip (#5702), the way the "new messages" banner is
- * centred over the transcript's head. Chats keep the floating disc, at the
- * right edge where it covers no message's words (run six, 14 Oct 2026;
- * @/components/ui/chat TranscriptOverlay).
+ * It floats over the transcript's foot, centred, with nothing behind it
+ * (@/components/ui/chat TranscriptOverlay), on a change's or a request's page
+ * as in a chat (1 Nov 2026). Those pages docked it in a thin strip of its own
+ * between the scroller and the composer (#4553, centred there by #5702), so
+ * it never covered their cards' buttons; the strip cut the transcript off
+ * above it and read as a solid box behind the disc. The disc is up only
+ * while the reader is up the transcript.
  *
  * The conversation itself (./index.tsx) draws the same button from the same
  * hook beside its banner.
@@ -31,34 +29,20 @@ import { jumpLabel, useUnreadAffordances, type UnreadRow } from './unread-anchor
 const NO_LINE: RefObject<HTMLElement | null> = { current: null };
 const NO_ROWS: readonly UnreadRow[] = [];
 
-export function JumpToLatest({ scroller, slack, rows = NO_ROWS, docked = false }: {
+export function JumpToLatest({ scroller, slack, rows = NO_ROWS }: {
   scroller: RefObject<HTMLElement | null>;
   /** The allowance the transcript follows new messages within. */
   slack?: number;
   /** The transcript's messages, oldest first, when the caller has them: the dot counts what arrives. */
   rows?: readonly UnreadRow[];
-  /** Dock into a shrink-0 strip below the scroller instead of floating over its foot. */
-  docked?: boolean;
 }) {
   const t = useMessages('messages');
   const { view, toLatest } = useUnreadAffordances(scroller, NO_LINE, {
     conversation: null, markKey: '', lineAt: null, rows, slack, watchContent: true,
   });
-  const button = (
-    <JumpToLatestButton shown={view.jump} dot={view.arrived > 0} aria-label={jumpLabel(view.arrived)} title={t('messages:thread.jumpToLatest')} onClick={toLatest} />
-  );
-  if (docked) {
-    // One class string or the other, never both on the node: `hidden` beside
-    // a display utility is the clap-chip bug again — the utility wins.
-    return (
-      <div data-transcript-strip="foot" className={view.jump ? 'flex shrink-0 justify-center px-3 py-1' : 'hidden'}>
-        {button}
-      </div>
-    );
-  }
   return (
     <TranscriptOverlay edge="foot">
-      {button}
+      <JumpToLatestButton shown={view.jump} dot={view.arrived > 0} aria-label={jumpLabel(view.arrived)} title={t('messages:thread.jumpToLatest')} onClick={toLatest} />
     </TranscriptOverlay>
   );
 }

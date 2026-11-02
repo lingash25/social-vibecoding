@@ -13,6 +13,11 @@
 //                 that one action.
 //   worker_read - the coding agent inside one change's worker. Six reads,
 //                 bound to that change's app, and nothing that writes.
+//   bot_admin   - Homeroom bot answering a full platform admin in their own
+//                 conversation with it (Homeroom bot parity P7): a curated
+//                 set of the connector's admin tools. Its reads run on the
+//                 turn's read grant; every write is one the admin confirmed
+//                 on a card, run on a grant minted for that one action.
 //
 // The kind comes from how the token was issued (mcp_delegations.kind), never
 // from anything the caller says, and never from its client name.
@@ -29,7 +34,7 @@
 //     lifecycle an agent session drives with the user's confirmation, which
 //     is not offered to a third-party chat product in v1.
 
-const KINDS = Object.freeze(['external', 'agent_mayor', 'worker_read']);
+const KINDS = Object.freeze(['external', 'agent_mayor', 'worker_read', 'bot_admin']);
 
 // Held back from external clients. start_change is not offered to them in
 // v1 (they hand work to their own coding agent through prepare_work); the
@@ -97,9 +102,42 @@ const MAYOR_CONFIRMED_TOOLS = Object.freeze([
   'withdraw_change',
 ]);
 
+// Homeroom bot's admin tools (P7, homeroom-bot-thread-tools/admin.js): the
+// bench, the bot's configurations and settings, test accounts, a project's
+// featured picture and the recent shots. Not every admin tool: nothing that
+// grades, picks a blind pair, cancels, regrades or launches the studio. Each
+// one is the connector's own, guarded for a full admin as it is there.
+const BOT_ADMIN_READ_TOOLS = Object.freeze([
+  'list_bench_runs',
+  'get_bench_run',
+  'list_bot_configs',
+  'list_test_accounts',
+  'get_featured_illustration',
+  'get_homeroom_bot',
+  'list_recent_shots',
+]);
+
+// The bot_admin tools that change something, and so never run from the
+// model: the turn seals the exact input and shows a confirm card, and only
+// the admin's Confirm runs it (homeroom-bot-cards/confirm.js).
+const BOT_ADMIN_CONFIRMED_TOOLS = Object.freeze([
+  'launch_bench_run',
+  'save_bot_config',
+  'set_bot_config_role',
+  'set_bot_config_budget',
+  'create_test_account',
+  'retire_test_account',
+  'send_test_release_email',
+  'propose_featured_illustration',
+  'set_homeroom_bot_settings',
+]);
+
+const BOT_ADMIN_TOOLS = Object.freeze([...BOT_ADMIN_READ_TOOLS, ...BOT_ADMIN_CONFIRMED_TOOLS]);
+
 const TOOLS_BY_KIND = Object.freeze({
   agent_mayor: AGENT_MAYOR_TOOLS,
   worker_read: WORKER_READ_TOOLS,
+  bot_admin: BOT_ADMIN_TOOLS,
 });
 
 function isKnownKind(kind) {
@@ -137,6 +175,9 @@ module.exports = {
   AGENT_MAYOR_TOOLS,
   WORKER_READ_TOOLS,
   MAYOR_CONFIRMED_TOOLS,
+  BOT_ADMIN_READ_TOOLS,
+  BOT_ADMIN_CONFIRMED_TOOLS,
+  BOT_ADMIN_TOOLS,
   isKnownKind,
   toolVisibleTo,
   kindOf,

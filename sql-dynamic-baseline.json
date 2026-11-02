@@ -1326,6 +1326,20 @@
       "preview": "`SELECT cs.id, cs.app_id, a.slug, CASE WHEN cs.status = 'merged' AND cs.live_at IS NULL THEN 'merging' ELSE cs.status END AS status, cs.check_state, cs.check_ph"
     },
     {
+      "source": "src/services/homeroom-bot-thread-tools/look-into.js",
+      "kind": "structural-template",
+      "fingerprint": "a45efc3039b9f36e409a",
+      "count": 1,
+      "preview": "`SELECT ${access.nonSecretAppColumnList()} FROM apps WHERE slug = LOWER($1) OR LOWER(name) = LOWER($1) ORDER BY (slug = LOWER($1)) DESC, id LIMIT 1`"
+    },
+    {
+      "source": "src/services/homeroom-bot-thread-tools/look-into.js",
+      "kind": "structural-template",
+      "fingerprint": "c88f14f4f226912f6e1e",
+      "count": 1,
+      "preview": "`SELECT ${require('../app-access').nonSecretAppColumnList()} FROM apps WHERE id = $1`"
+    },
+    {
       "source": "src/services/homeroom-bot-tray.js",
       "kind": "structural-template",
       "fingerprint": "38a972aa978bf0a467cf",

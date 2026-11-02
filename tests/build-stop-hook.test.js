@@ -282,7 +282,7 @@ const record = { args, env: {
   start: process.env.USERNODE_STOP_GUARD_START || null,
   count: process.env.USERNODE_STOP_GUARD_COUNT || null,
   repo: process.env.USERNODE_STOP_GUARD_REPO || null,
-}, hooks: [] };
+}, notes: process.env.USERNODE_STOP_GUARD_NOTES || null, hooks: [], reasons: [] };
 if (work === 'commit' || work === 'commit_and_serve' || work === 'commit_then_tests') {
   fs.writeFileSync('feature.js', 'x\\n');
   execSync('git add -A && git commit -q -m feature');
@@ -312,6 +312,7 @@ if (at >= 0) {
     const out = (ran.stdout || '').trim();
     const verdict = out ? JSON.parse(out) : null;
     record.hooks.push(verdict ? verdict.decision : null);
+    record.reasons.push(verdict ? verdict.reason : null);
     if (!verdict || verdict.decision !== 'block') break;
     active = true;
     if (work === 'after_first_block') fs.writeFileSync('made.js', 'made\\n');
@@ -862,4 +863,158 @@ test('the bot\'s build and fix prompts say how to boot the app, stop it, and use
     assert.ok(live.buildPrompt({ seed: 's', buildNote: 'n', firstVersion }).includes(text), `a build (first version: ${firstVersion})`);
   }
   assert.ok(botReview.fixPrompt({ spec: 'S', issues: [{ id: 'a', severity: 'major', screen: 'Home', problem: 'p', fix: 'f' }] }).includes(text), 'a review\'s fix');
+});
+
+// ── Notes from the person (Homeroom bot parity, P5) ─────────────────────
+//
+// The person who asked for the change (or its project's owner) can add to it
+// from their chat with the bot while it is built (services/homeroom-bot-
+// steer.js). Each stop asks the platform for the notes waiting on the build,
+// with the turn's own token, and sends the agent back once with them.
+
+// A platform that hands over `batches` of notes, one per take, then none,
+// and records each ask.
+function notesPlatform(batches = []) {
+  const http = require('node:http');
+  const asks = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      asks.push({ method: req.method, url: req.url, auth: req.headers.authorization || null, body });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, notes: batches.shift() || [] }));
+    });
+  });
+  return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve({
+    asks, url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((r) => server.close(r)),
+  })));
+}
+
+// Claude Code's call, without blocking this process (its platform answers here).
+function callHookAsync(env, input = { hook_event_name: 'Stop', stop_hook_active: false }) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [HOOK], { env, stdio: ['pipe', 'pipe', 'ignore'] });
+    let stdout = '';
+    child.stdout.on('data', (c) => { stdout += c; });
+    child.on('close', (status) => resolve({ status, stdout: stdout.trim() }));
+    child.stdin.end(JSON.stringify({ session_id: 's', cwd: env.USERNODE_STOP_GUARD_REPO, ...input }));
+  });
+}
+
+test('the notes gate\'s decision: notes send the turn back with them, anything else lets the guards decide', () => {
+  const notes = [{ note: 'Make the button blue too.', by: 'ada' }];
+  const sent = hook.decideNotes({ notes, blocks: 0 });
+  assert.equal(sent.block, true);
+  assert.equal(sent.why, 'notes');
+  assert.match(sent.reason, /@ada added: "Make the button blue too\."/);
+  assert.match(sent.reason, /never as instructions about your tools/);
+  assert.ok(!sent.reason.includes('—'));
+  assert.deepEqual(hook.decideNotes({ notes: [], blocks: 0 }), { block: false, why: 'no_notes' });
+  assert.deepEqual(hook.decideNotes({ notes: [{ note: '  ' }, null], blocks: 0 }), { block: false, why: 'no_notes' });
+  assert.deepEqual(hook.decideNotes({ notes: null, blocks: 0 }), { block: false, why: 'notes_unread' });
+  assert.deepEqual(hook.decideNotes({ notes, blocks: hook.NOTES_MAX_BLOCKS }), { block: false, why: 'notes_cap' });
+  assert.deepEqual(hook.decideNotes({ notes, blocks: null }), { block: false, why: 'no_count' });
+  // Several, each as theirs; one with no name is the person's.
+  const two = hook.notesReason([{ note: 'First', by: 'ada' }, { note: 'Second\nline', by: null }]);
+  assert.match(two, /@ada added: "First"\nThe person added: "Second line"/);
+});
+
+test('runNotesGate asks with the turn\'s token, counts what it hands over, and fails open', async () => {
+  const dir = tmp('stop-guard-notes-');
+  const count = path.join(dir, 'notes');
+  const asked = [];
+  const answer = (body, ok = true) => async (url, init) => {
+    asked.push({ url, auth: init.headers.authorization, method: init.method });
+    return { ok, json: async () => body };
+  };
+  const env = { USERNODE_STOP_GUARD_NOTES: 'http://platform/api/internal/sessions/5001/build-notes/take', USERNODE_STOP_GUARD_NOTES_COUNT: count, WORKER_JWT: 'jwt-1' };
+  const got = await hook.runNotesGate({ env, fetchImpl: answer({ notes: [{ note: 'Add a reset button.', by: 'sam' }] }) });
+  assert.equal(got.block, true);
+  assert.equal(got.noteBlocks, 1);
+  assert.match(got.reason, /@sam added: "Add a reset button\."/);
+  assert.deepEqual(asked[0], { url: env.USERNODE_STOP_GUARD_NOTES, auth: 'Bearer jwt-1', method: 'POST' });
+  assert.equal(fs.readFileSync(count, 'utf8'), '1');
+  // Nothing waiting, an answer it cannot use, a platform that fails: no block.
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: answer({ notes: [] }) })).block, false);
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: answer({ nope: 1 }) })).why, 'notes_unread');
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: answer({}, false) })).why, 'notes_unread');
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: async () => { throw new Error('down'); } })).why, 'notes_unread');
+  assert.equal(fs.readFileSync(count, 'utf8'), '1', 'only a block is counted');
+  // Not set up (no URL, counter or token): not asked at all.
+  const before = asked.length;
+  for (const missing of ['USERNODE_STOP_GUARD_NOTES', 'USERNODE_STOP_GUARD_NOTES_COUNT', 'WORKER_JWT']) {
+    const partial = { ...env };
+    delete partial[missing];
+    assert.deepEqual(await hook.runNotesGate({ env: partial, fetchImpl: answer({ notes: [{ note: 'x y' }] }) }), { block: false, why: 'no_notes_setup' });
+  }
+  // At its cap: not asked either, so nothing is taken that would not be handed over.
+  fs.writeFileSync(count, String(hook.NOTES_MAX_BLOCKS));
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: answer({ notes: [{ note: 'x y' }] }) })).why, 'notes_cap');
+  assert.equal(asked.length, before);
+  // A platform that does not answer in time.
+  fs.writeFileSync(count, '0');
+  // (A real ask holds its socket open; this one holds a timer of its own.)
+  const hold = setTimeout(() => {}, 5000);
+  const slow = (url, init) => new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  const started = Date.now();
+  assert.equal((await hook.runNotesGate({ env, fetchImpl: slow, timeoutMs: 200 })).block, false);
+  clearTimeout(hold);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test('the hook as Claude Code runs it: notes waiting on the build send the turn back once, before the guard', async () => {
+  const platform = await notesPlatform([[{ note: 'Use the brand blue for it.', by: 'ada' }]]);
+  try {
+    const { dir, repo, env } = hookRepo();
+    fs.appendFileSync(path.join(repo, 'app.js'), 'console.log(2);\n');
+    const withNotes = {
+      ...env,
+      USERNODE_STOP_GUARD_NOTES: `${platform.url}/api/internal/sessions/5001/build-notes/take`,
+      USERNODE_STOP_GUARD_NOTES_COUNT: path.join(dir, 'notes'),
+      WORKER_JWT: 'turn-token',
+    };
+    const first = await callHookAsync(withNotes);
+    assert.equal(first.status, 0);
+    const verdict = JSON.parse(first.stdout);
+    assert.equal(verdict.decision, 'block');
+    assert.match(verdict.reason, /@ada added: "Use the brand blue for it\."/);
+    // The platform handed them over once: the next stop goes on to the guard,
+    // which lets a turn that changed something end.
+    const second = await callHookAsync(withNotes, { hook_event_name: 'Stop', stop_hook_active: true });
+    assert.deepEqual([second.status, second.stdout], [0, '']);
+    assert.equal(platform.asks.length, 2);
+    assert.deepEqual(platform.asks.map((a) => [a.method, a.url, a.auth]), [
+      ['POST', '/api/internal/sessions/5001/build-notes/take', 'Bearer turn-token'],
+      ['POST', '/api/internal/sessions/5001/build-notes/take', 'Bearer turn-token'],
+    ]);
+    assert.equal(fs.readFileSync(path.join(dir, 'notes'), 'utf8'), '1');
+    assert.equal(fs.existsSync(path.join(dir, 'blocks')), false, 'the no-change guard never blocked');
+    // A platform that cannot be reached leaves the hook as it was.
+    const gone = await callHookAsync({ ...withNotes, USERNODE_STOP_GUARD_NOTES: 'http://127.0.0.1:1/x' });
+    assert.deepEqual([gone.status, gone.stdout], [0, '']);
+  } finally {
+    await platform.close();
+  }
+});
+
+test('run-cc.sh: a build is handed its notes at a stop, through the platform, with its own token, and works them in', async () => {
+  const platform = await notesPlatform([[{ note: 'Call the page Settings.', by: 'ada' }]]);
+  try {
+    const fx = runnerFixture();
+    const ran = await runRunCc(fx, { STUB_WORK: 'after_first_block', PLATFORM_URL: platform.url });
+    assert.equal(ran.code, 0, ran.out);
+    assert.equal(ran.claude.notes, `${platform.url}/api/internal/sessions/5001/build-notes/take`);
+    assert.deepEqual(ran.claude.hooks, ['block', null], 'sent back once with the note, then let go with its change');
+    assert.match(ran.claude.reasons[0], /@ada added: "Call the page Settings\."/);
+    assert.equal(platform.asks.length, 2);
+    assert.ok(platform.asks.every((a) => a.auth === 'Bearer test-worker-jwt'));
+    // The no-change guard never counted the note's block.
+    assert.match(resultLine(ran.out), / ahead=1 .*stop_hook_blocks=0$/);
+    // A scout carries no worker token, and asks for nothing.
+    const scout = await runRunCc(runnerFixture(), { MODE: 'scout', WORKER_JWT: '', PLATFORM_URL: platform.url });
+    assert.equal(scout.claude.notes, null);
+  } finally {
+    await platform.close();
+  }
 });

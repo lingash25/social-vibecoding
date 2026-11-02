@@ -1800,7 +1800,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
           id="comment-pin-small"
           role="group"
           aria-label={t('devchat:commentPin.box.label')}
-          className="comment-small-in absolute flex w-[300px] max-w-[calc(100vw-24px)] touch-none select-none items-center gap-0.5 rounded-2xl bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
+          className="comment-small-in absolute flex w-[300px] max-w-[calc(var(--platform-float-w)-24px)] touch-none select-none items-center gap-0.5 rounded-2xl bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
           style={{ left: boxAt.x, top: boxAt.y }}
           onPointerDown={onPinDragDown}
           onPointerMove={onPinDragMove}
@@ -1847,7 +1847,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
                  foot of the screen, clear of the keyboard, instead of a card
                  beside the pin (which the sheet would cover anyway). */
               `comment-sheet comment-sheet-in platform-kb-sheet absolute inset-x-0 bottom-0 flex flex-col gap-2 overflow-y-auto overscroll-contain rounded-t-[20px] ${PLANE_FILL} p-3 shadow-[inset_0_0_0_1px_var(--app-sheet-line)]`
-            : 'absolute flex w-[360px] max-w-[calc(100vw-24px)] flex-col gap-2 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10'}
+            : 'absolute flex w-[360px] max-w-[calc(var(--platform-float-w)-24px)] flex-col gap-2 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10'}
           style={phone ? undefined : { left: boxAt.x, top: boxAt.y }}
           onDragOver={(e) => { if (Array.from(e.dataTransfer?.types || []).includes('Files')) e.preventDefault(); }}
           onDrop={onDrop}
@@ -2196,7 +2196,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
           ref={cardRef}
           role="dialog"
           aria-label={placeOf(openRequest)}
-          className="absolute flex w-[300px] max-w-[calc(100vw-24px)] flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
+          className="absolute flex w-[300px] max-w-[calc(var(--platform-float-w)-24px)] flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
           style={{ left: cardAt.x, top: cardAt.y }}
         >
           <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -2242,7 +2242,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
           role="dialog"
           aria-label={t('devchat:commentPin.intro.title')}
           className={[
-            'absolute left-1/2 flex w-[340px] max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col gap-2 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10',
+            'absolute left-1/2 flex w-[340px] max-w-[calc(var(--platform-float-w)-24px)] -translate-x-1/2 flex-col gap-2 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10',
           ].join(' ')}
           style={inset ? { top: band + 8 } : { bottom: 'calc(76px + var(--platform-safe-bottom, 0px))' }}
         >
@@ -2268,7 +2268,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
           aria-live="polite"
           aria-label={t('devchat:commentPin.sent.label')}
           data-comment-pin-sent=""
-          className="absolute left-1/2 flex w-[340px] max-w-[calc(100vw-24px)] -translate-x-1/2 flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
+          className="absolute left-1/2 flex w-[340px] max-w-[calc(var(--platform-float-w)-24px)] -translate-x-1/2 flex-col gap-1.5 rounded-2xl bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.18)] ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10"
           style={inset ? { top: band + 8 } : { bottom: 'calc(76px + var(--platform-safe-bottom, 0px))' }}
         >
           <div className="flex items-center gap-2">
@@ -2324,7 +2324,7 @@ function CommentMode({ session, onClose }: { session: Session; onClose: () => vo
         role="toolbar"
         aria-label={t('devchat:commentPin.bar.label')}
         className={[
-          'absolute flex max-w-[calc(100vw-24px)] items-center gap-2 whitespace-nowrap rounded-full bg-white py-1.5 ps-1.5 pe-1.5 outline-none ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10 sm:gap-2.5',
+          'absolute flex max-w-[calc(var(--platform-float-w)-24px)] items-center gap-2 whitespace-nowrap rounded-full bg-white py-1.5 ps-1.5 pe-1.5 outline-none ring-1 ring-black/10 dark:bg-zinc-900 dark:ring-white/10 sm:gap-2.5',
           barFrame
             ? 'rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.18)]'
             : 'shadow-[0_8px_30px_rgba(0,0,0,0.22)]',

@@ -35,8 +35,11 @@ test('900px is the same cap the Discussion sheet and topic content use', () => {
 
 test('the selectors match what the thread shell renders as direct children', () => {
   // Fill mode: .dev-thread > #gc-thread-scroll, the status line, the bar.
-  assert.match(SHELL, /<StatusLine scope="thread"/);
+  // The bar is the chat foot's (1 November 2026), which carries the class
+  // the cap selects on; the read-only notice that replaces it names it.
+  assert.match(SHELL, /<StatusLine scope="thread" \/>/);
   assert.match(SHELL, /const SAFE_BAR = 'platform-safe-bar';/);
-  assert.match(SHELL, /<div className=\{`shrink-0 px-3 pt-1 pb-2 \$\{SAFE_BAR\}`\}>/);
+  assert.match(SHELL, /return \(\n\s*<ChatComposerBar>\n\s*<ComposerSlots scope="thread" \/>/);
+  assert.match(read('frontend/@/components/ui/chat.tsx'), /'chat-composer-bar platform-safe-bar'/);
   assert.match(read('frontend/src/features/group-chat/composer.tsx'), /typing: 'gc-thread-typing'/);
 });

@@ -195,6 +195,26 @@ test('a Claude Code coding turn\'s listener denies it, over an "allow", on messa
   sent.forEach((s, i) => assertDenied(s.body, `claude send ${i + 1} (${s.url})`));
 });
 
+test('Homeroom bot\'s pictures deny it (bot-pictures.js askImage)', async () => {
+  const pictures = require('../src/services/bot-pictures');
+  assertDenied(pictures.buildImageRequest({ model: 'google/gemini-2.5-flash-image', prompt: 'A pear' }), 'buildImageRequest');
+  const sent = [];
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(24)]);
+  await pictures.askImage({
+    apiKey: 'k', baseUrl: 'https://openrouter.example/api/v1', model: 'google/gemini-2.5-flash-image', prompt: 'A pear',
+    fetchImpl: async (url, init) => {
+      sent.push({ url, body: JSON.parse(init.body) });
+      return new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: '', images: [{ type: 'image_url', image_url: { url: `data:image/png;base64,${png.toString('base64')}` } }] } }],
+        usage: { cost: 0.039 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].url, /\/chat\/completions$/);
+  assertDenied(sent[0].body, 'bot-pictures.js askImage');
+});
+
 // ── The walk ────────────────────────────────────────────────────────────
 //
 // Every file under src/, worker/ and scripts/ (and server.js) that names an
@@ -208,6 +228,7 @@ const SENDERS = new Map([
   ['src/services/openrouter.js', 'POST /chat/completions for llm.js helpers, translation, small changes and the bot'],
   ['src/services/openrouter-mayor.js', 'POST /chat/completions for the Mayor, bot review and the bot\'s OpenRouter turns'],
   ['src/services/dictation.js', 'POST /audio/transcriptions'],
+  ['src/services/bot-pictures.js', 'POST /chat/completions for Homeroom bot\'s pictures (an image-output model)'],
   ['worker/codex-openrouter-request.js', 'POST /responses for every Codex coding turn'],
   ['worker/claude-openrouter-request.js', 'POST /messages and /messages/count_tokens for every Claude Code OpenRouter turn'],
 ]);

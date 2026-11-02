@@ -254,7 +254,8 @@ export function openBrowseFilterSheet(): void {
     : kit.sheet({ contentEl: panel, onDismiss: finish });
   if (!handle) { finish(); return; }
   if (dialog && handle.el) {
-    handle.el.style.width = 'min(440px, calc(100vw - 32px))';
+    // The float box (app.css THE USABLE BOX) less the kit's 16px a side.
+    handle.el.style.width = 'min(440px, calc(var(--platform-float-w) - 32px))';
     handle.el.setAttribute('aria-labelledby', 'browse-filters-title');
   }
   const leave = () => { finish(); handle?.dismiss(); };

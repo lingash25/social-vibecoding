@@ -361,7 +361,11 @@ test('the panel takes a navigation only beside a running app or the AI tab\'s pa
     [{ chromeless: true }, false, 'chromeless'],
     [{ visible: false }, false, 'the app view is not on screen'],
     [{ user: null }, false, 'signed out'],
-    [{ native: true }, false, 'the native app\'s WebView'],
+    [{ native: true }, false, 'the native app\'s WebView, beside an app'],
+    // 1 Nov 2026: iPhone Duo unfolded and held sideways docks the AI tab's
+    // column, and a request from its list belongs in Main's place there too.
+    [{ ...ai, native: true, width: 951 }, true, 'the native app\'s WebView, beside the AI tab\'s page'],
+    [{ ...ai, native: true, width: 669 }, false, 'the native app on a phone-width screen, where nothing is docked'],
     [{ embedded: true }, false, 'inside the panel itself'],
   ];
   for (const [opts, expected, why] of cases) {
@@ -1344,13 +1348,43 @@ test('the probe: beside an app, the app\'s left edge; beside the AI tab\'s page,
   const el = (box, classes = []) => ({ getBoundingClientRect: () => box, classList: { contains: (c) => classes.includes(c) } });
   const win = (els) => ({ innerWidth: 1280, document: { getElementById: (id) => els[id] || null } });
   const rail = el({ left: 0, right: 212, width: 212 });
-  assert.deepEqual(probeLayout(win({ 'app-view': el({ left: 76, width: 1204 }), 'platform-tabs': rail })), { innerWidth: 1280, appLeft: 76 },
+  assert.deepEqual(probeLayout(win({ 'app-view': el({ left: 76, width: 1204 }), 'platform-tabs': rail })), { innerWidth: 1280, appLeft: 76, rightInset: 0, neighbourMin: 480 },
     'an app on screen answers for itself, as before');
-  assert.deepEqual(probeLayout(win({ 'app-view': el({ left: 0, width: 0 }), 'platform-tabs': rail })), { innerWidth: 1280, appLeft: 212 },
+  assert.deepEqual(probeLayout(win({ 'app-view': el({ left: 0, width: 0 }), 'platform-tabs': rail })), { innerWidth: 1280, appLeft: 212, rightInset: 0, neighbourMin: 480 },
     'no app on screen: the rail is what sits left of the page');
   assert.deepEqual(probeLayout(win({ 'app-view': el({ left: 0, width: 0 }), 'platform-tabs': el({ left: 0, right: 212, width: 212 }, ['platform-tabs-peek']) })),
-    { innerWidth: 1280, appLeft: 0 }, 'a peeking rail takes no width');
-  assert.deepEqual(probeLayout(win({})), { innerWidth: 1280, appLeft: 0 });
+    { innerWidth: 1280, appLeft: 0, rightInset: 0, neighbourMin: 480 }, 'a peeking rail takes no width');
+  assert.deepEqual(probeLayout(win({})), { innerWidth: 1280, appLeft: 0, rightInset: 0, neighbourMin: 480 });
+});
+
+test('beside the bot page on an iPhone Duo held sideways: the list\'s floor, and the column left out', () => {
+  // 1 Nov 2026: Main runs under the Duo's 84px column of system chrome, and
+  // the drag measured its box, column and all, so the first 84px of a drag
+  // moved nothing; and it kept the app's 480px beside the list, which the
+  // stylesheet lets go to 280.
+  const { probeLayout, bounds, shownWidth, clampWidth } = api.resize;
+  const vars = { '--platform-strip-w': '84px', '--ai-list-min': '280px' };
+  const ai = { getBoundingClientRect: () => ({ left: 0, width: 867 }), classList: { contains: () => false } };
+  const win = {
+    innerWidth: 951,
+    getComputedStyle: () => ({ getPropertyValue: (name) => vars[name] || '' }),
+    document: {
+      body: {},
+      documentElement: { getAttribute: (name) => (name === 'data-side-strip' ? 'right' : null) },
+      getElementById: (id) => (id === 'ai-screen' ? ai : null),
+    },
+  };
+  const probe = probeLayout(win);
+  assert.deepEqual(probe, { innerWidth: 951, appLeft: 0, rightInset: 84, neighbourMin: 280 });
+  // 951 less the column and the list's 280: Main may take 587px.
+  assert.deepEqual({ ...bounds(probe) }, { min: 320, max: 587 });
+  // Main drawn from x 396 to the screen's edge is 471px wide as chosen, not 555.
+  assert.equal(shownWidth(396, probe), 471);
+  assert.equal(clampWidth(shownWidth(396, probe) + 100, bounds(probe)), 571, 'a 100px drag left gives 100px');
+  // Hidden, the bot page sets nothing: the app's floor, and no column on the left edge.
+  const hidden = { ...ai, classList: { contains: (c) => c === 'hidden' } };
+  win.document.getElementById = (id) => (id === 'ai-screen' ? hidden : null);
+  assert.equal(probeLayout(win).neighbourMin, 480);
 });
 
 test('the width\'s rules: 320px of panel and 480px of app at the least, whatever the window', () => {
@@ -1419,7 +1453,7 @@ test('the divider drags, takes the keys, resets on a double-click, and lets the 
   const SRC = read('frontend/src/features/side-panel/side-panel.tsx');
   const divider = SRC.slice(SRC.indexOf('function SidePanelDivider('));
   assert.match(divider, /setPointerCapture\(e\.pointerId\)/);
-  assert.match(divider, /d\.width = set\(d\.startW \+ \(d\.startX - e\.clientX\), false\);/,
+  assert.match(divider, /d\.width = set\(d\.startW \+ \(d\.startX - e\.clientX\) \* dirSign\(\), false\);/,
     'pinned to the right edge: moving left widens the panel, and nothing is stored mid-drag');
   assert.match(divider, /if \(d\.width != null\) writeStoredWidth\(d\.width\);/,
     'a press that never moved is half of a double-click, not a choice');
@@ -1481,4 +1515,36 @@ test('pend plants ?side= for a page the app is about to open beside, and drop ta
     delete globalThis.document;
     api._resetForTests();
   }
+});
+
+test('on a touch screen the divider is a handle you can see and hit', () => {
+  // iPhone Duo, 1 Nov 2026: the bar shows only under a pointer, which a
+  // finger never hovers over, and 10px is narrower than a fingertip.
+  const at = CSS.indexOf('@media (pointer: coarse) {\n  .side-panel-divider { --divider-w: 24px; }');
+  assert.ok(at > 0, 'a 24px handle with a coarse pointer');
+  const block = CSS.slice(at, CSS.indexOf('\n}\n', at));
+  assert.match(block, /\.side-panel-divider::before \{[^}]*content: "";[^}]*inset-inline-start: calc\(50% - 2px\);[^}]*height: 40px;[^}]*border-radius: 999px;[^}]*opacity: \.5;/,
+    'a grip drawn at rest, on the line');
+  // The grip is the whole mark under a finger: the full-height bar is a
+  // pointer's hover cue, and beside the grip it read as a second divider.
+  assert.match(block, /\.side-panel-divider::after \{ display: none; \}/);
+  assert.match(block, /html\.side-panel-resizing \.side-panel-divider::before \{ opacity: \.85; \}/, 'the grip darkens while held');
+  // A tap leaves iOS holding :hover, so the bar lights on hover only where
+  // the pointer can hover.
+  assert.match(CSS, /@media \(hover: hover\) \{\n  \.side-panel-divider:hover::after \{ opacity: \.45; \}\n\}/);
+  assert.doesNotMatch(CSS, /\n\.side-panel-divider:hover::after,/);
+});
+
+test('the divider is drawn on the line between the two halves, not inside the panel', () => {
+  // iPhone Duo, 1 Nov 2026: inside the panel, which clips its corner, the
+  // handle sat on the panel's side of the gutter beside the bot's list.
+  // Fixed, it escapes that clip while staying the panel's child.
+  const rule = CSS.slice(CSS.indexOf('.side-panel-divider {\n'), CSS.indexOf('\n}\n', CSS.indexOf('.side-panel-divider {\n')));
+  assert.match(rule, /--divider-w: 10px;/, 'a mouse keeps the 10px edge');
+  assert.match(rule, /position: fixed;/);
+  assert.match(rule, /inset-inline-end: calc\(var\(--divider-at, var\(--side-panel-w\)\) - var\(--divider-w\) \/ 2\);/,
+    'centred on the line; beside an app the line is the panel\'s own edge');
+  assert.match(CSS, /body:has\(#ai-screen:not\(\.hidden\)\) :is\(#side-panel-divider, #ai-main-divider\) \{\s*--divider-at: calc\(var\(--ai-main-w\) \+ var\(--ai-edge, 0px\) \+ 8px\);/,
+    'beside the bot\'s list, the middle of the 16px gutter before Main');
+  assert.match(CSS, /\.side-panel-divider::after \{[^}]*inset-inline-start: calc\(50% - 1\.5px\);/, 'the bar on the line too');
 });

@@ -9,6 +9,7 @@ import { adoptKitSurface, type KitAdoption } from '../../lib/kit-surface';
 import { walletSheetStore, WALLET_EMPTY, type WalletSheetState } from '../header/wallet-sheet-store';
 import { createStakingHistory } from './staking-history.js';
 import { requireAdult } from '../auth/adult-gate';
+import { dirSign } from '../../lib/i18n/direction';
 
 const controller = () => (window as any).WalletSheet;
 
@@ -196,14 +197,15 @@ export function EpochCarousel({ state, select, retry }: any) {
     const el = rail.current;
     if (!el) return;
     centering.current = true;
-    el.scrollLeft = epochs.indexOf(epoch) * (el.clientWidth - 12);
+    // Negative from the start in a right-to-left scroller.
+    el.scrollLeft = epochs.indexOf(epoch) * (el.clientWidth - 12) * dirSign();
     const frame = requestAnimationFrame(() => { centering.current = false; });
     return () => { cancelAnimationFrame(frame); clearTimeout(settle.current); };
   }, [epoch, state.currentEpoch]);
   function finishScroll() {
     const el = rail.current;
     if (!el || centering.current || drag.current) return;
-    const index = Math.max(0, Math.min(epochs.length - 1, Math.round(el.scrollLeft / (el.clientWidth - 12))));
+    const index = Math.max(0, Math.min(epochs.length - 1, Math.round(Math.abs(el.scrollLeft) / (el.clientWidth - 12))));
     if (epochs[index] !== epoch) select(epochs[index]);
   }
   return <>

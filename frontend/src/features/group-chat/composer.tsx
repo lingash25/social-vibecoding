@@ -18,7 +18,9 @@
  * bottom of the thread panel, ./general-chat.tsx to the bottom of the chat
  * pane, and the two read-only notices are worded and placed differently
  * enough that sharing them would be a change rather than a de-duplication.
- * What is shared is everything between the bar's edges.
+ * What is shared is everything between the bar's edges. The bar itself is
+ * the chat foot's (@/components/ui/chat ChatComposerBar), the one Messages'
+ * composer sits in, so its padding is decided in one place for both.
  *
  * The LISTENERS are still attached by the module, on the line after the mount:
  * submit, input, keydown, the paperclip, the paste and drag-and-drop wiring,
@@ -34,6 +36,7 @@
  */
 
 import { Button } from '@/components/ui/button';
+import { ChatStatusLine } from '@/components/ui/chat';
 import { ArrowUpIcon, PaperClipIcon, PlusIcon } from '@/components/ui/icons';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -161,15 +164,20 @@ function AttachStrip({ scope, items }: { scope: ComposerScope; items: PendingAtt
 /**
  * The one-line slot under the messages — who is typing, or the reconnect
  * notice. `*View` is the pure half, which is what the tests render.
+ *
+ * It is the chat foot's status line (@/components/ui/chat ChatStatusLine),
+ * so its size, colour and inset are the ones Messages' typing line has, and
+ * it takes no room while it is empty (1 November 2026). The callers passed
+ * their own Tailwind (`h-5` in the chat pane and the topic thread, `h-4` in
+ * the boxed one, three different insets), which held the line open while it
+ * said nothing and made each copy a little different.
  */
-export function StatusLineView(
-  { scope, className, status }: { scope: ComposerScope; className: string; status: string },
-) {
-  return <div id={IDS[scope].typing} className={className}>{status}</div>;
+export function StatusLineView({ scope, status }: { scope: ComposerScope; status: string }) {
+  return <ChatStatusLine id={IDS[scope].typing}>{status}</ChatStatusLine>;
 }
 
-export function StatusLine({ scope, className }: { scope: ComposerScope; className: string }) {
-  return <StatusLineView scope={scope} className={className} status={useComposerSlot(scope).status} />;
+export function StatusLine({ scope }: { scope: ComposerScope }) {
+  return <StatusLineView scope={scope} status={useComposerSlot(scope).status} />;
 }
 
 /** The three module-fed rows above the form, in their shipped order. */

@@ -258,7 +258,9 @@ const NO_HOLE_DIM = ['bg-zinc-950/60', 'dark:bg-zinc-950/75'] as const;
 // highlighted control cannot be pressed there.
 const SPOT = 'hidden absolute rounded-xl ring-2 ring-violet-500 dark:ring-violet-400 '
   + 'shadow-[0_0_0_200vmax_black] shadow-zinc-950/60 dark:shadow-zinc-950/75';
-const CARD = 'absolute w-[340px] max-w-[calc(100vw-1.5rem)] rounded-2xl border border-zinc-200 '
+// At most the float box (app.css THE USABLE BOX: the window less the Duo's
+// column) less the 12px a side the placement keeps.
+const CARD = 'absolute w-[340px] max-w-[calc(var(--platform-float-w)-1.5rem)] rounded-2xl border border-zinc-200 '
   + 'dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 shadow-xl focus:outline-none '
   + 'pointer-events-auto';
 // The card while its step's target settles: laid out and measurable, and

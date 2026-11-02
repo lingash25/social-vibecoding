@@ -34,7 +34,7 @@
 
 import { useMemo, useRef, useState, type RefObject } from 'react';
 
-import { NewMessagesBanner, TranscriptOverlay } from '@/components/ui/chat';
+import { ChatComposerBar, NewMessagesBanner, TranscriptOverlay } from '@/components/ui/chat';
 import { useMessages } from '../../lib/i18n/react';
 import { useStoreState } from '../../lib/use-store-state';
 import { JumpToLatest } from '../messages/jump-to-latest';
@@ -105,8 +105,6 @@ function ChannelJumpToLatest({ scroller }: { scroller: RefObject<HTMLElement | n
   return <JumpToLatest scroller={scroller} slack={GENERAL_FOLLOW_PX} rows={rows} />;
 }
 
-const SAFE_BAR = 'platform-safe-bar';
-
 export interface GeneralChatProps {
   readOnly: boolean;
   /**
@@ -135,22 +133,24 @@ export function GeneralChat({ readOnly, notice, maxLength, placeholder }: Genera
             below it — so the keyboard inset is reserved here, on the column. */}
         <div className="gc-chat-pane platform-kb-column flex-1 flex flex-col min-h-0">
           {/* Over the stream's top and its foot: siblings of #gc-messages,
-              which stays the transcript's alone. */}
+              which stays the transcript's alone. The foot under it is the
+              one every chat draws, Messages' included (@/components/ui/chat,
+              "A chat's foot", 1 November 2026): the stream ends 12px inside
+              #gc-messages (its `pt-2` is its top alone), then the status
+              line, then the bar. */}
           <ChannelUnreadBanner scroller={messages} />
-          <div ref={messages} id="gc-messages" className="flex-1 overflow-y-auto py-2 space-y-0.5" />
+          <div ref={messages} id="gc-messages" className="flex-1 overflow-y-auto pt-2 space-y-0.5 chat-transcript" />
           <ChannelJumpToLatest scroller={messages} />
-          <StatusLine
-            scope="general"
-            className="px-3 text-xs text-zinc-500 dark:text-zinc-400 h-5 shrink-0"
-          />
+          <StatusLine scope="general" />
           {/*
-              `platform-safe-bar` (app.css) adds the home-indicator inset to
-              this bar's own p-2. It wraps BOTH the composer and the read-only
-              notice, so both clear the indicator — which is why #621's notice
-              sits inside the bar here rather than replacing it the way the
+              The bar (ChatComposerBar) is padded 0 12px 8px, and
+              `platform-safe-bar` (app.css) adds the home-indicator inset
+              under it. It wraps BOTH the composer and the read-only notice,
+              so both clear the indicator, which is why #621's notice sits
+              inside the bar here rather than replacing it the way the
               thread panel's does.
           */}
-          <div className={`shrink-0 px-3 pt-1 pb-2 ${SAFE_BAR}`}>
+          <ChatComposerBar>
             {readOnly ? (
               <div className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400 text-center" data-gc-readonly-notice="">
                 {notice || t('chat:group.readOnly.devSpace')}
@@ -170,7 +170,7 @@ export function GeneralChat({ readOnly, notice, maxLength, placeholder }: Genera
                 />
               </>
             )}
-          </div>
+          </ChatComposerBar>
         </div>
         <div
           id="gc-spec-resizer"

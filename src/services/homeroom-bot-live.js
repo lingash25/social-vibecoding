@@ -1848,6 +1848,9 @@ async function post({
   proposalSessionId = null, sender = null, threadMessage = null, dm = null, untag = null, onlyProposal = false,
   skipIssueThread = false, skipGithub = false, homeroomText = null, strict = false, takeUpPending = false,
 }) {
+  // Homeroom bot parity (P4, P5): the request moved; its batch's roll-up and
+  // its build notes are read again shortly (homeroom-bot-batches.js).
+  require('./homeroom-bot-batches').noteRequestChanged(pool, app?.id, issueNumber);
   // Answered where it was asked: a reply to people who wrote only in the
   // change's own discussion is said there alone, with no GitHub comment and
   // no copy in the request's thread (9 Oct 2026: every answer on PR #4584

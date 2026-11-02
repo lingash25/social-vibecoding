@@ -306,6 +306,9 @@ test('settings default to off and clamp their numbers', () => {
     // The moment it went on for everyone is schema.sql's to write (readSettings
     // fills in a database without it); the proposal ceiling is automatic.
     everyoneSince: null, proposalCeiling: 0, liveBuildStream: true,
+    // Homeroom bot parity, P8: pictures on the default image model, 24 a
+    // person a week (services/bot-pictures.js).
+    imageModel: 'google/gemini-2.5-flash-image', pictureWeeklyCap: 24,
   });
   const t = bot.parseSettings([
     { key: bot.KEY_MODE, value: 'shadow' },

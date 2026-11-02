@@ -609,7 +609,7 @@ export function ReviewFlow({ items, error, capped, onDone, doneLabel, onAnswered
     const gone = stage.querySelector<HTMLElement>('[data-rf-leaving]');
     const opts = { duration: PUSH_MS, easing: EASE };
     const sign = dirSign();
-    const sliding = arriving?.animate([{ transform: `translateX(${sign * w}px)`, boxShadow: '-12px 0 32px rgba(0,0,0,.4)' }, { transform: 'none', boxShadow: '-12px 0 32px rgba(0,0,0,0)' }], opts);
+    const sliding = arriving?.animate([{ transform: `translateX(${sign * w}px)`, boxShadow: `${sign * -12}px 0 32px rgba(0,0,0,.4)` }, { transform: 'none', boxShadow: `${sign * -12}px 0 32px rgba(0,0,0,0)` }], opts);
     gone?.animate([{ transform: 'none', filter: 'none' }, { transform: `translateX(${sign * -0.3 * w}px)`, filter: 'brightness(0.55)' }], { ...opts, fill: 'forwards' });
     whenDone(sliding, settle, PUSH_MS);
   }, [from && from.index, index]); // eslint-disable-line react-hooks/exhaustive-deps

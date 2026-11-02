@@ -19,6 +19,7 @@
 
 import { useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 
+import { ChatComposerBar } from '@/components/ui/chat';
 import { Select } from '@/components/ui/select';
 import { PlusIcon, XIcon } from '@/components/ui/icons';
 import { useComposerKeyboard } from '../../lib/composer-keyboard';
@@ -143,7 +144,10 @@ export function NewThreadPanel({ conversationId }: { conversationId: number }): 
           <XIcon aria-hidden="true" />
         </button>
       </header>
-      <div ref={scroller} className="messages-thread-scroll messages-reply-scroll platform-safe-scroll flex flex-col justify-end">
+      {/* A thread's foot, as every chat's (@/components/ui/chat, "A chat's
+          foot"), with no typing line: nobody else is in a thread that does
+          not exist yet. */}
+      <div ref={scroller} className="messages-thread-scroll messages-reply-scroll platform-safe-scroll flex flex-col justify-end chat-transcript">
         <div className="mx-4 mb-4 flex flex-col gap-3 rounded-[20px] bg-white p-4 shadow-[inset_0_0_0_1px_var(--app-sheet-line)] dark:bg-zinc-900" data-bot-new-thread-start="">
           <label className="flex items-center gap-3 text-[13px] text-zinc-500 dark:text-zinc-400">
             <span className="w-24 shrink-0">{t('messages:newThread.project')}</span>
@@ -180,7 +184,7 @@ export function NewThreadPanel({ conversationId }: { conversationId: number }): 
           <p className="text-[12px] text-zinc-500 dark:text-zinc-400">{t('messages:newThread.hint')}</p>
         </div>
       </div>
-      <form className="messages-composer messages-composer-thread platform-safe-bar" onSubmit={(e) => { void send(e); }}>
+      <ChatComposerBar as="form" className="messages-composer messages-composer-thread" onSubmit={(e) => { void send(e); }}>
         {error ? <p className="px-4 pb-1 text-[13px] text-red-600" role="alert">{error}</p> : null}
         <div className="messages-composer-card flex items-end gap-2">
           <textarea
@@ -199,7 +203,7 @@ export function NewThreadPanel({ conversationId }: { conversationId: number }): 
             <span className="text-[13px] font-semibold">{t('messages:newThread.send')}</span>
           </button>
         </div>
-      </form>
+      </ChatComposerBar>
     </aside>
   );
 }

@@ -157,7 +157,8 @@
           close();
         },
       });
-      if (handle && handle.el) handle.el.style.width = 'min(576px, calc(100vw - 32px))';
+      // The float box (app.css THE USABLE BOX) less the kit's 16px a side.
+      if (handle && handle.el) handle.el.style.width = 'min(576px, calc(var(--platform-float-w) - 32px))';
     }
     if (!handle) {
       overlay.addEventListener('pointerdown', function (event) {

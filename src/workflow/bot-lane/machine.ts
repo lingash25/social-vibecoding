@@ -97,7 +97,7 @@ function decide(d0: Data, f: Facts, ctx: TransitionContext): Outcome<LState> {
   if (f.acting && !paused) {
     const inUse: Slot[] = f.inUse.slice();
     let room = Math.max(0, f.settings.liveAtOnce - inUse.length);
-    const reads = pickLive(f.reads, { inUse, slots: room, perPerson: f.settings.perPerson });
+    const reads = pickLive(f.reads, { inUse, slots: room, perPerson: f.settings.perPerson, raised: f.raised });
     for (const pick of reads) {
       const grant = d.grants + 1;
       d = { ...d, grants: grant };
@@ -107,7 +107,7 @@ function decide(d0: Data, f: Facts, ctx: TransitionContext): Outcome<LState> {
       inUse.push({ kind, appId: Number(pick.app_id), person: pick.person });
     }
     room = Math.max(0, f.settings.liveAtOnce - inUse.length);
-    const builds = pickLiveBuilds(f.builds, { inUse, slots: room, perPerson: f.settings.perPerson });
+    const builds = pickLiveBuilds(f.builds, { inUse, slots: room, perPerson: f.settings.perPerson, raised: f.raised });
     for (const pick of builds) {
       const grant = d.grants + 1;
       d = { ...d, grants: grant };

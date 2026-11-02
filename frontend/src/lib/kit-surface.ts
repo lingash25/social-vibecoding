@@ -280,7 +280,9 @@ export function adoptKitSurface(options: AdoptKitSurfaceOptions): KitAdoption | 
   }
   presented = true;
   if (handle.el && designWidth) {
-    handle.el.style.width = `var(--un-modal-width, min(${designWidth}, calc(100vw - 32px)))`;
+    // At most the float box (app.css THE USABLE BOX: the window less the
+    // Duo's column) less 16px a side, the kit's own margin.
+    handle.el.style.width = `var(--un-modal-width, min(${designWidth}, calc(var(--platform-float-w) - 32px)))`;
   }
 
   return {

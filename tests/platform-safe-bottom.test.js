@@ -251,15 +251,17 @@ test('Messages insets both of its independent scrollers and its composer', () =>
   const composer = read('frontend/src/features/messages/composer.tsx');
   assert.match(source, /className="messages-list-scroll platform-safe-scroll"/,
     'the conversation list must clear the home indicator');
-  assert.match(source, /className="messages-thread-scroll platform-safe-scroll"/,
+  assert.match(source, /className="messages-thread-scroll platform-safe-scroll chat-transcript"/,
     'the message history must clear the home indicator');
   // #1491: `un-kb-avoid` was REMOVED here on purpose. The column carries the
   // keyboard reservation now, and the kit's class would pad the inside of
   // this scroller on top of it — the inset twice, as dead space.
   assert.ok(!/messages-thread-scroll[^"]*un-kb-avoid/.test(source),
     'the Messages scroller must not reserve the inset a second time');
-  assert.match(composer, /messages-composer platform-safe-bar/,
+  // 1 November 2026: the bar is the chat foot's, which names the class.
+  assert.match(composer, /<ChatComposerBar className=\{`messages-composer \$\{inThread/,
     'the pinned Messages composer must carry the inset itself');
+  assert.match(read('frontend/@/components/ui/chat.tsx'), /className=\{cn\(className, 'chat-composer-bar platform-safe-bar'\)\}/);
 });
 
 test('the Messages history reserves no band above a composer that clears the bar', () => {
@@ -268,18 +270,27 @@ test('the Messages history reserves no band above a composer that clears the bar
   // composer, which reserves it again below itself. Where a composer follows
   // the history in its pane the band goes; where none does (an invitation)
   // the history reaches the foot of the screen and keeps it.
-  const rule = /\.messages-thread-scroll\.platform-safe-scroll:has\(~ \.platform-safe-bar\) \{([^}]*)\}/.exec(APP_CSS);
+  // 1 November 2026: the rule is the chat foot's, `.chat-transcript`, which
+  // every chat's scroller wears; the second selector is the same rule at
+  // (0,3,0) for the scrollers that also carry `.platform-safe-scroll`.
+  const rule = /\.chat-transcript:has\(~ \.platform-safe-bar\),\n\.chat-transcript\.platform-safe-scroll:has\(~ \.platform-safe-bar\) \{([^}]*)\}/.exec(APP_CSS);
   assert.ok(rule, 'the history-above-a-composer rule is missing');
-  assert.match(rule[1], /padding-bottom:\s*0 !important/,
+  assert.doesNotMatch(APP_CSS, /\.messages-thread-scroll\.platform-safe-scroll:has\(/, 'one rule, not a Messages copy beside it');
+  // 12px is the transcript's own end, not the bar's band (1 November 2026:
+  // the air under the newest message moved inside the scroller, see
+  // tests/transcript-meets-composer.test.js).
+  assert.match(rule[1], /padding-bottom:\s*12px !important/,
     'it must beat `.platform-safe-scroll`, which is !important itself');
   const composer = read('frontend/src/features/messages/composer.tsx');
-  // Every composer the history can have below it is a `.platform-safe-bar`.
-  for (const root of ['messages-composer messages-composer-awaiting platform-safe-bar', 'messages-composer-disabled platform-safe-bar', 'messages-composer platform-safe-bar']) {
+  // Every composer the history can have below it is a `.platform-safe-bar`:
+  // the two bars through ChatComposerBar, which adds the class, and the
+  // notice that stands in for a bar, which names it itself.
+  for (const root of ['<ChatComposerBar className="messages-composer messages-composer-awaiting"', 'messages-composer-disabled platform-safe-bar', '<ChatComposerBar className={`messages-composer ']) {
     assert.ok(composer.includes(root), root);
   }
   // And it is the pane's next element after the history, in both panes.
   const source = read('frontend/src/features/messages/index.tsx');
-  for (const scroller of ['className="messages-thread-scroll platform-safe-scroll"', 'className="messages-thread-scroll messages-reply-scroll platform-safe-scroll"']) {
+  for (const scroller of ['className="messages-thread-scroll platform-safe-scroll chat-transcript"', 'className="messages-thread-scroll messages-reply-scroll platform-safe-scroll chat-transcript"']) {
     const at = source.indexOf(scroller);
     assert.ok(at > 0, scroller);
     const ends = ['</section>', '</aside>'].map((tag) => source.indexOf(tag, at)).filter((i) => i > 0);
@@ -399,9 +410,11 @@ test('the general-chat composer bar carries platform-safe-bar, on both branches'
     'frontend/src/features/group-chat/general-chat.tsx', 'GeneralChat',
     { introAppName: null, readOnly, maxLength: 8000 },
   );
+  // 1 November 2026: the bar is the chat foot's (ChatComposerBar), whose
+  // padding is app.css's `.chat-composer-bar` rather than Tailwind here.
   for (const readOnly of [false, true]) {
     const html = pane(readOnly);
-    const bar = /<div class="shrink-0 px-3[^"]*"/.exec(html);
+    const bar = /<div class="chat-composer-bar[^"]*"/.exec(html);
     assert.ok(bar, `readOnly=${readOnly}: the composer's bar wrapper moved — re-anchor this test`);
     assert.match(bar[0], /platform-safe-bar/,
       `readOnly=${readOnly}: the general-chat composer must sit above the home indicator`);
@@ -430,7 +443,7 @@ test('the thread composer AND its read-only notice both carry the bar class', ()
     },
   );
   const composer = shell(false);
-  assert.match(composer, /class="shrink-0 px-3[^"]*platform-safe-bar"/,
+  assert.match(composer, /class="chat-composer-bar platform-safe-bar"/,
     'the thread composer must sit above the home indicator');
   const notice = shell(true);
   assert.match(notice, /class="px-3 py-2[^"]*platform-safe-bar">This thread is read-only\./,

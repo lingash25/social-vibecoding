@@ -84,6 +84,12 @@ const RULES = Object.freeze({
   ].join('\n'),
   noReports:
     '- Do not add reports, notes or other documents to the repository unless the spec asks for that file.',
+  // Homeroom bot parity, P8: a build's pictures (worker/usernode-image).
+  pictures: [
+    '- A picture the change needs (a hero image, an illustration): `usernode-image "<what it shows>" --out',
+    '  <path>.png` makes one, paid from this build\'s allowance; `usernode-image --from <link> --out <path>`',
+    '  saves one a request links.',
+  ].join('\n'),
   bugFirst: [
     '- If the request reports a bug, find where in the code it happens before changing anything. If you cannot',
     '  find it, stop and say so instead of changing code: do not ship a guessed fix.',
@@ -103,7 +109,7 @@ const RULES = Object.freeze({
 const ORDER = Object.freeze([
   'readInstructions', 'readBeforeWrite', 'keepSmall', 'unrelatedProblems', 'ownBranchOnly',
   'runTests', 'existingFlow', 'userGesture', 'lockfiles', 'checksProve', 'realCodePath', 'existingChecks',
-  'realDatabase', 'noReports', 'bugFirst', 'COMMIT', 'stopIfUnsafe',
+  'realDatabase', 'noReports', 'pictures', 'bugFirst', 'COMMIT', 'stopIfUnsafe',
 ]);
 
 const SUMMARY_LINE = [

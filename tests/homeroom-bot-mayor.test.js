@@ -107,7 +107,7 @@ test('#3733: a failed model request is asked again while that can help, and neve
   const err = (code, status = null) => Object.assign(new Error(code), { code, status });
   assert.deepEqual(mayor.retryPlan(err('output_limit')), { maxOutputTokens: mayor.RETRY_OUTPUT_TOKENS },
     'cut off at its limit: more room');
-  assert.ok(mayor.RETRY_OUTPUT_TOKENS > 900);
+  assert.ok(mayor.RETRY_OUTPUT_TOKENS > mayor.MAX_OUTPUT_TOKENS);
   for (const code of ['timeout', 'network', 'provider_unavailable', 'provider_error', 'invalid_response', 'stream_error',
     'response_too_large', 'empty_answer']) {
     assert.deepEqual(mayor.retryPlan(err(code)), { waitMs: 0 }, `${code}: at once, on a fresh route`);
@@ -124,8 +124,9 @@ test('#3733: a failed model request is asked again while that can help, and neve
   assert.deepEqual(mayor.retryPlan(err('invalid_request', 400)), {}, 'a provider\'s refusal goes to another provider');
   assert.equal(mayor.retryPlan(err('invalid_request')), null, 'a request built wrong here was never sent: asking again cannot help');
   for (const code of ['authentication', 'billing', 'cancelled', undefined]) assert.equal(mayor.retryPlan(err(code)), null, String(code));
-  assert.equal(mayor.retryPlan(err('timeout'), { elapsedMs: 91_000 }), null, 'not once the turn has run long');
-  assert.equal(mayor.retryPlan(err('rate_limited', 429), { elapsedMs: 88_000 }), null, 'nor when its wait would run past that');
+  // P1: a turn of sixteen rounds has a longer window (RETRY_WITHIN_MS).
+  assert.equal(mayor.retryPlan(err('timeout'), { elapsedMs: mayor.RETRY_WITHIN_MS + 1_000 }), null, 'not once the turn has run long');
+  assert.equal(mayor.retryPlan(err('rate_limited', 429), { elapsedMs: mayor.RETRY_WITHIN_MS - 2_000 }), null, 'nor when its wait would run past that');
   const src = read('src/services/homeroom-bot-mayor.js');
   assert.match(src, /sessionId: `hrbot-dm-\$\{t\.user\.id\}-\$\{t\.message\.id\}\$\{t\.route > 1 \? `-r\$\{t\.route\}` : ''\}`/,
     'a provider route is this turn\'s, and a retry takes a fresh one');
@@ -155,7 +156,9 @@ test('#3733: the calls a provider returned go back well formed: an id each, uniq
   const many = Array.from({ length: 20 }, (_, i) => call(`c${i}`, 'my_work', '{}'));
   assert.equal(mayor.normalizeCalls(many, 3, new Set()).length, mayor.MAX_CALLS_PER_ROUND,
     'a round answers a bounded number of calls, so a turn fits the transport\'s limit on messages');
-  assert.ok(1 + mayor.MAX_HISTORY + (mayor.MAX_ROUNDS - 1) * (mayor.MAX_CALLS_PER_ROUND + 2) <= 100);
+  // P1: sixteen rounds no longer fit by arithmetic; compactRounds keeps
+  // every request within the limit (tests/bot-parity-p1-room.test.js).
+  assert.equal(mayor.MAX_MESSAGES, 100);
 });
 
 test('#3733: the plain answer is told it has no lookups, and the key\'s failure never says to try again', () => {
@@ -284,7 +287,7 @@ test('#3772: the DM never sends parallel_tool_calls, so every provider of its mo
   assert.match(askModel, /parallelToolCalls: null,\n\s+timeoutMs: REQUEST_TIMEOUT_MS,/);
   // Set before the caller's own fields, so no caller can bring it back by accident.
   assert.ok(askModel.indexOf('parallelToolCalls: null') < askModel.indexOf('...rest,\n'));
-  assert.ok(mayor.REQUEST_TIMEOUT_MS > 25_000, 'longer than the transport\'s default: the DM\'s answers are not streamed');
+  assert.ok(mayor.REQUEST_TIMEOUT_MS > 25_000, 'longer than the transport\'s default: a long answer takes a while');
   // streamChat sends the field only for true.
   const { buildRequest } = require('../src/services/openrouter');
   const base = { model: 'z-ai/glm-5.3-flash', reasoning: 'low', messages: [], tools: [] };
@@ -297,7 +300,7 @@ test('#3772: a rate limit that says when to come back is believed, within a turn
   assert.deepEqual(mayor.retryPlan(limited(12_000)), { waitMs: 12_000 });
   assert.deepEqual(mayor.retryPlan(limited(500)), { waitMs: mayor.RATE_LIMIT_WAITS_MS[0] }, 'never less than its own wait');
   assert.deepEqual(mayor.retryPlan(limited(600_000)), { waitMs: 20_000 }, 'and never more than a turn can wait');
-  assert.equal(mayor.retryPlan(limited(20_000), { elapsedMs: 80_000 }), null, 'nor past the turn\'s window');
+  assert.equal(mayor.retryPlan(limited(20_000), { elapsedMs: mayor.RETRY_WITHIN_MS - 10_000 }), null, 'nor past the turn\'s window');
 });
 
 test('#3772: a later try is promised only for a provider\'s failure, three times, and never "try again"', () => {

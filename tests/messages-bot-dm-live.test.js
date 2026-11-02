@@ -246,6 +246,57 @@ test('31 Oct 2026: typing in a thread is that thread\'s line, and never the conv
   assert.deepEqual(h.store.typingUsers(42).map((typist) => typist.name), ['Homeroom bot'], 'the conversation\'s stays');
 });
 
+// 1 Nov 2026: the bot's typing says what it is doing, for its working card
+// (frontend/src/features/messages/bot-working.tsx). A person's never does.
+test('the bot types as the bot, with what it is doing; a person\'s typing never carries that', async (t) => {
+  const h = harness([serverMessage(1, BOT, 'Hello.')]);
+  const timers = [];
+  Object.assign(globalThis.window, {
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+    clearTimeout: (id) => { if (timers[id - 1]) timers[id - 1].live = false; },
+  });
+  const ADA = { id: 13, username: 'ada', avatarUrl: null };
+  const dm = {
+    ...DM,
+    members: [{ ...ME, status: 'member' }, { ...BOT, status: 'member' }, { ...ADA, status: 'member' }],
+    peer: { id: BOT.id, bot: true, displayName: 'Homeroom bot' },
+  };
+  h.api.getConversation = async () => dm;
+  await openDm(h);
+  const typing = (userId, on, extra = {}) => h.store.messagesController.handleEvent({
+    type: 'conversation_typing', conversationId: 42, userId, typing: on, ...extra,
+  });
+  typing(BOT.id, true);
+  assert.deepEqual(h.store.typingUsers(42), [{ name: 'Homeroom bot', unnamed: false, bot: true, doing: null }], 'thinking');
+  typing(BOT.id, true, { doing: { kind: 'request', number: 12, extra: 'x' } });
+  assert.deepEqual(h.store.typingUsers(42), [{ name: 'Homeroom bot', unnamed: false, bot: true, doing: { kind: 'request', number: 12 } }],
+    'what it is doing, in place');
+  typing(BOT.id, true, { doing: { kind: 'Reading request #12' } });
+  assert.equal(h.store.typingUsers(42)[0].doing, null, 'a kind word, never words to draw');
+  typing(BOT.id, true, { doing: { kind: 'drawing' } });
+  typing(ADA.id, true, { doing: { kind: 'drawing' } });
+  assert.deepEqual(h.store.typingUsers(42), [
+    { name: 'Homeroom bot', unnamed: false, bot: true, doing: { kind: 'drawing' } },
+    { name: 'ada', unnamed: false },
+  ], 'a person is a name on the line, whatever their event says');
+
+  // The answer's re-read is slow: the stop holds the card, with its words,
+  // until the answer is drawn (#4220), so the card gives way to it.
+  const listMessages = h.api.listMessages;
+  let release;
+  h.api.listMessages = (...args) => new Promise((resolve) => { release = () => resolve(listMessages(...args)); });
+  h.server.messages.push(serverMessage(h.server.nextId++, BOT, 'Version 1 · The main screen'));
+  h.store.messagesController.handleEvent({ type: 'conversation_message_created', conversationId: 42, messageId: 2 });
+  await h.flush();
+  typing(BOT.id, false);
+  assert.deepEqual(h.store.typingUsers(42)[0], { name: 'Homeroom bot', unnamed: false, bot: true, doing: { kind: 'drawing' } },
+    'held, as it was, while the answer is read');
+  release();
+  await h.flush();
+  assert.ok(h.contents().includes('Version 1 · The main screen'));
+  assert.deepEqual(h.store.typingUsers(42), [{ name: 'ada', unnamed: false }], 'and gone once it is drawn');
+});
+
 // The typing line shows what it showed before the text moved (base 1e6c91e33):
 // each shown name once, and a name leaves when anybody typing under it stops
 // or expires. What is new is only whose name it is: `unnamed` follows the

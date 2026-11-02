@@ -1185,7 +1185,8 @@ test('a ready verdict is held before it is built when the bot is at its ceiling 
   }), 'proposed');
   assert.deepEqual(built, [20]);
   assert.match(BOT_SRC, /quietHold: item\.reason === APP_AGAIN_REASON \|\| item\.reason === BACKLOG_REASON,\n\s+proposalCeiling: botProposalCeiling\(settings\),/);
-  assert.match(BOT_SRC, /simulateCaps\(pool, bot, app\.id, v\.verdict, settings\)/);
+  // (Homeroom bot parity, P4 and P6: with the request it decides for, which a batch may raise the hold for and a flaky check's fix is exempt from.)
+  assert.match(BOT_SRC, /simulateCaps\(pool, bot, app\.id, v\.verdict, settings, \{ issueNumber \}\)/);
   assert.match(LIVE_SRC, /router: deps\.votesRouter \|\| null, ceiling: proposalCeiling,/);
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 
+import { ChatComposerBar } from '@/components/ui/chat';
 import { ArrowUpIcon, ArrowUpTrayIcon, BoldIcon, HeadingIcon, ItalicIcon, ListBulletIcon, PaperClipIcon, PlusIcon, QuoteIcon, UnderlineIcon } from '@/components/ui/icons';
 import { RichMessage, useMessages } from '../../lib/i18n/react';
 import * as api from './api';
@@ -537,15 +538,19 @@ export function MessageComposer({ threadRootId = null }: { threadRootId?: number
   // Retry could never work.
   const awaiting = !inThread && !!active.awaitingAcceptance;
   const { name: waitingOn, unknown: waitingUnknown } = awaiting ? waitingFor(active) : { name: '', unknown: false };
+  // The bar round the card is the chat foot's (@/components/ui/chat
+  // ChatComposerBar), as in every chat: its padding and its clearance under
+  // it are decided there (1 November 2026). "You can't send here" is a line
+  // of text in the card's place, not a bar round one, so it keeps its own.
   if (awaiting && (!active.canSend || snap.messages.length > 0)) {
     return (
-      <div className="messages-composer messages-composer-awaiting platform-safe-bar" data-awaiting-acceptance="">
+      <ChatComposerBar className="messages-composer messages-composer-awaiting" data-awaiting-acceptance="">
         {askReply ? <NotifyAsk moment="reply" className="mb-2" /> : null}
         <div className="messages-awaiting" role="status">
           <strong>{t('messages:composer.requestSent.title')}</strong>
           <p>{waitingUnknown ? t('messages:composer.requestSent.waitingUnknown') : waitingOn ? t('messages:composer.requestSent.waitingNamed', { username: waitingOn }) : t('messages:composer.requestSent.waitingUnnamed')}</p>
         </div>
-      </div>
+      </ChatComposerBar>
     );
   }
   if (!active.canSend) return <div className="messages-composer-disabled platform-safe-bar">{t('messages:composer.cannotSend')}</div>;
@@ -573,7 +578,7 @@ export function MessageComposer({ threadRootId = null }: { threadRootId?: number
   const preview = isChannel && hasFormatting(value) && plainText(value).length > 0 ? value.trim() : null;
 
   return (
-    <div className={`messages-composer platform-safe-bar ${inThread ? 'messages-composer-thread' : ''} ${dragging ? 'messages-composer-dragging' : ''}`} {...drop.handlers}>
+    <ChatComposerBar className={`messages-composer ${inThread ? 'messages-composer-thread' : ''} ${dragging ? 'messages-composer-dragging' : ''}`} {...drop.handlers}>
       {/* QA 2026-09-24 Q2: before the opening message of a request, what it
           will be — so the composer turning into a notice after it is no
           surprise. */}
@@ -652,6 +657,6 @@ export function MessageComposer({ threadRootId = null }: { threadRootId?: number
       <div className="messages-composer-count mt-1 px-1 flex justify-end h-[15px]" data-near-limit={nearLimit ? '' : undefined} aria-hidden={!value.length}><span className={`text-[10px] leading-[15px] ${nearLimit ? 'text-amber-800 dark:text-amber-300' : 'text-zinc-500 dark:text-zinc-400'}`}>{value.length ? `${value.length}/8000` : ''}</span></div>
       </div>
       {dragging ? <DropOverlay className="messages-drop-overlay" /> : null}
-    </div>
+    </ChatComposerBar>
   );
 }

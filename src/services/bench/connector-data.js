@@ -522,6 +522,8 @@ const SETTINGS_FIELDS = Object.freeze([
   'liveAtOnce', 'perPerson', 'proposalCeiling',
   'shadowBuilds', 'shadowBuildPlatform', 'dmChat', 'voiceSession', 'voiceIssue', 'voiceChat',
   'continueReads', 'liveBuildStream',
+  // Homeroom bot parity, P8: pictures' model and weekly cap.
+  'imageModel', 'pictureWeeklyCap',
 ]);
 
 /**

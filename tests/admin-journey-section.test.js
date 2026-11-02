@@ -122,6 +122,21 @@ test('every first-mile column says what it counts on a tap, and onboard follows 
   assert.match(src, /repeat\(10,minmax\(0,1fr\)\)/, 'the grid has the tenth column');
 });
 
+test('the mail column tells opened from sent but not opened, and each cohort says its count (#6138)', () => {
+  const fills = src.match(/const MAIL_FILL = \{([\s\S]*?)\n\};/);
+  assert.ok(fills, 'one table of mail shades');
+  for (const part of ['opened', 'unopened', 'untracked']) assert.match(fills[1], new RegExp(`\\n  ${part}: '`), `${part} has a shade`);
+  assert.match(fills[1], /untracked: 'bg-\[repeating-linear-gradient\(/, 'a mail sent before tracking is striped');
+  assert.match(src, /key === 'mail_sent' \? mailFill\(p, st\.state\)/, 'each track\'s mail cell takes its shade');
+  assert.match(src, /\{mailParts\.opened\}\/\{mailTracked\}/, 'the mail bar counts opened of tracked');
+  assert.match(src, /\{label\(m\.cohort\)\} · \{m\.people\.length\}\{cohortMail\(m\.people, nowMs\)\}/,
+    'the cohort line carries its mail');
+  assert.match(src, /of \$\{tracked\.length\} opened`/, 'as a count, not a rate');
+  assert.match(src, /sent, not opened\$\{oldest != null \? `, \$\{Math\.floor\(\(nowMs - oldest\) \/ 86_400_000\)\} d`/,
+    'and how long the oldest unopened mail has sat');
+  assert.ok(!/clicked of \$\{/.test(src), 'the meta line no longer repeats it');
+});
+
 test('the demo rides on ?demo=1 and cannot be edited', () => {
   assert.match(src, /new URLSearchParams\(location\.search\)\.get\('demo'\) === '1'/);
   assert.match(src, /`\$\{path\}\$\{path\.includes\('\?'\) \? '&' : '\?'\}demo=1`/);

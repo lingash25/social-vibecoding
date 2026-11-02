@@ -263,6 +263,11 @@ COPY usernode-progress /usr/local/bin/usernode-progress
 # the spec goes on (services/first-version-screens.js). It only writes the
 # screen under /tmp/usernode-screens; nothing is sent from it.
 COPY usernode-screen /usr/local/bin/usernode-screen
+# usernode-image (Homeroom bot parity, P8): a build makes a picture for the
+# app on the bot's picture model, paid from whoever pays for the build, or
+# saves one a request links; written into the working tree. Build mode only
+# (WORKER_JWT); the platform makes, bills and checks it.
+COPY usernode-image /usr/local/bin/usernode-image
 # usernode-debug (#616) is read-only production debugging for ADMIN
 # sessions on the self-edit app. It calls the platform's prod-debug
 # internal API (deny-listed read-only SQL role, allowlisted container
@@ -294,6 +299,7 @@ RUN chmod +x /usr/local/bin/worker-run.sh \
               /usr/local/bin/usernode-debug \
               /usr/local/bin/usernode-progress \
               /usr/local/bin/usernode-screen \
+              /usr/local/bin/usernode-image \
   && mkdir -p /home/node/workspace /home/node/.claude \
   && chown -R node:node /home/node
 

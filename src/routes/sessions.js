@@ -10684,10 +10684,16 @@ async function requestSessionStop({ pool, sessionId, user, force = false, immedi
     // else's behalf.
     const stopAsAdmin = user?.canAdminWrite === true;
     try {
-      const { rows } = await pool.query(
+      let { rows } = await pool.query(
         `SELECT id, user_id FROM chat_sessions WHERE id = $1 AND (user_id = $2 OR $3::boolean)`,
         [sessionId, user.id, stopAsAdmin]
       );
+      // Homeroom bot parity (P5): the bot's build of a request may also be
+      // stopped by whoever asked for it, or by its project's owner
+      // (services/homeroom-bot-steer.js mayStopBotBuild).
+      if (!rows.length && await require('../services/homeroom-bot-steer').mayStopBotBuild(pool, sessionId, user)) {
+        ({ rows } = await pool.query('SELECT id, user_id FROM chat_sessions WHERE id = $1', [sessionId]));
+      }
       if (!rows.length) return { status: 404, body: { error: 'Session not found' } };
       if (rows[0].user_id !== user.id) {
         log.info('sessions', 'Admin stopping another user\'s turn', {

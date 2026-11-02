@@ -149,7 +149,8 @@ test('the shell draws a change page as the request page’s sheet, with Messages
   });
   assert.match(html, /^<div class="dev-request dev-change platform-kb-column"><div id="gc-thread-back" class="dev-request-back"><\/div><section class="dev-request-sheet dc-lift dc-lift-session" aria-label="Change"><div id="gc-thread-bar" class="dev-request-bar"><\/div>/);
   assert.match(html, /<div id="gc-thread-head"><\/div><div id="gc-thread-pin"><\/div><div id="gc-thread-messages"><\/div>/);
-  assert.match(html, /class="messages-composer messages-composer-thread platform-safe-bar"/);
+  // The bar is the chat foot's (1 November 2026), Messages' own classes kept.
+  assert.match(html, /class="messages-composer messages-composer-thread chat-composer-bar platform-safe-bar"/);
   const request = renderComponent(SHELL, 'ThreadShell', {
     fill: true, withHeader: true, readOnly: false, notice: '', placeholder: 'Reply…', maxLength: 4000, request: true,
   });

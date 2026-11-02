@@ -24,6 +24,10 @@ const KINDS = Object.freeze({
   // doing (it fails without it too): the checks' own problem, which only
   // admins can fix (homeroom-bot.js runChecksFix).
   CHECKS_NOT_CHANGE: 'checks_not_change',
+  // Homeroom bot parity P6: each step of working past such a check as a
+  // person would (homeroom-bot-flaky-checks.js): synced, filed or found its
+  // fix, building, rechecking, green or person (detail.outcome).
+  CHECKS_FIXING_FLAKE: 'checks_fixing_flake',
 });
 
 // How far back the console looks, and how many it lists.

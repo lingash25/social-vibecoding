@@ -65,6 +65,11 @@ import { workerStop } from './worker-stop/machine.ts';
 import { workerStopServices, workerInterruptServices } from './worker-stop/services.ts';
 import { workerInterrupt, requestWorkerInterrupt as askWorkerInterrupt } from './worker-stop/interrupt.ts';
 import { requestWorkerStop as askWorkerStop } from './worker-stop/request.ts';
+// Homeroom bot parity, P3 and P9: a look into a project's code, and an investigation of days.
+import { botLook } from './bot-look/machine.ts';
+import { botLookServices } from './bot-look/services.ts';
+import { botInvestigation } from './bot-investigation/machine.ts';
+import { botInvestigationServices } from './bot-investigation/services.ts';
 import { MACHINE as PLATFORM_OPERATION, WORK as OPERATION_WORK, operationKey, platformOperation, requested as operationRequested, singleFlight } from './platform-operation/machine.ts';
 import type { Request as OperationRequest } from './platform-operation/machine.ts';
 import { platformOperationServices } from './platform-operation/services.ts';
@@ -251,7 +256,9 @@ export async function startWorkflow(config: any, opts: { loops: boolean; preview
   const trials = shotsEval(evalDeps(config));
   // People's turns: a conversation's, a change's (turn/).
   const turns = turnMachine();
-  const machines = [machine, merges, builds, deliveries, creations, previews, shotRuns, proposals, queues, campaigns, botChanges, voices, dms, checks, requests, lane, bench, trials, turns, releases, clocks, workerRelease(), workerStop(), workerInterrupt(), platformOperation()];
+  const machines = [machine, merges, builds, deliveries, creations, previews, shotRuns, proposals, queues, campaigns, botChanges, voices, dms, checks, requests, lane, bench, trials, turns, releases, clocks, workerRelease(), workerStop(), workerInterrupt(), platformOperation(),
+    // Homeroom bot parity, P3 and P9.
+    botLook(), botInvestigation()];
   knownEvents = new Map(machines.map((m) => [m.name, new Set(m.events.keys())]));
   const services = {
     ...governanceServices(deps), ...mergeFollowupsServices(deps), ...botBuildServices(deps),
@@ -266,6 +273,7 @@ export async function startWorkflow(config: any, opts: { loops: boolean; preview
     ...platformOperationServices({ pool: appPool, config }),
     ...releaseServices({ adoptions: ADOPTIONS }),
     ...clockServices(CLOCK_JOBS, { config, pool: appPool, previewRetirement: opts.previewRetirement }),
+    ...botLookServices({ config, pool: appPool }), ...botInvestigationServices({ config, pool: appPool }),
   };
   const started = createPlatformRuntime({
     pool: kernelPool!, machines, services, slots: config.wfSlots, log: log!, release: bootRelease(),

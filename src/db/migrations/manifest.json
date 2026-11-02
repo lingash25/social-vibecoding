@@ -25,6 +25,26 @@
       "id": "0005-plans-and-projects",
       "sha256": "bed75be38b098152793af4a4c779681fc61377d944d5201703bf2ede9d50de64",
       "schemaSha256": "c55ee267d38b88af61c46c07fbf1a4fe2807ae1c8d6195183d29a8674d55fa84"
+    },
+    {
+      "id": "0006-bot-parity-looks",
+      "sha256": "4834aacf3eb52f5665b9f02a13a51d107eeb3df91a5e59c292e45e68504dec98",
+      "schemaSha256": "cc9b59950e4fa30af1900de9ffc868ad83fa6efe11b0d25820d4e4d7f85170c0"
+    },
+    {
+      "id": "0007-bot-parity-pictures",
+      "sha256": "121cb5af577e9c2d6e00d40f7157e0585a67db97cde28ea893746a338df0e209",
+      "schemaSha256": "9e7e225d594740c17b171850db9c81db0c77fe9210fc721f9c04e59a1939ed9f"
+    },
+    {
+      "id": "0008-bot-parity-batch-steer",
+      "sha256": "bf61d7fc67fa84f67a27dd597e061043a9640f76e6d81f1e35a5480dc6deb2ed",
+      "schemaSha256": "b6dd6396d1541b2c7ece43938a1b645bc28535693e36071a7c02fb30e10b4b52"
+    },
+    {
+      "id": "0009-bot-parity-p6-p7",
+      "sha256": "af1a6b5a153dc41b1dd5714c90a1d763cb4f039a628163e727bd2678820d937d",
+      "schemaSha256": "04b7ada04242e1d8281a673a40ec1a38b2894262b91970b2fd2772ad160043af"
     }
   ]
 }

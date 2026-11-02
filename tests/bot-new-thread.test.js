@@ -94,7 +94,8 @@ test('a started thread is headed by what it is for, never as a request, and take
   assert.match(css, /\.messages-layout-embedded\.messages-has-blank-thread > \.messages-thread-pane \{ display: none; \}/);
   assert.match(css, /\.messages-layout-embedded\.messages-has-blank-thread > \.messages-reply-pane \{ flex: 1 1 auto; margin-inline-start: 0; \}/);
   // On a phone its composer keeps clear of the tab bar, as a thread's does.
-  assert.match(read(NEW_THREAD), /<form className="messages-composer messages-composer-thread platform-safe-bar"/);
+  // The chat foot's bar, as a form (1 November 2026), which brings the class.
+  assert.match(read(NEW_THREAD), /<ChatComposerBar as="form" className="messages-composer messages-composer-thread"/);
 });
 
 test('Design a screen says to describe it, and Homeroom bot draws it: no screen to pick', () => {

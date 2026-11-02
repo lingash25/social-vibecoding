@@ -12,8 +12,9 @@
 //      opened and a design thread hang off the bot's line): the note at
 //      its head, the doors at its foot.
 //   4. 31 Oct 2026: the doors come once the bot has answered, and only the
-//      ones that apply to what the thread is.
-//   5. The doors are same-origin writes, named in the copy.
+//      ones that apply to what the thread is. 1 Nov 2026: File it and Post
+//      it are the bot's to offer, under its reply, never at the foot.
+//   5. The routes the old doors wrote to stay same-origin writes.
 //
 // Run with: node --test tests/private-thread-bar.test.js
 
@@ -31,7 +32,7 @@ const BAR = 'frontend/src/features/messages/private-thread-bar.tsx';
 
 test('its first render is nothing; where the thread stands is read in an effect', () => {
   assert.equal(renderComponent(BAR, 'PrivateThreadNote', { where: null }), '');
-  const doors = { rootId: 5, text: 'An idea', where: null, onWhere() {}, botReplied: true };
+  const doors = { rootId: 5, text: 'An idea', where: null, botReplied: true };
   assert.equal(renderComponent(BAR, 'PrivateThreadDoors', doors), '');
   assert.match(read(BAR), /fetch\(`\/api\/conversations\/homeroom-bot\/threads\/\$\{rootId\}`/);
 });
@@ -44,28 +45,32 @@ test('the projects to pick from are the viewer\'s communities, in the switcher\'
   assert.deepEqual(projectChoices({ list: null, info: {} }), []);
 });
 
-test('the doors wait for the bot\'s answer, and are only the ones that apply', () => {
+test('the doors wait for the bot\'s answer, and File it is never one of them', () => {
   const { doorsFor } = loadTsx(BAR);
+  const notes = { slug: 'notes', name: 'Notes' };
   const open = (kind, app = null) => ({ state: 'open', kind, app });
   const doors = (where, replied = true) => JSON.parse(JSON.stringify(doorsFor(where, replied)));
   assert.deepEqual(doors(open('idea'), false), [], 'nothing to take public before the bot answers');
-  assert.deepEqual(doors(open('draft_request')), ['file']);
-  assert.deepEqual(doors(open('draft_reply')), ['post']);
-  // 1 Nov 2026: a thread from the bot's "+" is an idea until it is more.
-  assert.deepEqual(doors(open('ask')), ['file', 'new'], 'a "+" thread in no project, like an idea');
-  assert.deepEqual(doors(open('ask', { slug: 'notes', name: 'Notes' })), ['file'], 'one for a project is filed there');
-  assert.deepEqual(doors(open('design', { slug: 'notes', name: 'Notes' })), ['file']);
+  // 1 Nov 2026 (Evan): File it and Post it are under the bot's offer, once
+  // something is ready, not at the foot of every thread.
+  assert.deepEqual(doors(open('draft_request', notes)), [], 'a drafted request is filed from its card');
+  assert.deepEqual(doors(open('draft_reply', notes)), [], 'a drafted reply is posted from its card');
+  assert.deepEqual(doors(open('ask', notes)), [], 'a "+" thread for a project waits for the bot\'s offer');
+  assert.deepEqual(doors(open('idea', notes)), []);
+  assert.deepEqual(doors(open('design', notes)), []);
+  assert.deepEqual(doors(open('design')), [], 'a design\'s bot offers the project itself');
+  // An idea in no project can still start one.
+  assert.deepEqual(doors(open('ask')), ['new'], 'a "+" thread in no project, like an idea');
+  assert.deepEqual(doors(open('idea')), ['new']);
+  assert.deepEqual(doors({ state: 'open' }), ['new'], 'an older server sends no kind: an idea');
   assert.deepEqual(doors({ ...open('idea'), mine: false }), [], 'never on a thread that is not theirs');
-  assert.deepEqual(doors(open('idea')), ['file', 'new'], 'an idea in no project can start one');
-  assert.deepEqual(doors(open('idea', { slug: 'notes', name: 'Notes' })), ['file']);
-  assert.deepEqual(doors({ state: 'open' }), ['file', 'new'], 'an older server sends no kind: an idea');
   assert.deepEqual(doors({ state: 'filed', number: 4 }), [], 'none once it went somewhere');
   assert.deepEqual(doors(null), []);
 });
 
 test('it is drawn on every private thread in the bot\'s chat, by the server\'s word: the note on top, the doors under it', () => {
   const screen = read('frontend/src/features/messages/index.tsx');
-  const gate = screen.slice(screen.indexOf('const privateRoot = '), screen.indexOf('const [privateWhere, setPrivateWhere] = usePrivateThread(privateRoot);'));
+  const gate = screen.slice(screen.indexOf('const privateRoot = '), screen.indexOf('const [privateWhere] = usePrivateThread(privateRoot);'));
   assert.match(gate, /snap\.active\?\.kind === 'direct' && threadsAllowed\(snap\.active\) && snap\.active\.homeroomBot/, 'the bot\'s chat');
   assert.match(gate, /privateRootMessage && !requestPageOf\(privateRootMessage\)/, 'any root but a request\'s story, the bot\'s line too');
   assert.doesNotMatch(gate, /!privateRootMessage\.sender\.bot/, '1 Nov 2026: not only the viewer\'s own message');
@@ -122,19 +127,35 @@ test('in Main Chat\'s column a thread is alone under its own head, and says it i
   assert.match(screen, /\{here && snap\.route\.threadRootId \? <ReplyThreadPanel inMain=\{mainChat\} onBack=\{onBack\} \/> : null\}/);
 });
 
-test('a door opens pointed at the thread\'s project, and a reply at the thread it answers', () => {
+test('the foot has New project alone: no File it or Post it form, and nothing it writes', () => {
   const source = read(BAR);
-  assert.match(source, /setProject\(where\.app\?\.slug \|\| ''\)/);
-  assert.match(source, /setNumber\(where\.target \? String\(where\.target\) : ''\)/);
   assert.match(source, /data-private-doors=/);
+  assert.match(source, /data-private-door=\{d\}/);
+  assert.doesNotMatch(source, /privateThread\.(fileIt|postIt|sendFile|sendPost)/, 'no File it or Post it at the foot');
+  assert.doesNotMatch(source, /method: 'POST'/, 'the foot writes nothing: the bot\'s offer does');
+  assert.equal(renderComponent(BAR, 'PrivateThreadDoors', {
+    rootId: 5, text: 'An idea', where: { state: 'open', kind: 'ask', app: { slug: 'notes', name: 'Notes' } }, botReplied: true,
+  }), '', 'a thread for a project has no foot');
+  assert.match(renderComponent(BAR, 'PrivateThreadDoors', {
+    rootId: 5, text: 'An idea', where: { state: 'open', kind: 'ask', app: null }, botReplied: true,
+  }), /data-private-door="new"[^>]*>New project</);
 });
 
-test('the doors are same-origin writes, and the copy names them', () => {
+test('the bot offers File it once a request is ready: the foot has none', () => {
+  const mayor = require('../src/services/homeroom-bot-mayor');
+  const plus = mayor.systemPrompt({ username: 'ada', thread: { draft: { kind: 'ask', changeKind: 'fix', appSlug: 'notes', appName: 'Notes' } } });
+  assert.match(plus, /Once it is clear enough to build, offer it as a request with offer_request:\n  File it shows only under that offer, so make it then, without waiting to be asked\./);
+  const idea = mayor.systemPrompt({ username: 'ada', thread: { draft: null } });
+  assert.match(idea, /Nothing in this thread is filed until you offer it\. Once what they want is clear enough to build, offer it as\n  a request with offer_request: File it shows only under that offer\./);
+  const filed = mayor.systemPrompt({ username: 'ada', thread: { draft: { kind: 'draft_request', state: 'filed', issueNumber: 4, appSlug: 'notes', appName: 'Notes' } } });
+  assert.doesNotMatch(filed, /File it shows only under that offer/, 'not once it is filed');
+});
+
+test('the routes the old doors wrote to stay same-origin writes, and the head\'s copy is unchanged', () => {
   const routes = read('src/routes/conversations.js');
   assert.match(routes, /router\.post\('\/api\/conversations\/homeroom-bot\/threads\/:rootId\/file', conversationActionLimiter, sameOriginBrowserOnly,/);
   assert.match(routes, /router\.post\('\/api\/conversations\/homeroom-bot\/threads\/:rootId\/post', conversationActionLimiter, sameOriginBrowserOnly,/);
   assert.equal(message('messages:privateThread.label'), 'Only you can see this thread.');
-  assert.equal(message('messages:privateThread.fileIt'), 'File it');
-  assert.equal(message('messages:privateThread.postIt'), 'Post it');
+  assert.equal(message('messages:privateThread.newProject'), 'New project');
   assert.equal(message('messages:privateThread.filed', { number: 41, project: 'Seed swap' }), 'Filed as request #41 on Seed swap.');
 });

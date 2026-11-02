@@ -298,6 +298,25 @@ function isNativeClick(event: MouseEvent): boolean {
   return !!nav?.isNativeClick?.(event);
 }
 
+/**
+ * A COMMUNITY PRESSED IN THE SIDEBAR IS A PLACE SWITCH (1 Nov 2026), and it
+ * swaps like the tabs above it, a cut (#2797, #2880). It went through
+ * navigateToApp's zoom with nothing on screen to grow out of, so the kit
+ * fell back to its sliding page transition: the old page, sidebar and all,
+ * slid left over the new sidebar while the new page was still blank. The
+ * router's own mark for a press (App._tabPress, as resumeWorkshopView sets
+ * it) is read before navigateToApp's first await, and never outlives it.
+ */
+export function pressPlace(navigate: () => void): void {
+  const app = (window as unknown as { App?: { _tabPress?: boolean } }).App;
+  if (app) app._tabPress = true;
+  try {
+    navigate();
+  } finally {
+    if (app) app._tabPress = false;
+  }
+}
+
 /** Where you are, as every row of the sidebar's communities reads it. */
 export interface RailHere {
   sidebarRows: boolean;
@@ -412,7 +431,7 @@ export function RailCommunityRow({ slug, here, record = null, pin }: {
           event.preventDefault();
           // On its page, a press goes up the page; from its app, to its page.
           if (onPage === slug) pressLitTab(screen, { stopAtCommunity: true });
-          else goToCommunity(slug);
+          else pressPlace(() => goToCommunity(slug));
         }}
         // One of yours pins or unpins from its right-click menu, which
         // keeps the link's Open in new tab (./pin-actions.ts).

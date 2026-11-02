@@ -589,6 +589,13 @@ if [ "$MODE" = "build" ] && [ "${STOP_GUARD:-}" = "1" ]; then
     # header, LEFTOVER SERVERS), counted for the result line.
     USERNODE_STOP_GUARD_SERVERS="$STOP_GUARD_DIR/servers"
     export USERNODE_STOP_GUARD_START USERNODE_STOP_GUARD_COUNT USERNODE_STOP_GUARD_REPO USERNODE_STOP_GUARD_SERVERS
+    # The notes a person sends this build while it runs (the hook's header,
+    # NOTES FROM THE PERSON), asked for at each stop with this turn's token.
+    if [ -n "$WORKER_JWT" ]; then
+      USERNODE_STOP_GUARD_NOTES="${PLATFORM_URL%/}/api/internal/sessions/${SESSION_ID}/build-notes/take"
+      USERNODE_STOP_GUARD_NOTES_COUNT="$STOP_GUARD_DIR/notes"
+      export USERNODE_STOP_GUARD_NOTES USERNODE_STOP_GUARD_NOTES_COUNT
+    fi
     if [ -n "$STOP_GUARD_CHECKS_ON" ]; then
       USERNODE_STOP_GUARD_CHECKS="$STOP_GUARD_CHECKS"
       USERNODE_STOP_GUARD_CHECKS_COUNT="$STOP_GUARD_DIR/checks"

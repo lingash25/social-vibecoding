@@ -66,3 +66,14 @@ export function currentDirection(): Direction {
 export function dirSign(): 1 | -1 {
   return currentDirection() === 'rtl' ? -1 : 1;
 }
+
+/**
+ * Something a person wrote, for a line of a right-to-left screen that has no
+ * element of its own to carry `dir="auto"` (a list row's preview, inside a
+ * translated sentence). Unicode's isolates give it its own direction, so an
+ * English "See you Saturday!" keeps its "!" at its end. Elsewhere the text
+ * is returned as it was.
+ */
+export function ownDirection(text: string): string {
+  return text && currentDirection() === 'rtl' ? `\u2068${text}\u2069` : text;
+}

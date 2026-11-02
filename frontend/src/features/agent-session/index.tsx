@@ -33,6 +33,7 @@ import { useInnerHtml } from '../../lib/html';
 import { changeHref as changeLink } from '../../lib/change-href';
 import { RichMessage, useMessages } from '../../lib/i18n/react';
 import { t } from '../../lib/i18n/runtime';
+import { dirSign } from '../../lib/i18n/direction';
 import { renderSpecHtml, useSpecFrames, type SpecHtmlDoc } from '../../lib/spec-html';
 import { useStoreState } from '../../lib/use-store-state';
 import { useVisibilityHiddenClass } from '../../lib/visibility-store';
@@ -1270,8 +1271,8 @@ function SidePane({ sheet, preview, tab, containerRef }: {
     // An iframe swallows pointer moves: the preview's, while the drag runs.
     const frame = document.getElementById('staging-iframe');
     if (frame) frame.style.pointerEvents = 'none';
-    // Dragging right narrows the pane: its left edge is the divider.
-    const onMove = (move: PointerEvent) => { latest = commit(startWidth - (move.clientX - startX)); };
+    // Dragging toward inline-end narrows the pane: its inline-start edge is the divider.
+    const onMove = (move: PointerEvent) => { latest = commit(startWidth - (move.clientX - startX) * dirSign()); };
     const onUp = () => {
       handle.removeEventListener('pointermove', onMove);
       handle.removeEventListener('pointerup', onUp);
@@ -1290,7 +1291,7 @@ function SidePane({ sheet, preview, tab, containerRef }: {
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
-    writeSpecWidth(commit(width + (event.key === 'ArrowLeft' ? SPEC_WIDTH_STEP : -SPEC_WIDTH_STEP)));
+    writeSpecWidth(commit(width + (event.key === 'ArrowLeft' ? SPEC_WIDTH_STEP : -SPEC_WIDTH_STEP) * dirSign()));
   };
 
   return (

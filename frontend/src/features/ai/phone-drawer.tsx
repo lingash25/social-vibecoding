@@ -163,11 +163,14 @@ export function AiDrawer({ level, onLevel, list, pane, peekLabel }: {
   const move = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pan.current;
     if (!p || !width) return;
-    const dx = e.clientX - p.x;
+    // In reading direction, so "toward the other level" and the offset below
+    // are the same sums in Arabic, where the strip runs the other way.
+    const dx = (e.clientX - p.x) * dirSign();
     const dy = e.clientY - p.y;
     if (!p.panning) {
       if (!isPan(dx, dy)) return;
-      // Only toward the other level: left from the list, right from Main.
+      // Only toward the other level: inline-start from the list (left in
+      // English), inline-end from Main.
       if ((p.from === 0 && dx > 0) || (p.from === 1 && dx < 0)) { pan.current = null; return; }
       p.panning = true;
       try { root.current?.setPointerCapture(p.id); } catch { /* released already */ }
@@ -183,7 +186,7 @@ export function AiDrawer({ level, onLevel, list, pane, peekLabel }: {
     const now = drag ?? at[p.from];
     swallow.current = true;
     setDrag(null);
-    onLevel(landingIn(at, p.from, now, e.clientX - p.x) as 0 | 1);
+    onLevel(landingIn(at, p.from, now, (e.clientX - p.x) * dirSign()) as 0 | 1);
   };
   const cancel = () => { pan.current = null; setDrag(null); };
 

@@ -272,7 +272,7 @@ test('openAtUnreadLine moves the stream to the line, holds it, and counts the op
 
 test('the pane counts from the opening, beside the stream, and draws nothing with nothing unread', () => {
   const src = read(GENERAL);
-  assert.match(src, /<ChannelUnreadBanner scroller=\{messages\} \/>\s*<div ref=\{messages\} id="gc-messages" className="flex-1 overflow-y-auto py-2 space-y-0\.5" \/>\s*<ChannelJumpToLatest scroller=\{messages\} \/>/);
+  assert.match(src, /<ChannelUnreadBanner scroller=\{messages\} \/>\s*<div ref=\{messages\} id="gc-messages" className="flex-1 overflow-y-auto pt-2 space-y-0\.5 chat-transcript" \/>\s*<ChannelJumpToLatest scroller=\{messages\} \/>/);
   assert.match(src, /offerBanner: opened !== atMount,/);
   assert.match(src, /markKey: unread \? `\$\{unread\.lastReadId\}:\$\{opened\}` : '',/, 'the opening starts the banner afresh');
   assert.match(src, /if \(!unread\) return null;/);

@@ -25,6 +25,8 @@ import { alsoInChat, botRequestNames, botThreadLabel, threadsAllowed, type Chang
 import { openRequestPage, requestPageOf } from './request-page';
 import { BotHeadWords, botHead, isHeadCard } from './bot-head-card';
 import { DesignVersionCard, designVersionOf } from './design-card';
+import { BotRichCard, botCardOf } from './bot-cards';
+import { BotLookedLine } from './bot-looked';
 import { LinkEmbeds } from './link-cards';
 import { plainText } from './plain-text';
 import { confirmAction } from '../../lib/confirm';
@@ -349,6 +351,8 @@ export const MessageRow = memo(function MessageRow({
   ) : (
     <>
       {message.reply ? <button type="button" className="messages-quote" onClick={() => document.getElementById(`messages-message-${message.reply?.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><span>{senderName(message.reply.sender, { bare })}</span><p>{message.reply.deleted ? t('messages:row.quote.deleted') : plainText(message.reply.content) || t('messages:row.quote.attachment')}</p></button> : null}
+      {/* Homeroom bot parity, P1: what the reply looked at, above its words (./bot-looked.tsx). */}
+      {!editing ? <BotLookedLine message={message} /> : null}
       {editing ? (
         <div className="messages-edit"><textarea ref={editRef} dir="auto" aria-label={t('messages:row.editLabel')} value={editValue} onChange={(event) => setEditValue(event.target.value.slice(0, 8000))} rows={2} maxLength={8000} autoFocus onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void saveEdit(); } }} /><div><button type="button" disabled={busy} onClick={() => void saveEdit()}>{t('core:common.save')}</button><button type="button" onClick={() => setEditing(false)}>{t('core:common.cancel')}</button></div></div>
       ) : isThanksMessage(message) ? (
@@ -395,6 +399,8 @@ export const MessageRow = memo(function MessageRow({
       {message.sender.bot && (message.metadata?.homeroomBot?.question || message.metadata?.homeroomBot?.actions?.length)
         && !isTwoQuestions(message) && !isReadyMessage(message)
         ? <BotQuestion message={message} conversationId={conversationId} hidePrompts={hidePrompts} /> : null}
+      {/* Homeroom bot parity (P1-P9): a card the bot put under its reply (./bot-cards/). */}
+      {botCardOf(message) ? <BotRichCard message={message} conversationId={conversationId} /> : null}
       {message.attachments.length ? <div className="messages-attachments">{message.attachments.map((attachment) => <Attachment key={attachment.id} attachment={attachment} />)}</div> : null}
       {objects.length ? <div className="messages-object-list">{objects.map((object, index) => <ObjectCard key={`${object.type}-${index}`} object={object} />)}</div> : null}
       {/* #3660: a link in the words to one of Homeroom's own pages, as the

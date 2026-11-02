@@ -71,6 +71,10 @@ const ANSWER_WINDOW_MINUTES = 60;
 // it, is to the bot.
 const CONTINUE_MINUTES = 30;
 const MAX_ROUNDS = 5;
+// Homeroom bot parity (P1): the voice keeps the chat's old room per request (homeroom-bot-mayor.js
+// raised its own for private conversations), so a public reply stays short and quick.
+const VOICE_OUTPUT_TOKENS = 900;
+const VOICE_REQUEST_TIMEOUT_MS = 45_000;
 const MAX_REPLY_CHARS = 2000;
 // A place that keeps the bot busy is a place something is wrong with.
 const MAX_TURNS_PER_PLACE_HOUR = 30;
@@ -1111,6 +1115,9 @@ async function converse(pool, cfg, { app, place, bot, settings, messages, fresh,
         const res = await mayor.askModel(t, {
           messages: msgs, tools, where: `v${rounds}`,
           toolChoice: rounds === limit ? { type: 'function', function: { name: 'reply' } } : 'auto',
+          // Homeroom bot parity (P1): the room a private conversation now has is not the voice's.
+          // Where the group reads, a reply stays short, as before.
+          maxOutputTokens: VOICE_OUTPUT_TOKENS, timeoutMs: VOICE_REQUEST_TIMEOUT_MS,
         });
         const calls = mayor.normalizeCalls(res.toolCalls, rounds, ids);
         if (!calls.length) { finalText = res.content || ''; break; }
@@ -1793,6 +1800,7 @@ async function composeReport(pool, cfg, { app, session, bot, asks, outcome, deps
     const res = await mayor.askModel(t, {
       messages, tools: [REPLY_TOOL], where: 'report', attempts: 2,
       toolChoice: { type: 'function', function: { name: 'reply' } },
+      maxOutputTokens: VOICE_OUTPUT_TOKENS, timeoutMs: VOICE_REQUEST_TIMEOUT_MS,
     });
     const call = (res.toolCalls || [])[0];
     const text = call ? String(mayor.parseArgs(call.function?.arguments).text || '') : String(res.content || '');

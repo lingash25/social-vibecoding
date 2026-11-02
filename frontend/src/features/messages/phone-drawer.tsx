@@ -40,6 +40,7 @@ import { startsOnSideways, swipeBackMayStart } from '../nav-drawer/sideways';
 import { open as openConversation } from './store';
 import type { ConversationDetail, ConversationMessage } from './types';
 import { stripWidth } from '../../lib/side-strip';
+import { dirSign } from '../../lib/i18n/direction';
 
 const PHONE_QUERY = '(max-width: 767.98px)';
 
@@ -166,7 +167,7 @@ export function useMessagesDrawer(
   type Slide = { el: HTMLElement; anim: Animation; start: string; end: string; t0: number };
   const slides = useRef(new Map<'list' | 'thread', Slide>());
   const at = (pane: 'list' | 'thread', offset: number, w: number) =>
-    `translate3d(${(pane === 'list' ? -offset : MESSAGES_AT[1] - offset) * w}px, 0, 0)`;
+    `translate3d(${(pane === 'list' ? -offset : MESSAGES_AT[1] - offset) * w * dirSign()}px, 0, 0)`;
   const run = (pane: 'list' | 'thread', el: HTMLElement, start: string, end: string, t0: number, elapsed = 0) => {
     const anim = el.animate([{ transform: start }, { transform: end }], { duration: SLIDE_MS, easing: SLIDE_EASE });
     if (elapsed > 0) anim.currentTime = Math.min(SLIDE_MS, elapsed);
@@ -301,7 +302,8 @@ export function useMessagesDrawer(
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pan.current;
     if (!p || e.pointerId !== p.id) return;
-    const dx = e.clientX - p.x0;
+    // In reading direction: the panes run the other way in Arabic.
+    const dx = (e.clientX - p.x0) * dirSign();
     const dy = e.clientY - p.y0;
     if (!p.on) {
       if (!isPan(dx, dy)) {
@@ -347,7 +349,9 @@ export function useMessagesDrawer(
     const move = (e: TouchEvent) => {
       const touch = e.touches[0];
       if (!p || !touch) return;
-      const dx = touch.clientX - p.x0;
+      // In reading direction, as the Communities drawer's pan reads it: `dx > 0`
+      // is the swipe back, whichever way the screen runs.
+      const dx = (touch.clientX - p.x0) * dirSign();
       const dy = touch.clientY - p.y0;
       if (!p.on) {
         if (isPan(dx, dy) && (from === 0 || dx > 0)) {
@@ -377,8 +381,10 @@ export function useMessagesDrawer(
       const layout = layoutRef.current;
       if (!target || !layout || !layout.contains(target)) return;
       if (from === 1) {
-        const sideways = touch.clientX > EDGE_PX && startsOnSideways(target, layout, window);
-        if (!swipeBackMayStart({ x: touch.clientX, takesEdge, sideways })) return;
+        const rtl = dirSign() === -1;
+        const pastEdge = rtl ? touch.clientX < window.innerWidth - EDGE_PX : touch.clientX > EDGE_PX;
+        const sideways = pastEdge && startsOnSideways(target, layout, window);
+        if (!swipeBackMayStart({ x: touch.clientX, takesEdge, sideways, rtl, width: window.innerWidth })) return;
       } else if (startsOnSideways(target, layout, window)) {
         // The list: anywhere on it but a field (the search).
         return;

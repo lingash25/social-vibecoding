@@ -35,6 +35,7 @@ import { ChevronLeftIcon, XIcon } from '@/components/ui/icons';
 
 import { useMessages } from '../../lib/i18n/react';
 import { designFrameDoc, currentSheets, DESIGN_SANDBOX, type FramePin } from '../design/frame';
+import { inlinePictures } from '../design/pictures';
 import * as api from './api';
 import type { DesignThread } from './api';
 import { loadReplyThread, useMessagesSnapshot } from './store';
@@ -149,7 +150,8 @@ export function DesignPane({ conversationId, rootId, view, onView, version = nul
   useEffect(() => {
     if (!design || !shown) return;
     let live = true;
-    api.getDesignVersion(rootId, shown).then((v) => {
+    // P8: the pictures it names, written in (../design/pictures.ts).
+    api.getDesignVersion(rootId, shown).then(async (v) => ({ version: v.version, html: await inlinePictures(v.html) })).then((v) => {
       if (!live) return;
       const origin = window.location.origin;
       setHtml({ version: v.version, doc: designFrameDoc(v.html, { origin, sheets: design.surface === 'platform' ? currentSheets() : [] }) });
@@ -350,8 +352,11 @@ export function DesignPane({ conversationId, rootId, view, onView, version = nul
   );
 }
 
-/** Propose it: what becomes public, said before it is; then the request it filed. */
-function ProposeCard({ design, version, onClose, onDone }: {
+/**
+ * Propose it: what becomes public, said before it is; then the request it
+ * filed. Also a compare card's Propose (./bot-cards/compare.tsx).
+ */
+export function ProposeCard({ design, version, onClose, onDone }: {
   design: DesignThread;
   version: number;
   onClose: () => void;

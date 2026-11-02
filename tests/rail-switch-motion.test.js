@@ -289,6 +289,27 @@ test('Home pressed on the Duo\'s strip out of a running app keeps its zoom into 
   assert.equal(App._stripShowsRunning('notes-ab12'), false, 'unreadable answers no');
 });
 
+// 1 Nov 2026: a community pressed in the sidebar went through navigateToApp's
+// zoom with nothing on screen to grow out of, and the kit fell back to its
+// sliding page transition: the old page, sidebar and all, slid left over the
+// new sidebar (recorded on iPhone Duo held sideways; a desktop window too).
+test('a community pressed in the sidebar is a place switch: it cuts, like the tabs', () => {
+  const rail = read('frontend/src/features/nav/rail-communities.tsx');
+  assert.match(rail, /if \(onPage === slug\) pressLitTab\(screen, \{ stopAtCommunity: true \}\);\s+else pressPlace\(\(\) => goToCommunity\(slug\)\);/);
+  const press = rail.slice(rail.indexOf('export function pressPlace('), rail.indexOf('\n}\n', rail.indexOf('export function pressPlace(')));
+  assert.match(press, /if \(app\) app\._tabPress = true;\s+try \{\s+navigate\(\);\s+\} finally \{\s+if \(app\) app\._tabPress = false;\s+\}/,
+    'the router\'s own mark, for exactly the press');
+  // The mark only counts if the press reaches navigateToApp in the same task.
+  const scope = read('frontend/src/features/workshop/community-scope.ts');
+  const go = scope.slice(scope.indexOf('export function goToCommunity('), scope.indexOf('\n}\n', scope.indexOf('export function goToCommunity(')));
+  assert.doesNotMatch(go, /\bawait\b|setTimeout|requestAnimationFrame/);
+  assert.match(go, /void app\?\.navigateToApp\?\.\(slug, 'dev'\);/);
+  // …and a press marked so is a cut on the rail's layout (the test above).
+  const { App, element } = harness();
+  App._tabPress = true;
+  assert.equal(App._entryTransition('zoom-in', element('app-view'), App._tabPress === true), 'none');
+});
+
 test('a tab press into an app\'s Workshop reveals it when its record lands, not empty before', async () => {
   const src = read('public/js/app.js');
   const nav = src.slice(src.indexOf('  async navigateToApp('), src.indexOf('\n  navigateHome(opts) {'));

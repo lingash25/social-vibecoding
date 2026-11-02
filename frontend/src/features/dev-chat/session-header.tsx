@@ -18,6 +18,7 @@ import {
   type SessionHeaderState,
 } from './session-header-store';
 import type { SessionAction } from './session-list-store';
+import { dirSign } from '../../lib/i18n/direction';
 
 function controller(): any {
   return (typeof window !== 'undefined' ? (window as any).DevChat : null) || null;
@@ -181,7 +182,10 @@ function ModeSwitch({ busy }: { busy: boolean }): ReactNode {
     const measure = () => {
       const active = seeing ? eyeRef.current : penRef.current;
       if (!active) return;
-      setThumb({ x: active.offsetLeft, w: active.offsetWidth });
+      // The thumb sits at `start-0`, so in Arabic it moves from the right edge.
+      const parentW = (active.offsetParent as HTMLElement | null)?.clientWidth ?? 0;
+      const x = dirSign() === -1 ? active.offsetLeft + active.offsetWidth - parentW : active.offsetLeft;
+      setThumb({ x, w: active.offsetWidth });
     };
     measure();
     // The label is text, so a font swap or a width change under it moves the

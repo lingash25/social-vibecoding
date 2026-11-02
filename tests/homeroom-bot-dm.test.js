@@ -836,6 +836,94 @@ test('31 Oct 2026: an answer to a message in a thread types in that thread, apar
   assert.deepEqual(said().filter(([, typing]) => !typing), [[13006, false], [null, false]]);
 });
 
+// 1 Nov 2026: what the bot is doing rides on its typing event, for the
+// working card (frontend/src/features/messages/bot-working.tsx).
+test('what the bot is doing goes out on its typing event at once, and on every renewal after, until it changes', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'Date'] });
+  const { events, ws } = typingHarness(t);
+  const doings = () => events.filter((e) => e.payload.type === 'conversation_typing').map((e) => [e.payload.typing, e.payload.doing || null]);
+  let finish;
+  let handed;
+  const answering = dm.whileTyping({}, { botId: 2, conversationId: 47, threadRootId: 13006, ws }, (typing) => {
+    handed = typing;
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  await settle();
+  assert.equal(typeof handed.doing, 'function', 'the work is handed what says it');
+  assert.deepEqual(doings(), [[true, null]], 'thinking, first: no doing');
+  await handed.doing({ kind: 'request', number: 12 });
+  assert.deepEqual(doings().at(-1), [true, { kind: 'request', number: 12 }], 'said at once');
+  await handed.doing({ kind: 'request', number: 12 });
+  assert.equal(doings().length, 2, 'the same thing is not said again');
+  t.mock.timers.tick(dm.TYPING_RENEW_MS);
+  await settle();
+  assert.deepEqual(doings().at(-1), [true, { kind: 'request', number: 12 }], 'and rides on the renewal');
+  assert.equal(events.at(-1).payload.threadRootId, 13006, 'in the place it types');
+  await handed.doing({ kind: 'code', project: '  Ear   Trainer ' });
+  await handed.doing(null);
+  t.mock.timers.tick(dm.TYPING_RENEW_MS);
+  await settle();
+  assert.deepEqual(doings().slice(-3), [[true, { kind: 'code', project: 'Ear Trainer' }], [true, null], [true, null]],
+    'a new kind at once; back to thinking, and the renewal says so too');
+  finish('done');
+  await answering;
+  assert.deepEqual(doings().at(-1), [false, null], 'a stop carries no doing');
+  await handed.doing({ kind: 'drawing' });
+  assert.deepEqual(doings().at(-1), [false, null], 'and nothing is said once it has stopped');
+});
+
+// 1 Nov 2026: a screen asked for in Main Chat is drawn in a thread the
+// designer opens; the typing, and so the working card, goes there with it.
+test('the typing moves to the thread the answer goes on in, with what it was doing, and ends there', async (t) => {
+  const { events, ws } = typingHarness(t);
+  const typed = () => events.filter((e) => e.payload.type === 'conversation_typing')
+    .map((e) => [e.payload.threadRootId || null, e.payload.typing, e.payload.doing || null]);
+  let finish;
+  let handed;
+  const answering = dm.whileTyping({}, { botId: 2, conversationId: 41, ws }, (typing) => {
+    handed = typing;
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  await settle();
+  assert.equal(typeof handed.moveTo, 'function', 'the work is handed what moves it');
+  await handed.doing({ kind: 'drawing' });
+  await handed.moveTo(13010);
+  await settle();
+  assert.deepEqual(typed(), [
+    [null, true, null],
+    [null, true, { kind: 'drawing' }],
+    [13010, true, null],
+    [13010, true, { kind: 'drawing' }],
+    [null, false, null],
+  ], 'typing in the thread first, with what it was doing, then stopped in the main chat');
+  await handed.moveTo(13010);
+  assert.equal(typed().length, 5, 'moving to where it already is changes nothing');
+  await handed.doing({ kind: 'designing' });
+  assert.deepEqual(typed().at(-1), [13010, true, { kind: 'designing' }], 'and it says what it does there');
+  finish('drawn');
+  assert.equal(await answering, 'drawn');
+  assert.deepEqual(typed().at(-1), [13010, false, null], 'it stops where it is when the answer is out');
+  assert.equal(typed().filter(([root, typing]) => root === null && !typing).length, 1, 'the main chat stopped once');
+});
+
+test('a typing event carries only the kinds of work the screen words, and what they name', () => {
+  // Homeroom bot parity: P1 'writing' (the answer as it is written), P3 'looking' (a helper sent into a
+  // project's code, named by the project as 'code' is).
+  assert.deepEqual([...dm.DOING_KINDS], ['progress', 'request', 'code', 'drawing', 'designing', 'drafting', 'writing', 'looking']);
+  assert.deepEqual(dm.typingDoing({ kind: 'looking', project: 'Gym Tracker', number: 3 }), { kind: 'looking', project: 'Gym Tracker' });
+  assert.deepEqual(dm.typingDoing({ kind: 'drawing', extra: 'x' }), { kind: 'drawing' });
+  assert.deepEqual(dm.typingDoing({ kind: 'request', number: '7' }), { kind: 'request', number: 7 });
+  assert.equal(dm.typingDoing({ kind: 'request' }), null, 'a request is named by its number');
+  assert.deepEqual(dm.typingDoing({ kind: 'code', project: 'x'.repeat(200) }).project.length, 61, 'a short name');
+  assert.deepEqual(dm.typingDoing({ kind: 'code', project: '' }), { kind: 'code' });
+  assert.equal(dm.typingDoing({ kind: 'Reading request #12' }), null, 'never words');
+  assert.equal(dm.typingDoing(null), null);
+  // A person's typing route never says what anybody is doing.
+  const route = read('src/routes/conversations.js');
+  const typing = route.slice(route.indexOf("router.post('/api/conversations/:id/typing'"), route.indexOf("router.post('/api/conversations/:id/typing'") + 1500);
+  assert.doesNotMatch(typing, /doing/);
+});
+
 test('a message from somebody let in is answered while the bot types; anybody else\'s is not', async (t) => {
   const { ws, typing } = typingHarness(t);
   const pool = {
@@ -849,7 +937,14 @@ test('a message from somebody let in is answered while the bot types; anybody el
   const seen = [];
   const mayor = {
     async decideOffer() { return null; },
-    async runDmTurn(_pool, _config, args) { await settle(); seen.push(typing().slice()); return { turn: args.message.id }; },
+    async runDmTurn(_pool, _config, args) {
+      await settle();
+      seen.push(typing().slice());
+      // 1 Nov 2026: and is handed what says what it is doing, and what moves it.
+      assert.equal(typeof args.deps.doing, 'function');
+      assert.equal(typeof args.deps.moveTyping, 'function');
+      return { turn: args.message.id };
+    },
   };
   const out = await dm.noteUserMessage(pool, {}, {
     user: { id: 9, username: 'ada', hasPlatformAccess: true }, conversationId: 45, message: { id: 70, content: 'what are you working on?' },
@@ -928,7 +1023,8 @@ test('#4239: a request about Homeroom itself says so, and offers the move instea
 test('"typing" goes out before the answer starts, bounded', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src/services/homeroom-bot-dm.js'), 'utf8');
   const fn = src.slice(src.indexOf('async function whileTyping('), src.indexOf('// ── Who a request is for'));
-  assert.ok(fn.indexOf('stop.ready') < fn.indexOf('await work()'), 'the answer waits for its typing event');
+  // 1 Nov 2026: the work is handed what says what it is doing, and what moves it.
+  assert.ok(fn.indexOf('stop.ready') < fn.indexOf('return await work(typing);'), 'the answer waits for its typing event');
   assert.match(fn, /setTimeout\(resolve, TYPING_FIRST_WAIT_MS\)/, 'but never long');
   assert.match(src, /created\.first = sendTyping\(pool, botId, id, true, io, root\);/);
   assert.match(src, /stop\.ready = entry\.first \|\| Promise\.resolve\(\);/);

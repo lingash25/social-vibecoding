@@ -449,9 +449,36 @@ const WORKER_READ_ALLOWED_ROUTES = Object.freeze([
   { method: 'GET', pattern: '/api/sessions/:id/status' },
 ]);
 
+// `bot_admin`: Homeroom bot answering a full platform admin in their own
+// conversation with it (Homeroom bot parity P7): exactly the routes its
+// curated tools call (services/mcp-audiences.js BOT_ADMIN_TOOLS), each one
+// already on the external list above and gated by its own handler for a full
+// admin (the featured picture: for whoever may manage the project). Its
+// writes run only on a grant minted for one action the admin confirmed on a
+// card.
+const BOT_ADMIN_ALLOWED_ROUTES = Object.freeze([
+  { method: 'GET', pattern: '/api/bot-bench/runs' },
+  { method: 'GET', pattern: '/api/bot-bench/runs/:id' },
+  { method: 'POST', pattern: '/api/bot-bench/runs' },
+  { method: 'GET', pattern: '/api/bot-configs' },
+  { method: 'POST', pattern: '/api/bot-configs' },
+  { method: 'POST', pattern: '/api/bot-configs/:id/role' },
+  { method: 'POST', pattern: '/api/bot-configs/budget' },
+  { method: 'GET', pattern: '/api/test-accounts' },
+  { method: 'POST', pattern: '/api/test-accounts' },
+  { method: 'POST', pattern: '/api/test-accounts/:id/retire' },
+  { method: 'POST', pattern: '/api/test-accounts/release-emails' },
+  { method: 'GET', pattern: '/api/apps/:slug/featured-illustration' },
+  { method: 'PUT', pattern: '/api/apps/:slug/featured-illustration' },
+  { method: 'GET', pattern: '/api/bot-studio/bot' },
+  { method: 'POST', pattern: '/api/bot-studio/bot/settings' },
+  { method: 'GET', pattern: '/api/bot-studio/shots' },
+]);
+
 const DELEGATED_ALLOWED_ROUTES = Object.freeze({
   agent_mayor: AGENT_MAYOR_ALLOWED_ROUTES,
   worker_read: WORKER_READ_ALLOWED_ROUTES,
+  bot_admin: BOT_ADMIN_ALLOWED_ROUTES,
 });
 
 function matchesPattern(pathname, pattern) {
@@ -530,6 +557,7 @@ module.exports = {
   CONNECTOR_ALLOWED_ROUTES,
   AGENT_MAYOR_ALLOWED_ROUTES,
   WORKER_READ_ALLOWED_ROUTES,
+  BOT_ADMIN_ALLOWED_ROUTES,
   canonicalApiTarget,
   isCliApiPath,
   isConnectorApiRequest,

@@ -1107,6 +1107,114 @@
     "text": "No progress to show for this one.",
     "description": "Shown on a Homeroom bot activity card when there is no progress record for that piece of work."
   },
+  "botCards.checksGreen.label": {
+    "text": "Getting a change past a check that is not its own",
+    "description": "What screen readers call the card in the chat with Homeroom bot that follows one of its changes past a failing check that is not the change's."
+  },
+  "botCards.checksGreen.title": {
+    "text": "A failing check that isn't this change's",
+    "description": "The title of the card in the chat with Homeroom bot that follows one of its changes past a failing check that fails without the change too."
+  },
+  "botCards.checksGreen.eyebrowWorking": {
+    "text": "Working on its checks",
+    "description": "The small label over that card while Homeroom bot is still getting the failing check fixed."
+  },
+  "botCards.checksGreen.eyebrowGreen": {
+    "text": "Checks pass",
+    "description": "The small label over that card once the change's checks pass again."
+  },
+  "botCards.checksGreen.eyebrowPerson": {
+    "text": "Needs a person",
+    "description": "The small label over that card once Homeroom bot could not get the check fixed and a person has to look."
+  },
+  "botCards.checksGreen.stepDone": {
+    "text": "Done",
+    "description": "What screen readers say for a step on that card that is finished."
+  },
+  "botCards.checksGreen.stepNow": {
+    "text": "Under way",
+    "description": "What screen readers say for the step on that card that is happening now."
+  },
+  "botCards.checksGreen.stepTodo": {
+    "text": "Next",
+    "description": "What screen readers say for a step on that card that has not started."
+  },
+  "botCards.checksGreen.stepFailed": {
+    "text": "Did not work",
+    "description": "What screen readers say for a step on that card that did not work."
+  },
+  "botCards.checksGreen.fixActions": {
+    "text": "The fix",
+    "description": "What screen readers call the buttons on that card that open the fix for the failing check."
+  },
+  "botCards.checksGreen.voteOn": {
+    "text": "Vote on #{{number}}",
+    "description": "Button on that card that opens the fix for the failing check, a change of its own, where people vote on it. {{number}} is the fix's number."
+  },
+  "botCards.checksGreen.seeFix": {
+    "text": "See the fix",
+    "description": "Button on that card that opens the request on Homeroom's board for fixing the failing check."
+  },
+  "botCards.confirm.label": {
+    "text": "Confirm: {{title}}",
+    "description": "What screen readers call a card in an admin's chat with Homeroom bot that waits for them to confirm a change. {{title}} is what it would do, such as \"Launch a bench run\"."
+  },
+  "botCards.confirm.untitled": {
+    "text": "An admin action",
+    "description": "The title of that confirm card when it does not say what it does."
+  },
+  "botCards.confirm.eyebrowPending": {
+    "text": "Waits for your Confirm",
+    "description": "The small label over that confirm card while nothing has run yet."
+  },
+  "botCards.confirm.eyebrowDone": {
+    "text": "Done",
+    "description": "The small label over that confirm card once what it showed ran."
+  },
+  "botCards.confirm.eyebrowFailed": {
+    "text": "Did not go through",
+    "description": "The small label over that confirm card when what it showed ran and was refused or failed."
+  },
+  "botCards.confirm.eyebrowCancelled": {
+    "text": "Cancelled",
+    "description": "The small label over that confirm card once the admin tapped Cancel."
+  },
+  "botCards.confirm.eyebrowExpired": {
+    "text": "Expired",
+    "description": "The small label over that confirm card once its 15 minutes passed with no tap."
+  },
+  "botCards.confirm.hint": {
+    "text": "Nothing runs until you tap Confirm. It expires in 15 minutes.",
+    "description": "The line on that confirm card above its buttons, while it waits."
+  },
+  "botCards.confirm.confirm": {
+    "text": "Confirm",
+    "description": "Button on that confirm card that runs exactly what it shows, once, as the admin."
+  },
+  "botCards.confirm.running": {
+    "text": "Running it",
+    "description": "What the Confirm button on that confirm card says while what it shows is running."
+  },
+  "botCards.confirm.cancel": {
+    "text": "Cancel",
+    "description": "Button on that confirm card that drops it: nothing runs."
+  },
+  "botCards.confirm.expiredLine": {
+    "text": "This card expired, so nothing ran. Ask Homeroom bot again for a new one.",
+    "description": "The line on that confirm card once its 15 minutes passed with no tap."
+  },
+  "botCards.confirm.secretLabel": {
+    "text": "Shown once",
+    "description": "The small label over a secret an admin action returned on that confirm card, such as a test account's one-time password, when the action did not name it."
+  },
+  "botCards.confirm.secretNote": {
+    "text": "Shown here once, on this screen. It is not kept anywhere: copy it now.",
+    "description": "The line under a secret an admin action returned on that confirm card, such as a test account's one-time password."
+  },
+  "botCards.confirm.failedTap": {
+    "text": "That didn't work just now. Try again.",
+    "description": "The line on that confirm card when tapping Confirm or Cancel could not reach Homeroom."
+  },
   "bot.activity.openChange": {
     "text": "Open change",
     "description": "Link on a Homeroom bot activity card: opens the page of the change the bot built. \"Open\" is a verb; \"change\" is a noun, the proposed change to the project."
@@ -1550,6 +1658,142 @@
   "bot.questions.closed": {
     "text": "No longer needed.",
     "description": "Line under Homeroom bot's questions once they no longer apply."
+  },
+  "botCards.failed": {
+    "text": "That did not go through. Try again.",
+    "description": "Line on a card under a reply from Homeroom bot (options, questions) when a tap could not be sent."
+  },
+  "botCards.options.label": {
+    "text": "Options",
+    "description": "Small label at the top of a card of options Homeroom bot offers to pick from (shown in capitals)."
+  },
+  "botCards.options.show": {
+    "text": "Show",
+    "description": "Button under one option on Homeroom bot's options card: asks the bot to show or explain that option. A verb."
+  },
+  "botCards.options.pick": {
+    "text": "Pick",
+    "description": "Button under one option on Homeroom bot's options card: chooses that option and tells the bot. A verb."
+  },
+  "botCards.options.showNamed": {
+    "text": "Show option {{key}}: {{title}}",
+    "description": "Accessible name of the Show button under one option on Homeroom bot's options card. {{key}} is the option's letter (A to D), {{title}} its title."
+  },
+  "botCards.options.pickNamed": {
+    "text": "Pick option {{key}}: {{title}}",
+    "description": "Accessible name of the Pick button under one option on Homeroom bot's options card. {{key}} is the option's letter (A to D), {{title}} its title."
+  },
+  "botCards.options.picked": {
+    "text": "Picked",
+    "description": "Shown, with a check, under the option the person picked on Homeroom bot's options card."
+  },
+  "botCards.options.showSay": {
+    "text": "Show me option {{key}}: {{title}}",
+    "description": "Sent as the person's own message to Homeroom bot when they tap Show under an option. {{key}} is the option's letter (A to D), {{title}} its title."
+  },
+  "botCards.options.pickSay": {
+    "text": "{{key}}: {{title}}",
+    "description": "Sent as the person's own message to Homeroom bot when they tap Pick under an option: their choice. {{key}} is the option's letter (A to D), {{title}} its title."
+  },
+  "botCards.questions.label": {
+    "text": "Questions",
+    "description": "Small label at the top of a card of questions Homeroom bot asks, answered together (shown in capitals)."
+  },
+  "botCards.questions.other": {
+    "text": "Other…",
+    "description": "Placeholder of the field under one of Homeroom bot's questions, for an answer of the person's own instead of a suggested one."
+  },
+  "botCards.questions.otherNamed": {
+    "text": "Your own answer to question {{number}}",
+    "description": "Accessible name of the field for an answer of one's own under one of Homeroom bot's questions. {{number}} is the question's number on the card."
+  },
+  "botCards.questions.send": {
+    "text": "Send answers",
+    "description": "Button on Homeroom bot's questions card: sends the chosen answers to the bot. \"Send\" is a verb."
+  },
+  "botCards.questions.youDecide": {
+    "text": "You decide",
+    "description": "Button on Homeroom bot's questions card: leaves the answers to the bot."
+  },
+  "botCards.questions.youDecideSay": {
+    "text": "You decide.",
+    "description": "Sent as the person's own message to Homeroom bot when they tap You decide on its questions card: the bot picks the answers."
+  },
+  "botCards.questions.answerLine": {
+    "text": "{{number}}. {{answer}}",
+    "description": "One line of the message sent as the person when they send their answers to Homeroom bot's questions, one line per question. {{number}} is the question's number, {{answer}} their answer."
+  },
+  "botCards.questions.skipped": {
+    "text": "You left these to Homeroom bot.",
+    "description": "Shown, with a check, on Homeroom bot's questions card once the person tapped You decide."
+  },
+  "botCards.table.tag.ready": {
+    "text": "Ready",
+    "description": "Small label on a row of a table Homeroom bot shows: the request is ready to build or to try."
+  },
+  "botCards.table.tag.question": {
+    "text": "Question",
+    "description": "Small label on a row of a table Homeroom bot shows: the request waits on a question."
+  },
+  "botCards.table.tag.done": {
+    "text": "Done",
+    "description": "Small label on a row of a table Homeroom bot shows: the request is done."
+  },
+  "botCards.table.tag.stopped": {
+    "text": "Stopped",
+    "description": "Small label on a row of a table Homeroom bot shows: work on the request stopped."
+  },
+  "botCards.table.tagHeading": {
+    "text": "Where it stands",
+    "description": "Accessible name of the last column of a table Homeroom bot shows, the column of small labels such as Ready or Done. Read by screen readers only."
+  },
+  "botCards.table.openRequest": {
+    "text": "Open {{project}} request #{{number}}",
+    "description": "Tooltip of a row of a table Homeroom bot shows, when the row is about a request: opens the request's page. {{project}} is the project's name, {{number}} the request's number."
+  },
+  "botCards.table.more_one": {
+    "text": "And {{count}} more",
+    "description": "Under a table Homeroom bot shows, when it left rows out. {{count}} is how many."
+  },
+  "botCards.table.more_other": {
+    "text": "And {{count}} more",
+    "description": "Under a table Homeroom bot shows, when it left rows out. {{count}} is how many."
+  },
+  "botCards.looked.summary_one": {
+    "text": "Looked at {{count}} thing · {{time}}",
+    "description": "Quiet line above a reply from Homeroom bot that opens to the list of what it read to answer. {{count}} is how many things; {{time}} is how long the answer took, such as \"40 s\"."
+  },
+  "botCards.looked.summary_other": {
+    "text": "Looked at {{count}} things · {{time}}",
+    "description": "Quiet line above a reply from Homeroom bot that opens to the list of what it read to answer. {{count}} is how many things; {{time}} is how long the answer took, such as \"40 s\"."
+  },
+  "botCards.looked.summaryNoTime_one": {
+    "text": "Looked at {{count}} thing",
+    "description": "Quiet line above a reply from Homeroom bot that opens to the list of what it read to answer, when how long it took is not known. {{count}} is how many things."
+  },
+  "botCards.looked.summaryNoTime_other": {
+    "text": "Looked at {{count}} things",
+    "description": "Quiet line above a reply from Homeroom bot that opens to the list of what it read to answer, when how long it took is not known. {{count}} is how many things."
+  },
+  "botCards.looked.seconds_one": {
+    "text": "{{count}} s",
+    "description": "How long Homeroom bot took to answer, in seconds, in the line \"Looked at 5 things · 40 s\". Short: an abbreviation of seconds."
+  },
+  "botCards.looked.seconds_other": {
+    "text": "{{count}} s",
+    "description": "How long Homeroom bot took to answer, in seconds, in the line \"Looked at 5 things · 40 s\". Short: an abbreviation of seconds."
+  },
+  "botCards.looked.minutes_one": {
+    "text": "{{count}} min",
+    "description": "How long Homeroom bot took to answer, in minutes, in the line \"Looked at 5 things · 2 min\". Short: an abbreviation of minutes."
+  },
+  "botCards.looked.minutes_other": {
+    "text": "{{count}} min",
+    "description": "How long Homeroom bot took to answer, in minutes, in the line \"Looked at 5 things · 2 min\". Short: an abbreviation of minutes."
+  },
+  "botCards.looked.list": {
+    "text": "What Homeroom bot looked at",
+    "description": "Accessible name of the list under the line \"Looked at 5 things\", of what Homeroom bot read to answer."
   },
   "bot.question.fileRequest": {
     "text": "File this request?",
@@ -3383,6 +3627,194 @@
     "text": "{{first}}, unknown are typing…",
     "description": "Line above the message box while two or more other people are typing. Used when the second person's username is not known; \"unknown\" is written as it has always been shown. {{first}} is the other person's name."
   },
+  "thread.botWorking.thinking": {
+    "text": "Thinking",
+    "description": "On the card at the end of the chat while Homeroom bot is working on an answer and has not said what it is doing. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.progress": {
+    "text": "Checking how your work is going",
+    "description": "On the card at the end of the chat while Homeroom bot reads how the reader's requests are going. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.request": {
+    "text": "Reading request #{{number}}",
+    "description": "On the card at the end of the chat while Homeroom bot reads one request. {{number}} is the request's number. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.code": {
+    "text": "Reading {{project}}'s code",
+    "description": "On the card at the end of the chat while Homeroom bot reads a project's code. {{project}} is the project's name. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.codeUnnamed": {
+    "text": "Reading the code",
+    "description": "On the card at the end of the chat while Homeroom bot reads a project's code, when the project's name is not known. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.drawing": {
+    "text": "Drawing the screen",
+    "description": "On the card at the end of the chat while Homeroom bot draws a design of a screen. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.designing": {
+    "text": "Changing the design",
+    "description": "On the card at the end of the chat while Homeroom bot changes a design it drew. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.drafting": {
+    "text": "Drafting the request",
+    "description": "On the card at the end of the chat while Homeroom bot drafts a request for the reader to file. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.looking": {
+    "text": "Looking into it in {{project}}",
+    "description": "On the card at the end of the chat while a helper of Homeroom bot reads a project's code to answer the reader, which can take a few minutes. {{project}} is the project's name. Three animated dots follow it, as an ellipsis."
+  },
+  "thread.botWorking.lookingUnnamed": {
+    "text": "Looking into the code",
+    "description": "On the card at the end of the chat while a helper of Homeroom bot reads a project's code, when the project's name is not known. Three animated dots follow it, as an ellipsis."
+  },
+  "botCards.investigation.label": {
+    "text": "Investigation · day {{day}} of up to {{days}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: its small label, shown in capitals. {{day}} is which day of the investigation it is, {{days}} the most days it may run."
+  },
+  "botCards.investigation.labelProposed_one": {
+    "text": "Investigation · up to a day",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: its small label before it is started, shown in capitals, when it may run for one day."
+  },
+  "botCards.investigation.labelProposed_other": {
+    "text": "Investigation · up to {{count}} days",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: its small label before it is started, shown in capitals. {{count}} is the most days it may run."
+  },
+  "botCards.investigation.labelDeclined": {
+    "text": "Investigation",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: its small label once the reader chose not to start it, shown in capitals."
+  },
+  "botCards.investigation.cadence_one": {
+    "text": "Checks in every hour",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again."
+  },
+  "botCards.investigation.cadence_other": {
+    "text": "Checks in every {{count}} hours",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again. {{count}} is a number of hours."
+  },
+  "botCards.investigation.cadenceModel_one": {
+    "text": "Checks in every hour, on {{model}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again, and the AI model that does it. {{model}} is the model's name, for example DeepSeek V4.1 Flash."
+  },
+  "botCards.investigation.cadenceModel_other": {
+    "text": "Checks in every {{count}} hours, on {{model}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again, and the AI model that does it. {{count}} is a number of hours; {{model}} is the model's name, for example DeepSeek V4.1 Flash."
+  },
+  "botCards.investigation.cadenceProject_one": {
+    "text": "Checks in on {{project}} every hour",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again. {{project}} is the project's name."
+  },
+  "botCards.investigation.cadenceProject_other": {
+    "text": "Checks in on {{project}} every {{count}} hours",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again. {{project}} is the project's name; {{count}} is a number of hours."
+  },
+  "botCards.investigation.cadenceProjectModel_one": {
+    "text": "Checks in on {{project}} every hour, on {{model}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again, and the AI model that does it. {{project}} is the project's name; {{model}} is the model's name, for example DeepSeek V4.1 Flash."
+  },
+  "botCards.investigation.cadenceProjectModel_other": {
+    "text": "Checks in on {{project}} every {{count}} hours, on {{model}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how often it looks at the project again, and the AI model that does it. {{project}} is the project's name; {{count}} is a number of hours; {{model}} is the model's name, for example DeepSeek V4.1 Flash."
+  },
+  "botCards.investigation.spent": {
+    "text": "{{spent}} of {{budget}} spent",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: how much of its own budget it has used so far, over a thin bar. {{spent}} and {{budget}} are amounts of money, for example $0.38 and $3.00."
+  },
+  "botCards.investigation.budget": {
+    "text": "Budget {{budget}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: its own budget, before it has spent anything. {{budget}} is an amount of money, for example $3.00."
+  },
+  "botCards.investigation.next": {
+    "text": "Next check-in at {{time}}",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: when it looks at the project again. {{time}} is a time of day, with the day of the week when it is not today."
+  },
+  "botCards.investigation.checkingNow": {
+    "text": "Checking in now",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: it is looking at the project right now."
+  },
+  "botCards.investigation.timeline": {
+    "text": "Last check-ins",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: the name, for screen readers, of the list of its last three check-ins, each a time and one line of what it found."
+  },
+  "botCards.investigation.declined": {
+    "text": "Not started",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: the reader chose Not now, so it never ran."
+  },
+  "botCards.investigation.ended.answered": {
+    "text": "Ended: it found the answer",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.budget": {
+    "text": "Ended: it used all of its budget",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.days": {
+    "text": "Ended: it ran for all of its days",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.stopped": {
+    "text": "Stopped by you",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: the reader stopped it."
+  },
+  "botCards.investigation.ended.botOff": {
+    "text": "Ended: Homeroom bot was turned off",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.paused": {
+    "text": "Ended: Homeroom bot stopped working on this project",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.gone": {
+    "text": "Ended: you can no longer build on this project",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.failed": {
+    "text": "Ended: its check-ins kept failing",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: why it ended."
+  },
+  "botCards.investigation.ended.other": {
+    "text": "Ended",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: it ended, for a reason this screen does not know."
+  },
+  "botCards.investigation.choices": {
+    "text": "Investigation choices",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: the name, for screen readers, of its row of buttons."
+  },
+  "botCards.investigation.start": {
+    "text": "Start",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that starts it. Nothing runs or costs anything until it is pressed."
+  },
+  "botCards.investigation.notNow": {
+    "text": "Not now",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that sets it aside without starting it."
+  },
+  "botCards.investigation.stop": {
+    "text": "Stop",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that ends it now."
+  },
+  "botCards.investigation.notes": {
+    "text": "Notes",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that opens, on the card, everything it has found so far."
+  },
+  "botCards.investigation.hideNotes": {
+    "text": "Hide notes",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that closes its notes again."
+  },
+  "botCards.investigation.file": {
+    "text": "File what it found",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: button that asks Homeroom bot to draft requests from what it found."
+  },
+  "botCards.investigation.fileWords": {
+    "text": "File what the investigation found",
+    "description": "Sent as the reader's own message to Homeroom bot when they press \"File what it found\" on an investigation's card; the bot then drafts requests from what it found."
+  },
+  "botCards.investigation.failed": {
+    "text": "That did not work. Try again.",
+    "description": "On the card Homeroom bot puts under its reply about an investigation it runs on one of the reader's projects over several days: shown when a press of one of its buttons did not go through."
+  },
+  "thread.botWorking.writing": {
+    "text": "Writing",
+    "description": "On the card at the end of the chat while Homeroom bot writes its answer; the answer so far is shown under it as it grows. Three animated dots follow it, as an ellipsis."
+  },
   "thread.activityTimeRange": {
     "text": "{{start}} – {{end}}",
     "description": "Time shown on the card of replies made in a thread when they span more than one minute: the time of the first reply and of the last. {{start}} and {{end}} are clock times."
@@ -3610,6 +4042,158 @@
   "design.pane.postedOn": {
     "text": "Posted as a plan on request #{{number}}",
     "description": "Link in the design pane once the design was posted as a plan on a request (a filed issue): opens that request. The design can be posted again as the plan's next version."
+  },
+  "botCards.gallery.groupLabel": {
+    "text": "Pictures Homeroom bot made",
+    "description": "Accessible name of the grid of pictures under a Homeroom bot reply, made on an outside picture model."
+  },
+  "botCards.gallery.open": {
+    "text": "Open picture {{label}}",
+    "description": "Accessible name of one picture in the bot's picture grid: tapping it opens the picture full screen. {{label}} is its letter, and light or dark."
+  },
+  "botCards.gallery.captionLight": {
+    "text": "{{letter}} · light",
+    "description": "Caption under a picture in the bot's picture grid when it comes in a light and a dark version: this is the light one. {{letter}} is A to D."
+  },
+  "botCards.gallery.captionDark": {
+    "text": "{{letter}} · dark",
+    "description": "Caption under a picture in the bot's picture grid when it comes in a light and a dark version: this is the dark one. {{letter}} is A to D."
+  },
+  "botCards.gallery.pickGroup": {
+    "text": "Which picture",
+    "description": "Accessible name of the row of letters (A, B, C, D) under the bot's picture grid that chooses which picture the buttons below act on."
+  },
+  "botCards.gallery.pick": {
+    "text": "Picture {{letter}}",
+    "description": "Accessible name of one letter button under the bot's picture grid: chooses picture {{letter}} for the buttons below."
+  },
+  "botCards.gallery.actions": {
+    "text": "What to do with it",
+    "description": "Accessible name of the row of buttons under the bot's picture grid (propose it, use it, more like it)."
+  },
+  "botCards.gallery.feature": {
+    "text": "Propose {{letter}} as the featured picture",
+    "description": "Button under the bot's picture grid, for a person who may change the project's card picture: opens a vote in the project's group on picture {{letter}} as the picture on its card in Discover."
+  },
+  "botCards.gallery.featured": {
+    "text": "Proposed {{letter}} as the featured picture",
+    "description": "Shown in place of the propose button once picture {{letter}} was proposed as the project's card picture: the group votes on it."
+  },
+  "botCards.gallery.seeVote": {
+    "text": "See the vote",
+    "description": "Link under the bot's picture grid once a picture was proposed as the project's card picture: opens that vote."
+  },
+  "botCards.gallery.use": {
+    "text": "Use {{letter}} in the app",
+    "description": "Button under the bot's picture grid: asks Homeroom bot to put picture {{letter}} in the project's app (it offers a request carrying the picture)."
+  },
+  "botCards.gallery.used": {
+    "text": "Asked to use {{letter}} in the app",
+    "description": "The use button once tapped, grey with a check: the person asked the bot to use picture {{letter}} in the app."
+  },
+  "botCards.gallery.design": {
+    "text": "Add {{letter}} to the design",
+    "description": "Button under the bot's picture grid in a design thread: adds picture {{letter}} to the design, for its next version."
+  },
+  "botCards.gallery.designed": {
+    "text": "Added {{letter}} to the design",
+    "description": "The add-to-design button once tapped, grey with a check: picture {{letter}} was added to the design thread's pictures."
+  },
+  "botCards.gallery.more": {
+    "text": "More like {{letter}}",
+    "description": "Button under the bot's picture grid: asks Homeroom bot for more pictures like picture {{letter}}."
+  },
+  "botCards.gallery.useWords": {
+    "text": "Use picture {{letter}} in {{project}}: {{url}}",
+    "description": "Words sent to Homeroom bot as the person's own message when they tap Use it in the app under its pictures. {{project}} is the project's name and {{url}} the picture's link, which the request it offers carries."
+  },
+  "botCards.gallery.useWordsNoProject": {
+    "text": "Use picture {{letter}} in the app: {{url}}",
+    "description": "Words sent to Homeroom bot as the person's own message when they tap Use it in the app under pictures made for no project yet. {{url}} is the picture's link."
+  },
+  "botCards.gallery.designWords": {
+    "text": "Add picture {{letter}} to the design.",
+    "description": "Words sent to Homeroom bot as the person's own message in a design thread when they tap Add to the design under its pictures."
+  },
+  "botCards.gallery.moreWords": {
+    "text": "More like picture {{letter}}, please.",
+    "description": "Words sent to Homeroom bot as the person's own message when they tap More like under its pictures."
+  },
+  "botCards.gallery.paid": {
+    "text": "Paid from your weekly building time.",
+    "description": "Quiet line under the pictures Homeroom bot made: they counted toward the person's own weekly building time with the bot."
+  },
+  "botCards.gallery.failed": {
+    "text": "That didn't work just now. Try again in a minute.",
+    "description": "Shown under the bot's picture grid when a tap on one of its buttons failed and the server said nothing more."
+  },
+  "botCards.compare.heading": {
+    "text": "Side by side",
+    "description": "Small label over the card that shows versions of a design side by side, under Homeroom bot's reply in a design thread."
+  },
+  "botCards.compare.groupLabel": {
+    "text": "Versions side by side",
+    "description": "Accessible name of the row of small previews in the card that compares versions of a design."
+  },
+  "botCards.compare.sizeGroup": {
+    "text": "Preview size",
+    "description": "Accessible name of the Phone and Desktop switch on the card that compares versions of a design."
+  },
+  "botCards.compare.phone": {
+    "text": "Phone",
+    "description": "Switch on the card that compares versions of a design: draws each version at a phone's width."
+  },
+  "botCards.compare.desktop": {
+    "text": "Desktop",
+    "description": "Switch on the card that compares versions of a design: draws each version at a desktop's width."
+  },
+  "botCards.compare.now": {
+    "text": "Now",
+    "description": "Label of the screen as it is today, beside its new versions, on the card that compares versions of a design."
+  },
+  "botCards.compare.version": {
+    "text": "Version {{version}}",
+    "description": "Label of one version on the card that compares versions of a design, when the bot gave it no name of its own."
+  },
+  "botCards.compare.frameTitle": {
+    "text": "{{label}}, small",
+    "description": "Title of the small preview of one version on the card that compares versions of a design. {{label}} is the version's name."
+  },
+  "botCards.compare.open": {
+    "text": "Open {{label}} beside the chat",
+    "description": "Accessible name of a small preview on the card that compares versions of a design: opens that version in the design preview."
+  },
+  "botCards.compare.pick": {
+    "text": "Pick",
+    "description": "Button under one version on the card that compares versions of a design: picks it, and tells Homeroom bot."
+  },
+  "botCards.compare.pickLabel": {
+    "text": "Pick {{label}}",
+    "description": "Accessible name of the Pick button under one version on the card that compares versions of a design."
+  },
+  "botCards.compare.picked": {
+    "text": "Picked",
+    "description": "The Pick button once tapped, grey with a check, under the version picked on the card that compares versions of a design."
+  },
+  "botCards.compare.pickedLabel": {
+    "text": "{{label}} picked",
+    "description": "Accessible name of the Picked button under the version picked on the card that compares versions of a design."
+  },
+  "botCards.compare.pickWords": {
+    "text": "Pick version {{version}}",
+    "description": "Words sent to Homeroom bot as the person's own message when they pick a version on the card that compares versions of a design."
+  },
+  "botCards.compare.keepNowWords": {
+    "text": "Keep it as it is now",
+    "description": "Words sent to Homeroom bot as the person's own message when they pick the screen as it is today on the card that compares versions of a design."
+  },
+  "botCards.compare.propose": {
+    "text": "Propose version {{version}}",
+    "description": "Button on the card that compares versions of a design, once a version was picked: opens the design's Propose it card for that version."
+  },
+  "botCards.compare.failed": {
+    "text": "That didn't work just now. Try again in a minute.",
+    "description": "Shown on the card that compares versions of a design when picking a version failed and the server said nothing more."
   },
   "replies.close": {
     "text": "Close thread",
@@ -4131,14 +4715,6 @@
     "text": "Only you can see this thread.",
     "description": "Line at the top of a thread the person started in their private chat with Homeroom bot (the AI tab): nothing in it is public until they file it or post it."
   },
-  "privateThread.fileIt": {
-    "text": "File it",
-    "description": "Button at the top of a thread the person started in their private chat with Homeroom bot (the AI tab): files what they wrote as a new request on a project they pick."
-  },
-  "privateThread.postIt": {
-    "text": "Post it",
-    "description": "Button at the top of a thread the person started in their private chat with Homeroom bot (the AI tab): posts what they wrote in an existing request's or change's discussion, as their own message."
-  },
   "privateThread.newProject": {
     "text": "New project",
     "description": "The head of a private thread in the person's chat with Homeroom bot (the AI tab): only they can see it until they file it, post it, or start a project from it. Button: asks who a project made from the thread's idea would be for."
@@ -4159,38 +4735,6 @@
     "text": "A community",
     "description": "The head of a private thread in the person's chat with Homeroom bot (the AI tab): only they can see it until they file it, post it, or start a project from it. Choice under \"Who is it for?\": a public project anyone can join."
   },
-  "privateThread.project": {
-    "text": "Project",
-    "description": "Label of the project picker in the File it / Post it form of a private thread with Homeroom bot."
-  },
-  "privateThread.chooseProject": {
-    "text": "Choose a project",
-    "description": "First, empty choice of the project picker in the File it / Post it form of a private thread with Homeroom bot."
-  },
-  "privateThread.title": {
-    "text": "Title",
-    "description": "Label of the request's title box in the File it form of a private thread with Homeroom bot."
-  },
-  "privateThread.number": {
-    "text": "Request or change number",
-    "description": "Label of the number box in the Post it form of a private thread with Homeroom bot: the number of the request or change to post in."
-  },
-  "privateThread.words": {
-    "text": "What goes public",
-    "description": "Label of the box with the words that will be filed or posted, in the File it / Post it form of a private thread with Homeroom bot. They can change them first."
-  },
-  "privateThread.sendFile": {
-    "text": "File it as a request",
-    "description": "Send button of the File it form of a private thread with Homeroom bot."
-  },
-  "privateThread.sendPost": {
-    "text": "Post it as you",
-    "description": "Send button of the Post it form of a private thread with Homeroom bot: the words are posted under the person's own name."
-  },
-  "privateThread.cancel": {
-    "text": "Cancel",
-    "description": "Button that closes the File it / Post it form of a private thread with Homeroom bot without doing anything."
-  },
   "privateThread.filed": {
     "text": "Filed as request #{{number}} on {{project}}.",
     "description": "Line at the top of a thread the person started in their private chat with Homeroom bot (the AI tab) once it was filed. {{number}} is the new request's number, {{project}} the project's name."
@@ -4202,10 +4746,6 @@
   "privateThread.open": {
     "text": "Open",
     "description": "Link after the filed or posted line at the top of a private thread with Homeroom bot: opens the request or change."
-  },
-  "privateThread.failed": {
-    "text": "That didn't work. Try again.",
-    "description": "Error under the File it / Post it form of a private thread with Homeroom bot when it could not be done."
   },
   "ai.hero.name": {
     "text": "Homeroom bot",
@@ -4698,5 +5238,401 @@
   "ai.thread.aboutChangeUntitled": {
     "text": "Change #{{number}}",
     "description": "The name over a private thread with Homeroom bot that was opened from a change's page, when the change's title is not known."
+  },
+  "botCards.batch.title": {
+    "text": "Requests on {{project}}",
+    "description": "Title of the card Homeroom bot puts under its reply when it works through several of a person's requests at once. {{project}} is the project's name."
+  },
+  "botCards.batch.titleRunning": {
+    "text": "Building on {{project}}",
+    "description": "Title of that card once the person tapped Build: Homeroom bot is building the ready requests. {{project}} is the project's name."
+  },
+  "botCards.batch.titleDone": {
+    "text": "Built on {{project}}",
+    "description": "Title of that card once nothing of the batch is being built any more (each is live, waiting for a yes, or stopped). {{project}} is the project's name."
+  },
+  "botCards.batch.count.total_one": {
+    "text": "{{count}} request",
+    "description": "First part of the summary under the batch card's title, joined to the next parts with a dot: how many requests the card lists."
+  },
+  "botCards.batch.count.total_other": {
+    "text": "{{count}} requests",
+    "description": "First part of the summary under the batch card's title, joined to the next parts with a dot: how many requests the card lists."
+  },
+  "botCards.batch.count.ready_one": {
+    "text": "{{count}} ready",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot found ready to build."
+  },
+  "botCards.batch.count.ready_other": {
+    "text": "{{count}} ready",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot found ready to build."
+  },
+  "botCards.batch.count.question_one": {
+    "text": "{{count}} question",
+    "description": "Part of the summary under the batch card's title: how many requests have a question from Homeroom bot waiting for an answer."
+  },
+  "botCards.batch.count.question_other": {
+    "text": "{{count}} questions",
+    "description": "Part of the summary under the batch card's title: how many requests have a question from Homeroom bot waiting for an answer."
+  },
+  "botCards.batch.count.person_one": {
+    "text": "{{count}} for the group",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot left for the project's group to decide."
+  },
+  "botCards.batch.count.person_other": {
+    "text": "{{count}} for the group",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot left for the project's group to decide."
+  },
+  "botCards.batch.count.done_one": {
+    "text": "{{count}} done",
+    "description": "Part of the summary under the batch card's title: how many requests are already live, or need nothing built."
+  },
+  "botCards.batch.count.done_other": {
+    "text": "{{count}} done",
+    "description": "Part of the summary under the batch card's title: how many requests are already live, or need nothing built."
+  },
+  "botCards.batch.count.reading_one": {
+    "text": "{{count}} being read",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot is reading again now."
+  },
+  "botCards.batch.count.reading_other": {
+    "text": "{{count}} being read",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot is reading again now."
+  },
+  "botCards.batch.count.underway_one": {
+    "text": "{{count}} under way",
+    "description": "Part of the summary under the batch card's title: how many requests are already being built, checked or voted on."
+  },
+  "botCards.batch.count.underway_other": {
+    "text": "{{count}} under way",
+    "description": "Part of the summary under the batch card's title: how many requests are already being built, checked or voted on."
+  },
+  "botCards.batch.count.unread_one": {
+    "text": "{{count}} not read",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot could not read from here."
+  },
+  "botCards.batch.count.unread_other": {
+    "text": "{{count}} not read",
+    "description": "Part of the summary under the batch card's title: how many requests Homeroom bot could not read from here."
+  },
+  "botCards.batch.read.ready": {
+    "text": "Ready",
+    "description": "Small tag at the end of a request's row on the batch card: Homeroom bot found it ready to build."
+  },
+  "botCards.batch.read.question": {
+    "text": "Question",
+    "description": "Small tag at the end of a request's row on the batch card: Homeroom bot asked a question about it that waits for an answer."
+  },
+  "botCards.batch.read.person": {
+    "text": "For the group",
+    "description": "Small tag at the end of a request's row on the batch card: Homeroom bot left it for the project's group to decide."
+  },
+  "botCards.batch.read.done": {
+    "text": "Done",
+    "description": "Small tag at the end of a request's row on the batch card: what it asks is live, or there was nothing to build."
+  },
+  "botCards.batch.read.reading": {
+    "text": "Reading",
+    "description": "Small tag at the end of a request's row on the batch card: Homeroom bot is reading it again now."
+  },
+  "botCards.batch.read.underway": {
+    "text": "Under way",
+    "description": "Small tag at the end of a request's row on the batch card: it is already being built, checked or voted on."
+  },
+  "botCards.batch.read.unread": {
+    "text": "Not read",
+    "description": "Small tag at the end of a request's row on the batch card: Homeroom bot could not read it from here."
+  },
+  "botCards.batch.why.plan": {
+    "text": "Its plan is ready: Build goes ahead with it.",
+    "description": "Line under a request's title on the batch card: Homeroom bot wrote its plan, and Build goes ahead with that plan."
+  },
+  "botCards.batch.why.held": {
+    "text": "Ready, and waiting for a free slot.",
+    "description": "Line under a request's title on the batch card: it is ready, but a limit on how much Homeroom bot builds at once held it."
+  },
+  "botCards.batch.why.allowance": {
+    "text": "Its building time for this week is used up.",
+    "description": "Line under a request's title on the batch card: whoever pays for it has no building time left this week."
+  },
+  "botCards.batch.why.notBuiltHere": {
+    "text": "Homeroom bot does not build on this project.",
+    "description": "Line under a request's title on the batch card, when it could not be read because Homeroom bot is not switched on for the project."
+  },
+  "botCards.batch.why.notMember": {
+    "text": "Only the project's members can ask for it to be read.",
+    "description": "Line under a request's title on the batch card, when the person is not a member of the project and did not file it."
+  },
+  "botCards.batch.why.empty": {
+    "text": "Nothing to build.",
+    "description": "Line under a request's title on the batch card: Homeroom bot found nothing to build for it."
+  },
+  "botCards.batch.why.live": {
+    "text": "It is live.",
+    "description": "Line under a request's title on the batch card: what it asks for is live."
+  },
+  "botCards.batch.why.vote": {
+    "text": "Its change waits for a yes.",
+    "description": "Line under a request's title on the batch card: its change is built and up for approval."
+  },
+  "botCards.batch.why.checks": {
+    "text": "Its change is in checks.",
+    "description": "Line under a request's title on the batch card: its change is built and its automated checks are running."
+  },
+  "botCards.batch.why.building": {
+    "text": "Being built now.",
+    "description": "Line under a request's title on the batch card: Homeroom bot is building it now."
+  },
+  "botCards.batch.why.goingLive": {
+    "text": "Approved, and going live.",
+    "description": "Line under a request's title on the batch card: its change was approved and is going live."
+  },
+  "botCards.batch.why.buildQueued": {
+    "text": "Waiting its turn to be built.",
+    "description": "Line under a request's title on the batch card: it is ready and its build waits its turn."
+  },
+  "botCards.batch.untitled": {
+    "text": "Request #{{number}}",
+    "description": "A request's name on the batch card when its title is not known. {{number}} is the request's number."
+  },
+  "botCards.batch.more_one": {
+    "text": "Show {{count}} more",
+    "description": "Button under the batch card's first rows: shows the rest of the requests."
+  },
+  "botCards.batch.more_other": {
+    "text": "Show {{count}} more",
+    "description": "Button under the batch card's first rows: shows the rest of the requests."
+  },
+  "botCards.batch.fewer": {
+    "text": "Show fewer",
+    "description": "Button under the batch card's rows once all are shown: shows only the first few again."
+  },
+  "botCards.batch.rollup.live_one": {
+    "text": "{{count}} live",
+    "description": "Part of the line under a running batch card's title and its bar's name, joined with dots: how many of its requests are live."
+  },
+  "botCards.batch.rollup.live_other": {
+    "text": "{{count}} live",
+    "description": "Part of the line under a running batch card's title and its bar's name, joined with dots: how many of its requests are live."
+  },
+  "botCards.batch.rollup.ready_one": {
+    "text": "{{count}} ready for your yes",
+    "description": "Part of the line under a running batch card's title: how many of its changes are built and wait for approval."
+  },
+  "botCards.batch.rollup.ready_other": {
+    "text": "{{count}} ready for your yes",
+    "description": "Part of the line under a running batch card's title: how many of its changes are built and wait for approval."
+  },
+  "botCards.batch.rollup.checks_one": {
+    "text": "{{count}} in checks",
+    "description": "Part of the line under a running batch card's title: how many of its changes are having their automated checks run."
+  },
+  "botCards.batch.rollup.checks_other": {
+    "text": "{{count}} in checks",
+    "description": "Part of the line under a running batch card's title: how many of its changes are having their automated checks run."
+  },
+  "botCards.batch.rollup.building_one": {
+    "text": "{{count}} building",
+    "description": "Part of the line under a running batch card's title: how many of its requests are being planned or built."
+  },
+  "botCards.batch.rollup.building_other": {
+    "text": "{{count}} building",
+    "description": "Part of the line under a running batch card's title: how many of its requests are being planned or built."
+  },
+  "botCards.batch.rollup.waiting_one": {
+    "text": "{{count}} waiting",
+    "description": "Part of the line under a running batch card's title: how many of its requests wait their turn, a limit, or an answer."
+  },
+  "botCards.batch.rollup.waiting_other": {
+    "text": "{{count}} waiting",
+    "description": "Part of the line under a running batch card's title: how many of its requests wait their turn, a limit, or an answer."
+  },
+  "botCards.batch.rollup.stopped_one": {
+    "text": "{{count}} stopped",
+    "description": "Part of the line under a running batch card's title: how many of its builds stopped without a change."
+  },
+  "botCards.batch.rollup.stopped_other": {
+    "text": "{{count}} stopped",
+    "description": "Part of the line under a running batch card's title: how many of its builds stopped without a change."
+  },
+  "botCards.batch.state.live": {
+    "text": "Live",
+    "description": "Where one request of a running batch is, at the end of its row: live."
+  },
+  "botCards.batch.state.ready": {
+    "text": "Ready for your yes",
+    "description": "Where one request of a running batch is, at the end of its row: its change is built and waits for approval."
+  },
+  "botCards.batch.state.checks": {
+    "text": "In checks",
+    "description": "Where one request of a running batch is, at the end of its row: its change's automated checks are running."
+  },
+  "botCards.batch.state.building": {
+    "text": "Building",
+    "description": "Where one request of a running batch is, at the end of its row: it is being planned or built."
+  },
+  "botCards.batch.state.waiting": {
+    "text": "Waiting",
+    "description": "Where one request of a running batch is, at the end of its row: it waits its turn, a limit, or an answer."
+  },
+  "botCards.batch.state.stopped": {
+    "text": "Stopped",
+    "description": "Where one request of a running batch is, at the end of its row: its build stopped without a change."
+  },
+  "botCards.batch.raise.offerOwner_one": {
+    "text": "As the project's owner, Build runs up to {{count}} of these at once for this batch.",
+    "description": "Line on the batch card before Build is tapped: the project's owner may have more of Homeroom bot's work going at once for this batch than the usual limit. {{count}} is that number."
+  },
+  "botCards.batch.raise.offerOwner_other": {
+    "text": "As the project's owner, Build runs up to {{count}} of these at once for this batch.",
+    "description": "Line on the batch card before Build is tapped: the project's owner may have more of Homeroom bot's work going at once for this batch than the usual limit. {{count}} is that number."
+  },
+  "botCards.batch.raise.offerAdmin_one": {
+    "text": "As one of the project's admins, Build runs up to {{count}} of these at once for this batch.",
+    "description": "Line on the batch card before Build is tapped, for an admin of the project: more of Homeroom bot's work may go at once for this batch than the usual limit. {{count}} is that number."
+  },
+  "botCards.batch.raise.offerAdmin_other": {
+    "text": "As one of the project's admins, Build runs up to {{count}} of these at once for this batch.",
+    "description": "Line on the batch card before Build is tapped, for an admin of the project: more of Homeroom bot's work may go at once for this batch than the usual limit. {{count}} is that number."
+  },
+  "botCards.batch.raise.runningOwner_one": {
+    "text": "{{count}} at once: your limit for this batch, as the project's owner.",
+    "description": "Line on a running batch card: how many of its requests Homeroom bot works on at once, raised for this batch because the person owns the project."
+  },
+  "botCards.batch.raise.runningOwner_other": {
+    "text": "{{count}} at once: your limit for this batch, as the project's owner.",
+    "description": "Line on a running batch card: how many of its requests Homeroom bot works on at once, raised for this batch because the person owns the project."
+  },
+  "botCards.batch.raise.runningAdmin_one": {
+    "text": "{{count}} at once: your limit for this batch, as one of the project's admins.",
+    "description": "Line on a running batch card: how many of its requests Homeroom bot works on at once, raised for this batch because the person is one of the project's admins."
+  },
+  "botCards.batch.raise.runningAdmin_other": {
+    "text": "{{count}} at once: your limit for this batch, as one of the project's admins.",
+    "description": "Line on a running batch card: how many of its requests Homeroom bot works on at once, raised for this batch because the person is one of the project's admins."
+  },
+  "botCards.batch.refused_one": {
+    "text": "Could not start {{numbers}}.",
+    "description": "Line on a running batch card: a request it found ready could not be started (its building time, or who may ask). {{numbers}} is the request, for example #4."
+  },
+  "botCards.batch.refused_other": {
+    "text": "Could not start {{numbers}}.",
+    "description": "Line on a running batch card: requests it found ready could not be started (building time, or who may ask). {{numbers}} lists them, for example #4 and #9."
+  },
+  "botCards.batch.choices": {
+    "text": "What to do with these requests",
+    "description": "Accessible name of the row of buttons under the batch card."
+  },
+  "botCards.batch.build_one": {
+    "text": "Build it",
+    "description": "Button on the batch card: Homeroom bot starts building the one ready request."
+  },
+  "botCards.batch.build_other": {
+    "text": "Build the {{count}}",
+    "description": "Button on the batch card: Homeroom bot starts building every ready request at once. {{count}} is how many."
+  },
+  "botCards.batch.answer_one": {
+    "text": "Answer the question",
+    "description": "Button on the batch card: Homeroom bot asks its open question about one of the requests, in the chat."
+  },
+  "botCards.batch.answer_other": {
+    "text": "Answer the questions",
+    "description": "Button on the batch card: Homeroom bot asks its open questions about the requests, in the chat."
+  },
+  "botCards.batch.close": {
+    "text": "Close #{{number}}",
+    "description": "Button on the batch card for a request that is done: Homeroom bot offers a vote on closing it. {{number}} is the request's number."
+  },
+  "botCards.batch.say.answer_one": {
+    "text": "Ask me your question about {{numbers}}.",
+    "description": "What the person says to Homeroom bot in the chat, as their own message, when they tap Answer the question on the batch card. {{numbers}} is the request, for example #3."
+  },
+  "botCards.batch.say.answer_other": {
+    "text": "Ask me your questions about {{numbers}}.",
+    "description": "What the person says to Homeroom bot in the chat, as their own message, when they tap Answer the questions on the batch card. {{numbers}} lists the requests, for example #3 and #7."
+  },
+  "botCards.batch.say.close": {
+    "text": "#{{number}} is done. Can you propose closing it?",
+    "description": "What the person says to Homeroom bot in the chat, as their own message, when they tap Close on the batch card. {{number}} is the request's number."
+  },
+  "botCards.batch.failed": {
+    "text": "That did not work just now. Try again.",
+    "description": "Error under the batch card's buttons when a tap could not be done and the server gave no reason."
+  },
+  "botCards.buildNote.title.waiting": {
+    "text": "Sent to the build of #{{number}}",
+    "description": "Title of the card under Homeroom bot's reply when the person added a note to a request it is building right now. {{number}} is the request's number."
+  },
+  "botCards.buildNote.title.delivered": {
+    "text": "The build of #{{number}} has your note",
+    "description": "Title of that card once the build has read the note. {{number}} is the request's number."
+  },
+  "botCards.buildNote.title.missed": {
+    "text": "The build of #{{number}} finished first",
+    "description": "Title of that card when the build ended before it read the note. {{number}} is the request's number."
+  },
+  "botCards.buildNote.title.forwarded": {
+    "text": "Your note goes into the next update",
+    "description": "Title of that card once the person put the note in the change's next update."
+  },
+  "botCards.buildNote.title.offerRedo": {
+    "text": "Stop the build of #{{number}} and start again?",
+    "description": "Title of the card Homeroom bot puts under its reply when the person wants a running build stopped and done again with their note. {{number}} is the request's number."
+  },
+  "botCards.buildNote.title.redone": {
+    "text": "Starting #{{number}} again with your note",
+    "description": "Title of that card once the person tapped Stop and redo: the build was stopped and the request is done again. {{number}} is the request's number."
+  },
+  "botCards.buildNote.title.gone": {
+    "text": "That build of #{{number}} already finished",
+    "description": "Title of that card when the build ended before the person decided, so there is nothing to stop. {{number}} is the request's number."
+  },
+  "botCards.buildNote.line.waiting": {
+    "text": "It reads it at its next step, before it finishes.",
+    "description": "Line on the build note card while the note waits for the running build to read it."
+  },
+  "botCards.buildNote.line.missedChange": {
+    "text": "Its change is up for a vote. Put your note in its next update?",
+    "description": "Line on the build note card when the build finished before reading the note and its change is up for approval: the button under it puts the note in the change's next update."
+  },
+  "botCards.buildNote.line.missed": {
+    "text": "It ended before it read your note.",
+    "description": "Line on the build note card when the build ended before reading the note and there is no change to update."
+  },
+  "botCards.buildNote.line.forwarded": {
+    "text": "It goes into the next update instead. Your note is on the change's discussion.",
+    "description": "Line on the build note card once the note was put in the change's next update: it is posted on the change's discussion under the person's name."
+  },
+  "botCards.buildNote.line.offerRedo": {
+    "text": "Stop and redo stops it now. Your note goes on the request's discussion, under your name, and Homeroom bot reads the request again first. Keep going sends the note into this build instead.",
+    "description": "Line on the Stop and redo card, before anything is tapped: what each button does."
+  },
+  "botCards.buildNote.line.redone": {
+    "text": "It stopped. Your note is on the request's discussion, and Homeroom bot reads the request again first.",
+    "description": "Line on the build note card once Stop and redo was tapped and the note was posted on the request."
+  },
+  "botCards.buildNote.line.redoneCarried": {
+    "text": "It stopped. Homeroom bot reads the request again, and its next build gets your note.",
+    "description": "Line on the build note card once Stop and redo was tapped, when the note could not be posted on the request: the next build is handed it instead."
+  },
+  "botCards.buildNote.redo": {
+    "text": "Stop and redo",
+    "description": "Button on the Stop and redo card: stops Homeroom bot's running build and does the request again with the person's note."
+  },
+  "botCards.buildNote.keep": {
+    "text": "Keep going",
+    "description": "Button on the Stop and redo card: nothing stops, and the person's note is sent into the running build instead."
+  },
+  "botCards.buildNote.forward": {
+    "text": "Put it in the next update",
+    "description": "Button on the build note card when the build finished first: posts the note on the change's discussion so Homeroom bot puts it in the change's next update."
+  },
+  "botCards.buildNote.choices": {
+    "text": "What to do with the build",
+    "description": "Accessible name of the row of buttons on the build note card."
+  },
+  "botCards.buildNote.failed": {
+    "text": "That did not work just now. Try again.",
+    "description": "Error under the build note card's buttons when a tap could not be done and the server gave no reason."
   }
 }

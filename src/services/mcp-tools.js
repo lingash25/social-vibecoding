@@ -3878,8 +3878,9 @@ function registerTools(server, ctx) {
   // connector reads each one back for its owner, holds it to the editor's
   // own limit (1 MB, a smaller cap than a screenshot's) and sends the pair
   // to the route exactly as the editor's PUT does. External clients only,
-  // like prepare_upload.
-  if (offersImages) {
+  // like prepare_upload, and Homeroom bot's admin tools (bot_admin, P7),
+  // which propose new framing or tint, or pictures an admin sent ahead.
+  if (offersImages || kind === 'bot_admin') {
     const ILLUSTRATION_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,99}$/;
     // routes/app-illustrations.js validateImage: the most one picture may be.
     const ILLUSTRATION_MAX_BYTES = 1024 * 1024;
@@ -8648,6 +8649,8 @@ function registerTools(server, ctx) {
       shadowBuilds: botSwitch, shadowBuildPlatform: botSwitch, dmChat: botSwitch,
       voiceSession: botSwitch, voiceIssue: botSwitch, voiceChat: botSwitch,
       continueReads: botSwitch, liveBuildStream: botSwitch,
+      // Homeroom bot parity, P8: the image model (blank: the default) and pictures a person may have made a week.
+      imageModel: botModel, pictureWeeklyCap: botCount,
     };
     server.registerTool('set_homeroom_bot_settings', {
       title: 'Homeroom bot: change its settings',
