@@ -350,4 +350,13 @@ Each later plan takes one group of screens into the frame under the glass skin, 
 
 ## Notes
 
-(filled in during execution: Task 1's exclusions and timings, Task 7's findings)
+**Execution, 2026-11-08.** The platform runs natively on the host (`node server.js` with the env file in the scratchpad's `glass-local/local.env`) against the Docker Postgres on `localhost:5440`, not in the dev container: the dev image dated from 10 August and could not boot this checkout's `src/`, and its rebuild failed on a transient GitHub 504 fetching bcrypt's binary. `PROCESS_ROLE=all`, not `web`: a web-only process waits 180 s for a conductor's preview-retirement proof and then exits (`services/platform-preview-startup.js`). Outward credentials are blank (GitHub, Anthropic; Topochain a dummy; no mail, SMS or push provider), so the loops reach nothing.
+
+**Task 1** has not run yet: it needs the cluster login in the user's browser.
+
+**Task 7, on the fixture database** (3 users, 1 app; the admin account pins nothing and owes no vote): 24 images, no console errors (`glass-local/capture/sheet.html`). Findings for the next plan:
+1. An account with nothing pinned, no decision owed and an empty public directory gets a blank glass Home (title, sentence, button, nothing else). Today's Home still offers New community and a Challenges card there. An empty screen is an invitation (spec rule 8's spirit): the glass Home needs an empty state for each group, or the Communities to join group drawn with the directory's own "you're in every community" line.
+2. Challenges (today's third area) are not on the glass Home: the plan's Home shape left them out. Decide where they go (a group in the side column, or a row of the main column) in plan 2.
+3. `#communities` (All communities) draws the same Home under glass; today's Home.showCommunities({ all: true }) has no counterpart yet.
+4. The sidebar, header and phone tab bar are today's around the glass frame: plan 2.
+5. The pulled search bar sits above the title on desktop in both looks (it does today too).
