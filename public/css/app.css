@@ -26893,6 +26893,162 @@ button.rf-claim-row:active .rf-claim { color: var(--rf-ink); }
   .platform-rail-pin { opacity: .55; }
 }
 
+/* ── SKIN TOKEN DEFAULTS ─────────────────────────────────────────────────
+   The tokens the frame primitives (frontend/@/components/ui/frame.tsx and
+   status.tsx) draw with. Under the standard look they point at the
+   product's own tokens, so a primitive renders sanely whatever the skin;
+   a look (THE GLASS LOOK below) redefines them. --ok/--wait/--bad are the
+   three state inks of spec rule 5 (done, waiting on others, a problem),
+   kept apart from --state-* which other screens already count. */
+:root {
+  --surface: var(--dc-sheet-solid);
+  --sunk: var(--bg-secondary);
+  --ink: var(--text-primary);
+  --mut: var(--text-secondary);
+  --faint: var(--text-muted);
+  --line: var(--border-light);
+  --acc: var(--accent);
+  --acc-ink: var(--accent-ink);
+  --acc-t: var(--accent-tint);
+  --lit: var(--lit-ink);
+  --lit-t: var(--lit-tint);
+  --ok: #0c8346;
+  --ok-t: #ddf2e6;
+  --wait: #955000;
+  --wait-t: #faecd3;
+  --bad: #bf3529;
+  --bad-t: #fbe5e2;
+  --ring: var(--app-sheet-line);
+  --glow: none;
+  --glass-blur: none;
+}
+.dark {
+  --ok: #4fd08a;
+  --ok-t: #11311f;
+  --wait: #f2b45c;
+  --wait-t: #35270f;
+  --bad: #ff8c80;
+  --bad-t: #3a1815;
+}
+
+/* ── THE GLASS LOOK (Settings › Experimental, off by default) ───────────
+   Every rule here is scoped to html[data-skin="glass"], which the head's
+   window.Skin sets from the device's stored choice (or a ?skin=glass pin)
+   before this sheet applies; without it not one rule below matches. Light
+   AND dark: the .dark variant redefines the same tokens.
+
+   The look is direction C of the 2026-11-06 screen tour, "Aurora glass":
+   the wallpaper is the room, and everything else is frosted glass floating
+   in it. So the wallpaper tokens are NOT redeclared (the room stays the
+   room), and the surfaces become translucent: --surface over a blur, one
+   bright ring instead of a border, a long soft glow instead of a shadow.
+   - One palette: an indigo ink (#1a1e3c) and its tints for text and lines.
+   - One job per colour (spec rule 5): blue (#3b55e6) means "this waits for
+     you"; navy (--lit) is where you are; green, amber and red are done,
+     waiting on others, and a problem. Nothing else is coloured.
+   - Albert Sans for words, from our own origin (public/fonts/albert-sans).
+   Where backdrop-filter is unavailable the surface is opaque instead, so
+   text never sits on the washes directly.
+
+   Placed BEFORE the new look's block, which stays last as its own tests
+   pin; the two looks never apply together (one data-skin on <html>). */
+@font-face {
+  font-family: 'Albert Sans';
+  /* Absolute: the build-scoped copy of this sheet (/b/<sha>/css/app.css)
+     serves only .js and .css, so a relative url would 404 there. Only a
+     rule scoped to the glass look names the family, so a browser with the
+     look off never downloads the file. */
+  src: url('/fonts/albert-sans/AlbertSans-Variable.woff2') format('woff2');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face {
+  font-family: 'Albert Sans';
+  src: url('/fonts/albert-sans/AlbertSans-Variable-latin-ext.woff2') format('woff2');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+html[data-skin="glass"] {
+  font-family: 'Albert Sans', system-ui, -apple-system, 'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  /* The look's own tokens (spec table, light column). */
+  --surface: rgba(255, 255, 255, 0.58);
+  --sunk: rgba(55, 71, 123, 0.09);
+  --ink: #1a1e3c;
+  --mut: #565c82;
+  --faint: #8b90b0;
+  --line: rgba(55, 71, 123, 0.13);
+  --acc: #3b55e6;
+  --acc-ink: #ffffff;
+  --acc-t: rgba(59, 85, 230, 0.12);
+  --lit: #2b3769;
+  --lit-t: rgba(55, 71, 123, 0.11);
+  --ok: #0c8346;
+  --ok-t: #ddf2e6;
+  --wait: #955000;
+  --wait-t: #faecd3;
+  --bad: #bf3529;
+  --bad-t: #fbe5e2;
+  --ring: rgba(255, 255, 255, 0.8);
+  --glow: 0 22px 44px -30px rgba(55, 71, 123, 0.55);
+  --glass-blur: blur(22px) saturate(1.4);
+  /* The product's own tokens, retargeted, so the screens not yet drawn in
+     the frame take the look's ink, accent and surfaces where they read a
+     token. Those drawn with literal zinc/violet utilities stay as they are
+     until their own plan. */
+  --text-primary: var(--ink);
+  --text-secondary: var(--mut);
+  --text-muted: var(--faint);
+  --border: var(--line);
+  --border-light: var(--line);
+  --accent: var(--acc);
+  --accent-ink: var(--acc-ink);
+  /* A literal, not var(--acc-t): tests/dev-chat-ground.test.js reads every
+     --accent-tint declaration and holds its alpha at or under 0.2. */
+  --accent-tint: rgba(59, 85, 230, 0.12);
+  --accent-tint-ink: var(--acc);
+  --lit-ink: var(--lit);
+  --lit-tint: var(--lit-t);
+  --lit-line: var(--line);
+  --dc-sheet: var(--surface);
+  --dc-sheet-solid: var(--surface);
+  --dc-sheet-raise: var(--surface);
+  --app-sheet-line: var(--ring);
+}
+html[data-skin="glass"].dark {
+  --surface: rgba(255, 255, 255, 0.065);
+  --sunk: rgba(255, 255, 255, 0.08);
+  --ink: #f1f0fa;
+  --mut: #aeb0cf;
+  --faint: #7a7d9e;
+  --line: rgba(255, 255, 255, 0.12);
+  --acc: #8ea2ff;
+  --acc-ink: #0a0f2c;
+  --acc-t: rgba(142, 162, 255, 0.16);
+  --lit: #dfe3ff;
+  --lit-t: rgba(199, 208, 245, 0.14);
+  --ok: #4fd08a;
+  --ok-t: #11311f;
+  --wait: #f2b45c;
+  --wait-t: #35270f;
+  --bad: #ff8c80;
+  --bad-t: #3a1815;
+  --ring: rgba(255, 255, 255, 0.12);
+  --glow: 0 22px 44px -30px rgba(0, 0, 0, 0.9);
+  --accent-tint: rgba(142, 162, 255, 0.16);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  html[data-skin="glass"] {
+    --surface: #fbfbfd;
+  }
+  html[data-skin="glass"].dark {
+    --surface: #171a2b;
+  }
+}
+
 /* ── THE NEW LOOK, AN EXPERIMENT (Settings › Experimental, off by default) ──
    Every rule here is scoped to html[data-skin="brand"], which the head's
    window.Skin sets from the device's stored choice before this sheet

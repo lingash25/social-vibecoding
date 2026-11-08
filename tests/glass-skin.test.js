@@ -118,3 +118,92 @@ test('the glass switch copy is English source with descriptions', () => {
   }
   assert.match(en['experimental.glassLook.description'].text, /Albert Sans/);
 });
+
+// ── The stylesheet ───────────────────────────────────────────────────────
+//
+// The glass block sits BEFORE the brand block (which stays last, as its own
+// tests pin) and after a small unscoped section of token defaults, so a
+// primitive that reads --surface or --acc renders sanely under every look.
+
+const appCss = () => read('public', 'css', 'app.css');
+const GLASS_MARK = '/* ── THE GLASS LOOK';
+const BRAND_MARK = '/* ── THE NEW LOOK, AN EXPERIMENT';
+const DEFAULTS_MARK = '/* ── SKIN TOKEN DEFAULTS';
+
+function glassBlock() {
+  const css = appCss();
+  const at = css.indexOf(GLASS_MARK);
+  const end = css.indexOf(BRAND_MARK);
+  assert.ok(at > 0, 'app.css carries the glass block');
+  assert.ok(end > at, 'the glass block ends where the brand block begins');
+  return css.slice(at, end);
+}
+
+// Every selector of a block, with comments and the @media / @supports
+// wrappers (which only narrow where a rule applies) stripped.
+function selectorsOf(block) {
+  const flat = block.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@(media|supports)[^{]*\{/g, '');
+  const out = [];
+  for (const rule of flat.split('}').map((r) => r.trim()).filter(Boolean)) {
+    const head = rule.slice(0, rule.indexOf('{')).trim();
+    if (!head) continue;
+    for (const sel of head.split(',').map((s) => s.trim())) out.push(sel);
+  }
+  return out;
+}
+
+test('Albert Sans is served from our own origin with its licence and provenance beside it', () => {
+  for (const f of ['AlbertSans-Variable.woff2', 'AlbertSans-Variable-latin-ext.woff2', 'LICENSE.txt', 'README.md']) {
+    assert.ok(fs.existsSync(path.join(ROOT, 'public', 'fonts', 'albert-sans', f)), `public/fonts/albert-sans/${f}`);
+  }
+  const block = glassBlock();
+  assert.match(block, /url\('\/fonts\/albert-sans\/AlbertSans-Variable\.woff2'\) format\('woff2'\)/);
+  assert.match(block, /url\('\/fonts\/albert-sans\/AlbertSans-Variable-latin-ext\.woff2'\) format\('woff2'\)/);
+  assert.match(read('public', 'fonts', 'albert-sans', 'README.md'), /sha384/);
+  assert.match(read('public', 'fonts', 'albert-sans', 'LICENSE.txt'), /SIL Open Font License/);
+});
+
+test('every rule of the glass block is scoped to html[data-skin="glass"]', () => {
+  const sels = selectorsOf(glassBlock());
+  assert.ok(sels.length > 4, 'the block is read whole');
+  for (const sel of sels) {
+    assert.ok(sel === '@font-face' || sel.startsWith('html[data-skin="glass"]'), `"${sel}" must start from the flag`);
+  }
+});
+
+test('the glass block draws dark too', () => {
+  assert.match(glassBlock(), /html\[data-skin="glass"\]\.dark\s*\{/);
+});
+
+test('the glass block redeclares none of the counted wallpaper or frost tokens', () => {
+  const block = glassBlock();
+  for (const token of ['--home-ground:', '--home-wallpaper:', '--home-washes:', '--home-star:', '--home-grain:', '--dc-sheet-fill:', '--dc-frost:']) {
+    assert.ok(!block.includes(token), `${token} is counted elsewhere and must not be redeclared here`);
+  }
+});
+
+test('without backdrop-filter the surface is opaque', () => {
+  const block = glassBlock();
+  const at = block.indexOf('@supports not (backdrop-filter: blur(1px))');
+  assert.ok(at > 0, 'a fallback for browsers without backdrop-filter');
+  const fallback = block.slice(at);
+  assert.match(fallback, /html\[data-skin="glass"\]\s*\{[^}]*--surface:\s*#fbfbfd/);
+  assert.match(fallback, /html\[data-skin="glass"\]\.dark\s*\{[^}]*--surface:\s*#171a2b/);
+});
+
+test('the token defaults come first, then the glass block, then the brand block last', () => {
+  const css = appCss();
+  const d = css.indexOf(DEFAULTS_MARK);
+  const g = css.indexOf(GLASS_MARK);
+  const b = css.indexOf(BRAND_MARK);
+  assert.ok(d > 0 && d < g && g < b, 'defaults < glass < brand');
+  const defaults = css.slice(d, g);
+  for (const token of ['--surface:', '--ink:', '--mut:', '--acc:', '--acc-ink:', '--lit:', '--lit-t:', '--ok:', '--ok-t:', '--wait:', '--wait-t:', '--bad:', '--bad-t:', '--ring:', '--glow:', '--glass-blur:']) {
+    assert.ok(defaults.includes(token), `${token} has a default for the standard look`);
+  }
+  assert.match(defaults, /\n\.dark\s*\{/, 'and dark defaults');
+});
+
+test('the glass look sets the typeface on the root, with a system fallback', () => {
+  assert.match(glassBlock(), /html\[data-skin="glass"\]\s*\{[^}]*font-family:\s*'Albert Sans',\s*system-ui/);
+});
