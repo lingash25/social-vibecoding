@@ -44,21 +44,28 @@
 **Interfaces:**
 - Produces: a local database `usernode_prod` on `postgres://usernode:localdev@localhost:5440/usernode_prod`; the stack at `http://localhost:3000` reading it; the user's own account signed in with a local-only password.
 
-- [ ] **Step 1: The user logs in to the cluster** (OIDC needs their browser; run ONE kubectl at a time):
+The dump is taken from a **replica** (the hot standby), never the primary: the same current data, seconds behind, and no load on the pod that serves production. `pg_dump` reads one consistent snapshot for its whole run, so the copy is internally consistent. The standby runs with `hot_standby_feedback` off, so a long read there can be cancelled by a recovery conflict (it happened to a base backup in October): the script retries once on the replica and stops with a message if it is cancelled again; the primary is used only if the user says so.
+
+- [ ] **Step 1: The user logs in to the cluster and names the replica** (OIDC needs their browser; run ONE kubectl at a time):
 
 ```sh
-! KUBECONFIG=~/.kube/bare-metal-org-github.yaml kubectl -n social-refresh get clusters.postgresql.cnpg.io
+! KUBECONFIG=~/.kube/bare-metal-org-github.yaml kubectl -n social-refresh get pods -l cnpg.io/cluster=social-postgres-refresh-20260909 -L cnpg.io/instanceRole
 ```
-Expected: a row for `social-postgres-refresh-20260909` with its PRIMARY pod named (was `social-postgres-refresh-20260909-1`).
-
-- [ ] **Step 2: Size the tables** (read-only) to choose what to leave out:
+Expected: one pod with role `primary` and at least one with role `replica`; the replica pod's name is `$REPLICA` below. Confirm it is a standby and current:
 
 ```sh
-KUBECONFIG=~/.kube/bare-metal-org-github.yaml kubectl -n social-refresh exec <primary> -c postgres -- psql -U postgres -d app_usernode_2d5619 -Atc "select relname, pg_size_pretty(pg_total_relation_size(c.oid)), pg_total_relation_size(c.oid) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and relkind='r' order by 3 desc limit 25"
+KUBECONFIG=~/.kube/bare-metal-org-github.yaml kubectl -n social-refresh exec $REPLICA -c postgres -- psql -U postgres -Atc "select pg_is_in_recovery(), now() - pg_last_xact_replay_timestamp()"
 ```
-Decision rule: exclude the DATA of a table over 500 MB that no shell screen reads (telemetry, logs, raw event streams); keep every table a screen in the tour reads (`events` is read by `services/app-notices.js`, so it stays unless it alone exceeds 2 GB).
+Expected: `t|00:00:0x` (in recovery, lag under a minute).
 
-- [ ] **Step 3: Write `dump.sh`** — one `pg_dump -U postgres -d app_usernode_2d5619 -Fc --no-owner --no-privileges --exclude-table-data=<t> ...` through `kubectl exec -i`, streamed to `proddata/app_usernode_2d5619.dump`, then `pg_restore --list` to count entries. The user runs it with `!` (the sandbox classifies a production export as a PII read).
+- [ ] **Step 2: Size the tables** (read-only, on the replica) to choose what to leave out:
+
+```sh
+KUBECONFIG=~/.kube/bare-metal-org-github.yaml kubectl -n social-refresh exec $REPLICA -c postgres -- psql -U postgres -d app_usernode_2d5619 -Atc "select relname, pg_size_pretty(pg_total_relation_size(c.oid)), pg_total_relation_size(c.oid) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and relkind='r' order by 3 desc limit 25"
+```
+Decision rule: exclude the DATA of a table over 500 MB that no shell screen reads (telemetry, logs, raw event streams); keep every table a screen in the tour reads (`events` is read by `services/app-notices.js`, so it stays unless it alone exceeds 2 GB). A smaller dump also finishes before the standby has a reason to cancel it.
+
+- [ ] **Step 3: Write `dump.sh`** — `kubectl exec -i $REPLICA -c postgres -- pg_dump -U postgres -d app_usernode_2d5619 -Fc --no-owner --no-privileges --exclude-table-data=<t> ...` streamed to `proddata/app_usernode_2d5619.dump`; on a non-zero exit whose stderr says `canceling statement due to conflict with recovery`, delete the partial file and run once more; after a second cancellation stop and print "the standby cancelled the dump twice; ask before using the primary". On success run `pg_restore --list` on the file and print the entry count. The user runs the script with `!` (the sandbox classifies a production export as a PII read).
 
 - [ ] **Step 4: Restore into its own database**:
 

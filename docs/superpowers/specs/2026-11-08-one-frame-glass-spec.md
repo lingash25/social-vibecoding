@@ -80,7 +80,9 @@ button: `--acc` fill, `--acc-ink` text, shadow `0 12px 24px -12px var(--acc)`.
 ## Data
 
 The local stack runs on a **full production dump** (the user's choice,
-2026-11-08) restored into its own local database, never the fixture one.
+2026-11-08), taken with `pg_dump` from a **replica** of the production
+cluster so the primary carries no extra load, restored into its own local
+database, never the fixture one.
 That dump holds real people's data, so the stack that reads it must be
 unable to act outwardly: `PROCESS_ROLE=web` (no workflow, no clocks, no
 digests), and no GitHub, Anthropic or Topochain credentials in its
