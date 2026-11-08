@@ -9538,5 +9538,25 @@
   "governance.menu.copyLinkDone": {
     "text": "Link copied",
     "description": "Brief notice after pressing Copy link on a governance vote's page: the link is on the clipboard."
+  },
+  "track.plan": {
+    "text": "Plan",
+    "description": "One of the five stages of a change's progress line (Plan, Build, Checks, Vote, Live), drawn under every request and change. Keep it to one short word."
+  },
+  "track.build": {
+    "text": "Build",
+    "description": "One of the five stages of a change's progress line (Plan, Build, Checks, Vote, Live), drawn under every request and change. Keep it to one short word."
+  },
+  "track.checks": {
+    "text": "Checks",
+    "description": "One of the five stages of a change's progress line (Plan, Build, Checks, Vote, Live), drawn under every request and change. Keep it to one short word."
+  },
+  "track.vote": {
+    "text": "Vote",
+    "description": "One of the five stages of a change's progress line (Plan, Build, Checks, Vote, Live), drawn under every request and change. Keep it to one short word."
+  },
+  "track.live": {
+    "text": "Live",
+    "description": "One of the five stages of a change's progress line (Plan, Build, Checks, Vote, Live), drawn under every request and change. Keep it to one short word."
   }
 }
