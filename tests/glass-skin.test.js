@@ -207,3 +207,35 @@ test('the token defaults come first, then the glass block, then the brand block 
 test('the glass look sets the typeface on the root, with a system fallback', () => {
   assert.match(glassBlock(), /html\[data-skin="glass"\]\s*\{[^}]*font-family:\s*'Albert Sans',\s*system-ui/);
 });
+
+// ── useSkin(): the look, read by an island after it mounts ─────────────
+//
+// An island that draws a look must not read data-skin on its first render:
+// the prerendered document is skin-agnostic, so a first render that
+// differed would be a hydration mismatch (a console error, which fails
+// proposal checks). The hook answers 'standard' until mounted, then the
+// live value from window.Skin.
+
+const { loadTsx, renderToHtml, createElement } = require('./lib/render-tsx');
+
+test('useSkin reads standard on the first render and currentSkin reads window.Skin', () => {
+  const mod = loadTsx('frontend/src/lib/skin.ts');
+  assert.equal(mod.currentSkin(), 'standard', 'no window.Skin in the test: the standard look');
+  const html = renderToHtml(createElement(() => createElement('i', null, mod.useSkin())));
+  assert.equal(html, '<i>standard</i>');
+  globalThis.window = { Skin: { get: () => 'glass', onChange() {} } };
+  try {
+    assert.equal(mod.currentSkin(), 'glass');
+    assert.equal(renderToHtml(createElement(() => createElement('i', null, mod.useSkin()))), '<i>standard</i>',
+      'the first render stays standard even when the device has a look on');
+  } finally {
+    delete globalThis.window;
+  }
+});
+
+test('useSkin subscribes through window.Skin.onChange after mount', () => {
+  const src = read('frontend', 'src', 'lib', 'skin.ts');
+  assert.match(src, /useEffect\(/);
+  assert.match(src, /window\.Skin\?\.onChange\?\.\(/);
+  assert.match(src, /useState<Skin>\('standard'\)/);
+});
