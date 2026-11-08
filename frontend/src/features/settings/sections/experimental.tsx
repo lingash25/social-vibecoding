@@ -91,6 +91,14 @@ export function ExperimentalSection() {
             {t('settings:experimental.newLook.description')}
           </p>
         </div>
+        <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
+          <SwitchRow id="glass-look-enabled">
+            {t('settings:experimental.glassLook.label')}
+          </SwitchRow>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-2 leading-relaxed">
+            {t('settings:experimental.glassLook.description')}
+          </p>
+        </div>
       </div>
       <div id="settings-local-agents-section" className="hidden mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
         <SectionHeading title={t('settings:experimental.localAgents.title')}>

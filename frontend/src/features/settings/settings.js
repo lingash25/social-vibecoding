@@ -788,14 +788,32 @@
 
       // New look (an experiment), kept on the device by the head's
       // window.Skin: the change is the save, and the look applies at once.
+      // The two looks are exclusive (one data-skin on <html>), so turning
+      // one on turns the other's switch off through the same listener.
       const lookToggle = document.getElementById('new-look-enabled');
+      const glassToggle = document.getElementById('glass-look-enabled');
+      const paintLooks = () => {
+        const skin = window.Skin?.get?.();
+        if (lookToggle) lookToggle.checked = skin === 'brand';
+        if (glassToggle) glassToggle.checked = skin === 'glass';
+      };
       if (lookToggle) {
         lookToggle.addEventListener('change', (e) => {
           window.Skin?.set?.(e.target.checked ? 'brand' : 'standard');
+          paintLooks();
         });
-        // Another tab flipping it re-paints the switch here too.
+      }
+      if (glassToggle) {
+        glassToggle.addEventListener('change', (e) => {
+          window.Skin?.set?.(e.target.checked ? 'glass' : 'standard');
+          paintLooks();
+        });
+      }
+      if (lookToggle || glassToggle) {
+        // Another tab flipping it re-paints the switches here too.
         window.Skin?.onChange?.(() => {
-          lookToggle.checked = window.Skin?.get?.() === 'brand';
+          lookToggle && (lookToggle.checked = window.Skin?.get?.() === 'brand');
+          glassToggle && (glassToggle.checked = window.Skin?.get?.() === 'glass');
         });
       }
 
@@ -1910,6 +1928,8 @@
       if (bridgeStatus) { bridgeStatus.classList.add('hidden'); bridgeStatus.textContent = ''; }
       const look = document.getElementById('new-look-enabled');
       if (look) look.checked = window.Skin?.get?.() === 'brand';
+      const glass = document.getElementById('glass-look-enabled');
+      if (glass) glass.checked = window.Skin?.get?.() === 'glass';
       this._renderLocalAgentsSection();
     },
 

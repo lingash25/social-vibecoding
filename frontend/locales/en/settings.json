@@ -1343,6 +1343,14 @@
     "text": "Try Homeroom's new look: white cards on a light grey background, the Geist typeface with a serif for titles, and colours that each have a job: yellow for what needs you, black for where you are. Light mode only. On for this browser.",
     "description": "Explanation under the New look switch in Settings, Experimental. Geist is the name of a typeface; keep it as is. Homeroom is the product name. Yellow and black name the colours of the highlights on screen."
   },
+  "experimental.glassLook.label": {
+    "text": "Glass look",
+    "description": "Label of a switch in Settings, Experimental. When on, Homeroom is drawn as frosted glass panels floating on its wallpaper, with the Albert Sans typeface."
+  },
+  "experimental.glassLook.description": {
+    "text": "Try the glass look: translucent panels on Homeroom's wallpaper, the Albert Sans typeface, and one blue that only marks what waits for you. Light and dark. On for this browser.",
+    "description": "Explanation under the Glass look switch in Settings, Experimental. Albert Sans is the name of a typeface; keep it as is. Homeroom is the product name."
+  },
   "experimental.localAgents.title": {
     "text": "Local coding agent",
     "description": "Heading of a block in Settings > Experimental that lists the person's own computers attached to run the coding agent."

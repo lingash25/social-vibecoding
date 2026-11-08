@@ -421,6 +421,7 @@ const ADDED_IDS = {
   'platform-side-strip-back': 'iPhone Duo: #back-btn\'s copy in the side strip, rendered from the same useBackSlot hook and handing its press to #back-btn. Ships hidden with no href, as #back-btn does.',
   // ── New look (an experiment) ───────────────────────────────────────
   'new-look-enabled': 'New look: the switch in Settings, Experimental (off by default, kept on the device by the head\'s window.Skin) that sets data-skin="brand" on <html>, which app.css draws the new look from in light mode. settings.js paints and saves it through window.Skin.',
+  'glass-look-enabled': 'Glass look: the second switch under New look in Settings, Experimental (off by default, kept on the device by the head\'s window.Skin) that sets data-skin="glass" on <html>, which app.css draws the glass look from in light and dark. The two looks are exclusive; settings.js paints and saves both through window.Skin.',
   // ── #5097: Settings > Privacy, "Share usage analytics" ──────────────
   'settings-usage-analytics': '#5097: the Share usage analytics switch (features/settings/sections/usage-analytics.tsx, the last block of Settings > Privacy). Off, and disabled until the saved choice is read.',
   'settings-usage-analytics-section': '#5097: the Usage analytics block, the last of Settings > Privacy under #5104\'s contact settings (features/settings/sections/usage-analytics.tsx).',
