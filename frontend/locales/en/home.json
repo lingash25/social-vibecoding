@@ -974,5 +974,69 @@
   "guest.pinnedCommunity": {
     "text": "Pinned",
     "description": "The same button once the community is on this device's Home; pressing it again unpins it."
+  },
+  "glass.title": {
+    "text": "Home",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). The page title."
+  },
+  "glass.purpose": {
+    "text": "What needs you, then your places.",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). The one sentence under the title saying what the page is for."
+  },
+  "glass.make": {
+    "text": "Make a project",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). The page's one primary button; opens the Make screen."
+  },
+  "glass.needs": {
+    "text": "Needs you",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Label of the first group: every decision waiting on the viewer."
+  },
+  "glass.pinnedApps": {
+    "text": "Pinned apps",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Label of the group holding the launcher grid of pinned apps."
+  },
+  "glass.yourCommunities": {
+    "text": "Your communities",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Label of the group listing the communities the viewer pinned or joined."
+  },
+  "glass.toJoin": {
+    "text": "Communities to join",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Label of the group listing public communities the viewer is not in."
+  },
+  "glass.join": {
+    "text": "Join",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Button on a row of Communities to join."
+  },
+  "glass.vote": {
+    "text": "Vote",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status word on a Needs you row whose decision waits for the viewer's vote."
+  },
+  "glass.toVote_one": {
+    "text": "{{count}} to vote",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status on a community row: how many of its votes wait for the viewer. Singular."
+  },
+  "glass.toVote_other": {
+    "text": "{{count}} to vote",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status on a community row: how many of its votes wait for the viewer. Plural."
+  },
+  "glass.thisWeek": {
+    "text": "This week",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Label of the side column's group of two facts."
+  },
+  "glass.decisions_one": {
+    "text": "{{count}} decision waits for you",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Fact in the side column: the number of decisions in Needs you. Singular."
+  },
+  "glass.decisions_other": {
+    "text": "{{count}} decisions wait for you",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Fact in the side column: the number of decisions in Needs you. Plural."
+  },
+  "glass.communities_one": {
+    "text": "{{count}} community",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Fact in the side column: how many communities the viewer is in. Singular."
+  },
+  "glass.communities_other": {
+    "text": "{{count}} communities",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Fact in the side column: how many communities the viewer is in. Plural."
   }
 }

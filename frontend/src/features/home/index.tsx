@@ -83,7 +83,11 @@
  * app.js's router.
  */
 
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { whenPlatformViewer } from '../../lib/platform-viewer';
+import { useSkin } from '../../lib/skin';
+import { HomeGlass } from './glass/home-glass';
 
 import { SearchIcon } from '@/components/ui/icons';
 
@@ -122,6 +126,15 @@ export function HomeScreen() {
   // with no items and editing off, so the prerender and the first client
   // render draw no action at all.
   const grid = useStoreState(gridStore);
+  // The glass look draws this page in the one frame (./glass/home-glass.tsx).
+  // Read after mount only: the first render must match the prerendered
+  // document, which knows no look (lib/skin.ts says why).
+  const skin = useSkin();
+  // And for a viewer the member APIs answer: the signed-out landing and the
+  // waiting room keep the standard body (lib/platform-viewer.ts says why a
+  // member-only read from either is a console error).
+  const [viewer, setViewer] = useState(false);
+  useEffect(() => whenPlatformViewer(() => setViewer(true)), []);
   const canEdit = grid.ready && grid.view === 'grid' && !grid.editing
     && grid.items.some((item) => !item.app.demo);
   // ONE HOME (#6361): Pinned apps appears once something is pinned. A new
@@ -212,6 +225,9 @@ export function HomeScreen() {
           in the grid now, so nothing below the grid is anchored any more.)
       */}
       <div id="home-body" className="home-column home-body-fill">
+        {skin === 'glass' && viewer ? (
+          <HomeGlass />
+        ) : (<>
         {/*
             #1561's once-per-account explainer stood here, above everything,
             because it was the thing a first-time viewer needed before the
@@ -440,6 +456,7 @@ export function HomeScreen() {
             sections above are outside #app-list and never re-rendered by a
             search keystroke, so there is nothing left to catch.
         */}
+        </>)}
       </div>
     </main>
   );

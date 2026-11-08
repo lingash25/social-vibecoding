@@ -83,6 +83,7 @@ function compilationInputs(files) {
 
 /**
  * Bundle `entry` (a repo-relative .tsx/.ts path) and return its exports.
+ * (`renderComponent` passes its fourth argument here: `stubs` and `cache`.)
  *
  * `react`, `react-dom` and the JSX runtime stay external and are resolved out
  * of frontend/node_modules, so the component under test shares one React with
@@ -170,8 +171,8 @@ function isComponent(value) {
 }
 
 /** Convenience: bundle, render one export with `props`, return the HTML. */
-function renderComponent(entry, exportName, props) {
-  const mod = loadTsx(entry);
+function renderComponent(entry, exportName, props, options = {}) {
+  const mod = loadTsx(entry, options);
   const Component = mod[exportName];
   if (!isComponent(Component)) {
     throw new Error(`${entry} does not export a component named ${exportName}`);
