@@ -26897,38 +26897,42 @@ button.rf-claim-row:active .rf-claim { color: var(--rf-ink); }
    The tokens the frame primitives (frontend/@/components/ui/frame.tsx and
    status.tsx) draw with. Under the standard look they point at the
    product's own tokens, so a primitive renders sanely whatever the skin;
-   a look (THE GLASS LOOK below) redefines them. --ok/--wait/--bad are the
+   a look (THE GLASS LOOK below) redefines them. --fr-ok/--fr-wait/--fr-bad are the
    three state inks of spec rule 5 (done, waiting on others, a problem),
-   kept apart from --state-* which other screens already count. */
+   kept apart from --state-* which other screens already count. Every name
+   carries the --fr- prefix: bare names on :root change the meaning of any
+   `var(--x, fallback)` already in this sheet (--ring had one). */
 :root {
-  --surface: var(--dc-sheet-solid);
-  --sunk: var(--bg-secondary);
-  --ink: var(--text-primary);
-  --mut: var(--text-secondary);
-  --faint: var(--text-muted);
-  --line: var(--border-light);
-  --acc: var(--accent);
-  --acc-ink: var(--accent-ink);
-  --acc-t: var(--accent-tint);
-  --lit: var(--lit-ink);
-  --lit-t: var(--lit-tint);
-  --ok: #0c8346;
-  --ok-t: #ddf2e6;
-  --wait: #955000;
-  --wait-t: #faecd3;
-  --bad: #bf3529;
-  --bad-t: #fbe5e2;
-  --ring: var(--app-sheet-line);
-  --glow: none;
-  --glass-blur: none;
+  --fr-surface: var(--dc-sheet-solid);
+  --fr-sunk: var(--bg-secondary);
+  --fr-ink: var(--text-primary);
+  --fr-mut: var(--text-secondary);
+  --fr-faint: var(--text-muted);
+  --fr-line: var(--border-light);
+  --fr-acc: var(--accent);
+  --fr-acc-ink: var(--accent-ink);
+  --fr-acc-t: var(--accent-tint);
+  --fr-lit: var(--lit-ink);
+  --fr-lit-t: var(--lit-tint);
+  --fr-ok: #0c8346;
+  --fr-ok-t: #ddf2e6;
+  --fr-wait: #955000;
+  --fr-wait-t: #faecd3;
+  --fr-bad: #bf3529;
+  --fr-bad-t: #fbe5e2;
+  --fr-ring: var(--app-sheet-line);
+  /* A no-op shadow, not `none`: inside a comma list `none` voids the whole
+     box-shadow, so the ring would vanish under the standard look. */
+  --fr-glow: 0 0 #0000;
+  --fr-blur: none;
 }
 .dark {
-  --ok: #4fd08a;
-  --ok-t: #11311f;
-  --wait: #f2b45c;
-  --wait-t: #35270f;
-  --bad: #ff8c80;
-  --bad-t: #3a1815;
+  --fr-ok: #4fd08a;
+  --fr-ok-t: #11311f;
+  --fr-wait: #f2b45c;
+  --fr-wait-t: #35270f;
+  --fr-bad: #ff8c80;
+  --fr-bad-t: #3a1815;
 }
 
 /* ── THE GLASS LOOK (Settings › Experimental, off by default) ───────────
@@ -26940,11 +26944,11 @@ button.rf-claim-row:active .rf-claim { color: var(--rf-ink); }
    The look is direction C of the 2026-11-06 screen tour, "Aurora glass":
    the wallpaper is the room, and everything else is frosted glass floating
    in it. So the wallpaper tokens are NOT redeclared (the room stays the
-   room), and the surfaces become translucent: --surface over a blur, one
+   room), and the surfaces become translucent: --fr-surface over a blur, one
    bright ring instead of a border, a long soft glow instead of a shadow.
    - One palette: an indigo ink (#1a1e3c) and its tints for text and lines.
    - One job per colour (spec rule 5): blue (#3b55e6) means "this waits for
-     you"; navy (--lit) is where you are; green, amber and red are done,
+     you"; navy (--fr-lit) is where you are; green, amber and red are done,
      waiting on others, and a problem. Nothing else is coloured.
    - Albert Sans for words, from our own origin (public/fonts/albert-sans).
    Where backdrop-filter is unavailable the surface is opaque instead, so
@@ -26975,77 +26979,77 @@ button.rf-claim-row:active .rf-claim { color: var(--rf-ink); }
 html[data-skin="glass"] {
   font-family: 'Albert Sans', system-ui, -apple-system, 'Segoe UI', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
   /* The look's own tokens (spec table, light column). */
-  --surface: rgba(255, 255, 255, 0.58);
-  --sunk: rgba(55, 71, 123, 0.09);
-  --ink: #1a1e3c;
-  --mut: #565c82;
-  --faint: #8b90b0;
-  --line: rgba(55, 71, 123, 0.13);
-  --acc: #3b55e6;
-  --acc-ink: #ffffff;
-  --acc-t: rgba(59, 85, 230, 0.12);
-  --lit: #2b3769;
-  --lit-t: rgba(55, 71, 123, 0.11);
-  --ok: #0c8346;
-  --ok-t: #ddf2e6;
-  --wait: #955000;
-  --wait-t: #faecd3;
-  --bad: #bf3529;
-  --bad-t: #fbe5e2;
-  --ring: rgba(255, 255, 255, 0.8);
-  --glow: 0 22px 44px -30px rgba(55, 71, 123, 0.55);
-  --glass-blur: blur(22px) saturate(1.4);
+  --fr-surface: rgba(255, 255, 255, 0.58);
+  --fr-sunk: rgba(55, 71, 123, 0.09);
+  --fr-ink: #1a1e3c;
+  --fr-mut: #565c82;
+  --fr-faint: #8b90b0;
+  --fr-line: rgba(55, 71, 123, 0.13);
+  --fr-acc: #3b55e6;
+  --fr-acc-ink: #ffffff;
+  --fr-acc-t: rgba(59, 85, 230, 0.12);
+  --fr-lit: #2b3769;
+  --fr-lit-t: rgba(55, 71, 123, 0.11);
+  --fr-ok: #0c8346;
+  --fr-ok-t: #ddf2e6;
+  --fr-wait: #955000;
+  --fr-wait-t: #faecd3;
+  --fr-bad: #bf3529;
+  --fr-bad-t: #fbe5e2;
+  --fr-ring: rgba(255, 255, 255, 0.8);
+  --fr-glow: 0 22px 44px -30px rgba(55, 71, 123, 0.55);
+  --fr-blur: blur(22px) saturate(1.4);
   /* The product's own tokens, retargeted, so the screens not yet drawn in
      the frame take the look's ink, accent and surfaces where they read a
      token. Those drawn with literal zinc/violet utilities stay as they are
      until their own plan. */
-  --text-primary: var(--ink);
-  --text-secondary: var(--mut);
-  --text-muted: var(--faint);
-  --border: var(--line);
-  --border-light: var(--line);
-  --accent: var(--acc);
-  --accent-ink: var(--acc-ink);
-  /* A literal, not var(--acc-t): tests/dev-chat-ground.test.js reads every
+  --text-primary: var(--fr-ink);
+  --text-secondary: var(--fr-mut);
+  --text-muted: var(--fr-faint);
+  --border: var(--fr-line);
+  --border-light: var(--fr-line);
+  --accent: var(--fr-acc);
+  --accent-ink: var(--fr-acc-ink);
+  /* A literal, not var(--fr-acc-t): tests/dev-chat-ground.test.js reads every
      --accent-tint declaration and holds its alpha at or under 0.2. */
   --accent-tint: rgba(59, 85, 230, 0.12);
-  --accent-tint-ink: var(--acc);
-  --lit-ink: var(--lit);
-  --lit-tint: var(--lit-t);
-  --lit-line: var(--line);
-  --dc-sheet: var(--surface);
-  --dc-sheet-solid: var(--surface);
-  --dc-sheet-raise: var(--surface);
-  --app-sheet-line: var(--ring);
+  --accent-tint-ink: var(--fr-acc);
+  --lit-ink: var(--fr-lit);
+  --lit-tint: var(--fr-lit-t);
+  --lit-line: var(--fr-line);
+  --dc-sheet: var(--fr-surface);
+  --dc-sheet-solid: var(--fr-surface);
+  --dc-sheet-raise: var(--fr-surface);
+  --app-sheet-line: var(--fr-ring);
 }
 html[data-skin="glass"].dark {
-  --surface: rgba(255, 255, 255, 0.065);
-  --sunk: rgba(255, 255, 255, 0.08);
-  --ink: #f1f0fa;
-  --mut: #aeb0cf;
-  --faint: #7a7d9e;
-  --line: rgba(255, 255, 255, 0.12);
-  --acc: #8ea2ff;
-  --acc-ink: #0a0f2c;
-  --acc-t: rgba(142, 162, 255, 0.16);
-  --lit: #dfe3ff;
-  --lit-t: rgba(199, 208, 245, 0.14);
-  --ok: #4fd08a;
-  --ok-t: #11311f;
-  --wait: #f2b45c;
-  --wait-t: #35270f;
-  --bad: #ff8c80;
-  --bad-t: #3a1815;
-  --ring: rgba(255, 255, 255, 0.12);
-  --glow: 0 22px 44px -30px rgba(0, 0, 0, 0.9);
+  --fr-surface: rgba(255, 255, 255, 0.065);
+  --fr-sunk: rgba(255, 255, 255, 0.08);
+  --fr-ink: #f1f0fa;
+  --fr-mut: #aeb0cf;
+  --fr-faint: #7a7d9e;
+  --fr-line: rgba(255, 255, 255, 0.12);
+  --fr-acc: #8ea2ff;
+  --fr-acc-ink: #0a0f2c;
+  --fr-acc-t: rgba(142, 162, 255, 0.16);
+  --fr-lit: #dfe3ff;
+  --fr-lit-t: rgba(199, 208, 245, 0.14);
+  --fr-ok: #4fd08a;
+  --fr-ok-t: #11311f;
+  --fr-wait: #f2b45c;
+  --fr-wait-t: #35270f;
+  --fr-bad: #ff8c80;
+  --fr-bad-t: #3a1815;
+  --fr-ring: rgba(255, 255, 255, 0.12);
+  --fr-glow: 0 22px 44px -30px rgba(0, 0, 0, 0.9);
   --accent-tint: rgba(142, 162, 255, 0.16);
 }
 @supports not (backdrop-filter: blur(1px)) {
   html[data-skin="glass"] {
-    --surface: #fbfbfd;
+    --fr-surface: #fbfbfd;
   }
   html[data-skin="glass"].dark {
-    --surface: #171a2b;
+    --fr-surface: #171a2b;
   }
 }
 

@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - The shell loads no cross-origin assets: fonts are vendored under `public/fonts/<family>/` with `LICENSE` and `README.md` beside them, and `@font-face` uses the absolute path `/fonts/...` (AGENTS.md "Shell CSS", `tests/new-look.test.js` 'Geist loads from our own origin').
-- Stylesheet order stays `native.css` → `app.css` → `tailwind.css`; no fourth link. Glass rules live in `public/css/app.css`, appended after the brand block, every rule scoped to `html[data-skin="glass"]`.
+- Stylesheet order stays `native.css` → `app.css` → `tailwind.css`; no fourth link. Glass rules live in `public/css/app.css`, placed BEFORE the brand block (whose own tests require it to stay last; the two looks never apply together), every rule scoped to `html[data-skin="glass"]`, with the frame's token defaults in their own `SKIN TOKEN DEFAULTS` section just before them, every token prefixed `--fr-`.
 - `data-skin` is set on `<html>` by the head before first paint and never read during a React first render (hydration must match the prerender).
 - Interface text is read from `frontend/locales/en/<namespace>.json` as `{ "text", "description" }` entries; no English literal in a component.
 - Every Tailwind class in a component or a `cva` table is a complete literal.

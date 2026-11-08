@@ -29,7 +29,7 @@ export function PrimaryButton({ className, type = 'button', ...props }: React.Bu
   return (
     <button
       type={type}
-      className={cn(BUTTON, 'rounded-full bg-[color:var(--acc)] text-[color:var(--acc-ink)] shadow-[0_12px_24px_-12px_var(--acc)]', className)}
+      className={cn(BUTTON, 'rounded-full bg-[color:var(--fr-acc)] text-[color:var(--fr-acc-ink)] [box-shadow:0_12px_24px_-12px_var(--fr-acc)]', className)}
       {...props}
     />
   );
@@ -39,7 +39,7 @@ export function QuietButton({ className, type = 'button', ...props }: React.Butt
   return (
     <button
       type={type}
-      className={cn(BUTTON, 'rounded-full bg-[color:var(--surface)] text-[color:var(--ink)] shadow-[inset_0_0_0_1px_var(--ring)]', className)}
+      className={cn(BUTTON, 'rounded-full bg-[color:var(--fr-surface)] text-[color:var(--fr-ink)] [box-shadow:inset_0_0_0_1px_var(--fr-ring)]', className)}
       {...props}
     />
   );
@@ -74,12 +74,12 @@ export function Group({ label, action, children, id, className }: {
       <div className="flex items-baseline justify-between gap-4 pe-4">
         {/* The group's label: 13px at 650 in the muted ink, sentence case
             (spec rule 8), over the card-group label's own gutter. */}
-        <SectionHeader className="normal-case tracking-normal text-[13px] font-[650] text-[color:var(--mut)]">
+        <SectionHeader className="normal-case tracking-normal text-[13px] font-[650] text-[color:var(--fr-mut)]">
           {label}
         </SectionHeader>
-        {action ? <div className="shrink-0 pt-6 text-[13px] font-semibold text-[color:var(--acc)]">{action}</div> : null}
+        {action ? <div className="shrink-0 pt-6 text-[13px] font-semibold text-[color:var(--fr-acc)]">{action}</div> : null}
       </div>
-      <div className="overflow-hidden rounded-[24px] bg-[color:var(--surface)] [backdrop-filter:var(--glass-blur)] shadow-[inset_0_0_0_1px_var(--ring),var(--glow)]">
+      <div className="overflow-hidden rounded-[24px] bg-[color:var(--fr-surface)] [backdrop-filter:var(--fr-blur)] [box-shadow:inset_0_0_0_1px_var(--fr-ring),var(--fr-glow)]">
         {children}
       </div>
     </section>
@@ -101,8 +101,8 @@ export function PageFrame({ title, purpose, primary, tabs, children, side, sideF
     <div className={cn('flex flex-col gap-6 px-3 pb-12 pt-5 md:px-8', className)}>
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[28px] md:text-[36px] font-bold tracking-[-0.035em] leading-[1.08] text-[color:var(--ink)] [text-wrap:balance]">{title}</h1>
-          {purpose ? <p className="mt-2 max-w-[60ch] text-[17px] leading-snug text-[color:var(--mut)]">{purpose}</p> : null}
+          <h1 className="text-[28px] md:text-[36px] font-bold tracking-[-0.035em] leading-[1.08] text-[color:var(--fr-ink)] [text-wrap:balance]">{title}</h1>
+          {purpose ? <p className="mt-2 max-w-[60ch] text-[17px] leading-snug text-[color:var(--fr-mut)]">{purpose}</p> : null}
         </div>
         {primary ? (
           <div className="shrink-0">

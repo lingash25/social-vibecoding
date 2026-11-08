@@ -1038,5 +1038,17 @@
   "glass.communities_other": {
     "text": "{{count}} communities",
     "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Fact in the side column: how many communities the viewer is in. Plural."
+  },
+  "glass.approve": {
+    "text": "Approve",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status word on a Needs you row for a change on the viewer's own just-you project, whose Yes is the one it needs."
+  },
+  "glass.waiting.checks": {
+    "text": "Checks",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status word on a Needs you row for a change still waiting on its checks before it can be voted on."
+  },
+  "glass.waiting.conflict": {
+    "text": "Conflict",
+    "description": "Home drawn in the one frame under the glass look (Settings > Experimental). Status word on a Needs you row for a change that needs its conflict with the main branch resolved before it can be voted on."
   }
 }

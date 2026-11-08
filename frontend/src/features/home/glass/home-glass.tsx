@@ -11,43 +11,51 @@
  * ones they are not in — with two facts in the 320px column beside it.
  *
  * HomeScreen (../index.tsx) mounts this instead of the standard body only
- * after mount, when lib/skin.ts says the device's look is glass, so the
- * prerendered document is never contradicted. The standard Home is not
- * touched. Three nodes the legacy home.js still writes into stay in the
- * DOM, hidden, so its writes land somewhere harmless.
+ * after mount, when lib/skin.ts says the device's look is glass and the
+ * member APIs will answer (lib/platform-viewer.ts), so the prerendered
+ * document is never contradicted and the signed-out landing keeps today's
+ * body. The standard Home is not touched. Three nodes the legacy home.js
+ * still writes into stay in the DOM, hidden, so its writes land somewhere
+ * harmless.
  *
  * Data: the pins store the standard Home already keeps (../home-pins-store),
- * the same public directory read (../communities-to-join), and the Needs
- * you feed (GET /api/workshop/needs-feed, the Workshop's own read).
+ * the launcher's grid store (../grid-store), the same public directory read
+ * (../communities-to-join), and the Needs you feed (GET /api/workshop/
+ * needs-feed, shaped by src/routes/workshop-overview.js shapeNeedsFeed).
+ *
+ * Every row is a door (pinned-communities.tsx's rule): a plain click lands
+ * on the community's page through AppView, a cmd-click or middle-click keeps
+ * the href the browser gives it.
  */
 import { useEffect, useState } from 'react';
 
-import { Columns, Group, PageFrame, PrimaryButton, QuietButton } from '@/components/ui/frame';
-import { StatusPill, StatusRow, type Tone } from '@/components/ui/status';
+import { Group, PageFrame, PrimaryButton } from '@/components/ui/frame';
+import { StatusRow, type Tone } from '@/components/ui/status';
 import { useMessages } from '../../../lib/i18n/react';
 import { useStoreState } from '../../../lib/use-store-state';
 import { AppGrid } from '../app-grid';
-import { gridStore } from '../grid-store';
 import { readDirectory } from '../communities-to-join';
+import { gridStore } from '../grid-store';
 import { homePinsStore, loadHomePins, type HomePin, type JoinedCommunity } from '../home-pins-store';
 
-/** A row of GET /api/workshop/needs-feed, the fields this screen reads. */
+/**
+ * A row of GET /api/workshop/needs-feed, the fields this screen reads, as
+ * shapeNeedsFeed emits them: every row is a decision the viewer owes;
+ * `approve` marks a change on their own just-you project whose Yes is the
+ * one it needs; `waitingOn` names what a change still waits on before it
+ * can be voted on ('checks', 'conflict').
+ */
 export type FeedRow = {
   id: number;
   kind: string;
   title: string | null;
   number?: number | null;
-  app?: { slug?: string; name?: string; icon_url?: string | null; icon_emoji?: string | null; icon_color?: string | null } | null;
-  app_slug?: string;
-  app_name?: string;
-  /** The viewer's vote is what it waits for. */
+  app?: { slug?: string; name?: string; icon_url?: string | null; icon_emoji?: string | null } | null;
   approve?: boolean;
-  /** One word for what it waits on instead, when not the viewer. */
-  waiting?: string | null;
-  waiting_on?: unknown[] | null;
+  waitingOn?: string[] | null;
 };
 
-type DirectoryApp = NonNullable<Awaited<ReturnType<typeof readDirectory>>>[number] & {
+type DirectoryApp = {
   slug: string;
   name?: string;
   icon_url?: string | null;
@@ -66,19 +74,13 @@ function Lead({ name, iconUrl, iconEmoji, iconColor }: {
   const style = iconColor ? { backgroundColor: iconColor } : undefined;
   return (
     <span
-      className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[color:var(--sunk)] text-[15px] font-bold text-[color:var(--ink)] shadow-[inset_0_0_0_1px_var(--line)]"
+      className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[12px] bg-[color:var(--fr-sunk)] text-[15px] font-bold text-[color:var(--fr-ink)] [box-shadow:inset_0_0_0_1px_var(--fr-line)]"
       style={style}
       aria-hidden="true"
     >
       {iconUrl ? <img src={iconUrl} alt="" className="h-full w-full object-cover" /> : (iconEmoji || name.slice(0, 1).toUpperCase())}
     </span>
   );
-}
-
-function feedWaiting(row: FeedRow): string | null {
-  if (typeof row.waiting === 'string' && row.waiting) return row.waiting;
-  if (Array.isArray(row.waiting_on) && row.waiting_on.length) return String(row.waiting_on[0]);
-  return null;
 }
 
 function joinedAsPin(c: JoinedCommunity): HomePin {
@@ -95,16 +97,31 @@ function joinedAsPin(c: JoinedCommunity): HomePin {
 const hubHref = (slug: string) => `/app/${encodeURIComponent(slug)}/workshop?ws=status`;
 const needsHref = (slug: string) => `/app/${encodeURIComponent(slug)}/workshop?ws=needs`;
 
-export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | null }) {
+/** Open a community's hub, as the standard Home's tile does (the door rule). */
+function openHub(event: React.MouseEvent<HTMLElement>, slug: string) {
+  const win = window as any;
+  if (win.NavLink?.isNativeClick?.(event)) return;
+  event.preventDefault();
+  try { win.AppView?._landOnHub?.(slug); } catch { /* the page opens on what it remembers */ }
+  win.App?.navigateToApp?.(slug, 'dev');
+}
+
+/** Open a community's Needs you place, where the decision is taken. */
+function openNeeds(event: React.MouseEvent<HTMLElement>, slug: string) {
+  const win = window as any;
+  if (win.NavLink?.isNativeClick?.(event)) return;
+  event.preventDefault();
+  try { win.AppView?._landOnTab?.(slug, 'needs'); } catch { /* as above */ }
+  win.App?.navigateToApp?.(slug, 'dev');
+}
+
+/** `initialFeed` and `initialDirectory` seed the state a render test cannot reach through effects. */
+export function HomeGlass({ initialFeed = null, initialDirectory = null }: { initialFeed?: FeedRow[] | null; initialDirectory?: DirectoryApp[] | null }) {
   const t = useMessages('home');
   const pins = useStoreState(homePinsStore);
   const grid = useStoreState(gridStore);
-  // Today's Home hides the launcher when a settled grid holds nothing; so
-  // does this one (a zero says nothing), keeping the section the declared
-  // checks select on in the DOM.
-  const noApps = grid.ready && grid.view === 'grid' && !grid.editing && grid.items.length === 0;
   const [feed, setFeed] = useState<FeedRow[] | null>(initialFeed);
-  const [directory, setDirectory] = useState<DirectoryApp[] | null>(null);
+  const [directory, setDirectory] = useState<DirectoryApp[] | null>(initialDirectory);
 
   useEffect(() => {
     let on = true;
@@ -117,6 +134,11 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
     return () => { on = false; };
   }, []);
 
+  // Today's Home hides the launcher when a settled grid holds nothing; so
+  // does this one (a zero says nothing), keeping the section the declared
+  // checks select on in the DOM.
+  const noApps = grid.ready && grid.view === 'grid' && !grid.editing && grid.items.length === 0;
+
   // Your communities: the pinned ones first, then the joined ones not pinned.
   const pinned = new Set(pins.pins.map((p) => p.slug));
   const mine: HomePin[] = [...pins.pins, ...pins.joined.filter((c) => !pinned.has(c.slug)).map(joinedAsPin)];
@@ -126,15 +148,26 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
   const decisions = feed ? feed.length : 0;
   const communities = mine.length;
 
+  // The one word at the end of a Needs you row (spec rules 5 and 8): what
+  // still waits on something else is amber and says what; everything else
+  // waits for the viewer and is blue.
+  const statusOf = (row: FeedRow): { word: string; tone: Tone } => {
+    const waiting = Array.isArray(row.waitingOn) && row.waitingOn.length ? String(row.waitingOn[0]) : null;
+    if (waiting === 'checks') return { word: t('home:glass.waiting.checks'), tone: 'waiting' };
+    if (waiting === 'conflict') return { word: t('home:glass.waiting.conflict'), tone: 'waiting' };
+    if (row.approve) return { word: t('home:glass.approve'), tone: 'you' };
+    return { word: t('home:glass.vote'), tone: 'you' };
+  };
+
   const side = (decisions > 0 || communities > 0) ? (
     <Group label={t('home:glass.thisWeek')}>
       {decisions > 0 ? (
-        <div className="px-4 py-3 text-[15px] leading-5 text-[color:var(--ink)]">
+        <div className="px-4 py-3 text-[15px] leading-5 text-[color:var(--fr-ink)]">
           {t('home:glass.decisions', { count: decisions })}
         </div>
       ) : null}
       {communities > 0 ? (
-        <div className="px-4 py-3 text-[15px] leading-5 text-[color:var(--ink)]">
+        <div className="px-4 py-3 text-[15px] leading-5 text-[color:var(--fr-ink)]">
           {t('home:glass.communities', { count: communities })}
         </div>
       ) : null}
@@ -166,20 +199,19 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
           {feed && feed.length > 0 ? (
             <Group label={t('home:glass.needs')} id="home-glass-needs">
               {feed.map((row) => {
-                const slug = row.app?.slug || row.app_slug || '';
-                const name = row.app?.name || row.app_name || slug;
-                const waiting = feedWaiting(row);
-                const status = row.approve ? t('home:glass.vote') : waiting;
-                const tone: Tone = row.approve ? 'you' : 'waiting';
+                const slug = row.app?.slug || '';
+                const name = row.app?.name || slug;
+                const { word, tone } = statusOf(row);
                 return (
                   <StatusRow
                     key={`${row.kind}:${row.id}`}
                     as="a"
                     href={slug ? needsHref(slug) : '#needs'}
-                    leading={<Lead name={name} iconUrl={row.app?.icon_url} iconEmoji={row.app?.icon_emoji} iconColor={row.app?.icon_color} />}
+                    onClick={slug ? (event) => openNeeds(event, slug) : undefined}
+                    leading={<Lead name={name} iconUrl={row.app?.icon_url} iconEmoji={row.app?.icon_emoji} />}
                     title={row.title || name}
                     subtitle={row.number ? `${name} · #${row.number}` : name}
-                    status={status}
+                    status={word}
                     tone={tone}
                   />
                 );
@@ -206,6 +238,7 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
                     key={c.slug}
                     as="a"
                     href={hubHref(c.slug)}
+                    onClick={(event) => openHub(event, c.slug)}
                     leading={<Lead name={c.name} iconUrl={c.iconUrl} iconEmoji={c.iconEmoji} iconColor={c.iconColor} />}
                     title={c.name}
                     status={owed > 0 ? t('home:glass.toVote', { count: owed }) : null}
@@ -218,15 +251,19 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
 
           {toJoin.length > 0 ? (
             <Group label={t('home:glass.toJoin')} id="home-glass-to-join">
+              {/* The row's word is Join and its door is the hub, where Join
+                  lives with what the community is about: an act, not a
+                  wait, so it is not blue, and not a button inside a link. */}
               {toJoin.map((a) => (
                 <StatusRow
                   key={a.slug}
                   as="a"
                   href={hubHref(a.slug)}
+                  onClick={(event) => openHub(event, a.slug)}
                   leading={<Lead name={a.name || a.slug} iconUrl={a.icon_url} iconEmoji={a.icon_emoji} iconColor={a.icon_color} />}
                   title={a.name || a.slug}
-                  subtitle={a.member_count ? String(a.member_count) : undefined}
-                  status={<QuietButton className="h-8 px-3 text-[13px]">{t('home:glass.join')}</QuietButton>}
+                  subtitle={a.member_count ? t('home:join.members', { count: a.member_count }) : undefined}
+                  status={t('home:glass.join')}
                   tone="none"
                 />
               ))}
@@ -237,7 +274,3 @@ export function HomeGlass({ initialFeed = null }: { initialFeed?: FeedRow[] | nu
     </div>
   );
 }
-
-// Columns and StatusPill are part of the frame this screen is drawn with;
-// named here so a reader of this file sees the whole kit it builds from.
-export { Columns, StatusPill };

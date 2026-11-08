@@ -70,6 +70,12 @@ async function tellRetired(config, result, { signal = null } = {}) {
 async function beforeServe(config, pool, { timeoutMs = WAIT_MS, pollMs = 500,
   now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   if (process.env.USERNODE_ENV === 'staging') return { skipped: 'staging' };
+  // A local development stack (docker-compose.dev.yml, or `node server.js`
+  // against the dev database) has no preview cluster whose retirement a
+  // conductor could prove, so a web-only process there would wait WAIT_MS
+  // and exit. Skipped the way staging is; production and previews never set
+  // USERNODE_LOCAL_DEV (tests/platform-preview-startup-local-dev.test.js).
+  if (process.env.USERNODE_LOCAL_DEV === '1') return { skipped: 'local-dev' };
   if (roles.runsWorkflow(roles.processRole())) {
     return check(config, pool, null, { boot: true });
   }

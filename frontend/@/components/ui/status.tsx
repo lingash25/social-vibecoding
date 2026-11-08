@@ -32,12 +32,12 @@ const pill = cva(
   {
     variants: {
       tone: {
-        you: 'px-2.5 bg-[color:var(--acc)] text-[color:var(--acc-ink)]',
-        here: 'px-2.5 bg-[color:var(--lit-t)] text-[color:var(--lit)]',
-        done: 'px-2.5 bg-[color:var(--ok-t)] text-[color:var(--ok)]',
-        waiting: 'px-2.5 bg-[color:var(--wait-t)] text-[color:var(--wait)]',
-        problem: 'px-2.5 bg-[color:var(--bad-t)] text-[color:var(--bad)]',
-        none: 'text-[color:var(--mut)]',
+        you: 'px-2.5 bg-[color:var(--fr-acc)] text-[color:var(--fr-acc-ink)]',
+        here: 'px-2.5 bg-[color:var(--fr-lit-t)] text-[color:var(--fr-lit)]',
+        done: 'px-2.5 bg-[color:var(--fr-ok-t)] text-[color:var(--fr-ok)]',
+        waiting: 'px-2.5 bg-[color:var(--fr-wait-t)] text-[color:var(--fr-wait)]',
+        problem: 'px-2.5 bg-[color:var(--fr-bad-t)] text-[color:var(--fr-bad)]',
+        none: 'text-[color:var(--fr-mut)]',
       },
     },
     defaultVariants: { tone: 'none' },
@@ -76,13 +76,13 @@ function stageState(index: number, stage: TrackStage, waiting: boolean, problem:
 }
 
 const STAGE_CLASS =
-  'flex min-w-0 flex-col gap-2 text-[12px] font-semibold text-[color:var(--faint)] '
-  + "before:h-1 before:rounded-sm before:bg-[color:var(--sunk)] before:content-[''] "
-  + 'data-[state=done]:text-[color:var(--mut)] data-[state=done]:before:bg-[color:var(--mut)] '
-  + 'data-[state=now]:text-[color:var(--acc)] data-[state=now]:before:bg-[color:var(--acc)] '
-  + 'data-[state=wait]:text-[color:var(--wait)] data-[state=wait]:before:bg-[color:var(--wait)] '
-  + 'data-[state=problem]:text-[color:var(--bad)] data-[state=problem]:before:bg-[color:var(--bad)] '
-  + 'data-[state=live]:text-[color:var(--ok)] data-[state=live]:before:bg-[color:var(--ok)]';
+  'flex min-w-0 flex-col gap-2 text-[12px] font-semibold text-[color:var(--fr-faint)] '
+  + "before:h-1 before:rounded-sm before:bg-[color:var(--fr-sunk)] before:content-[''] "
+  + 'data-[state=done]:text-[color:var(--fr-mut)] data-[state=done]:before:bg-[color:var(--fr-mut)] '
+  + 'data-[state=now]:text-[color:var(--fr-acc)] data-[state=now]:before:bg-[color:var(--fr-acc)] '
+  + 'data-[state=wait]:text-[color:var(--fr-wait)] data-[state=wait]:before:bg-[color:var(--fr-wait)] '
+  + 'data-[state=problem]:text-[color:var(--fr-bad)] data-[state=problem]:before:bg-[color:var(--fr-bad)] '
+  + 'data-[state=live]:text-[color:var(--fr-ok)] data-[state=live]:before:bg-[color:var(--fr-ok)]';
 
 export function Track({ stage, waiting = false, problem = false, mini = false, className }: {
   stage: TrackStage;

@@ -44,7 +44,9 @@ The wallpaper is today's (`--home-wallpaper` in `public/css/app.css`:
 `--home-ground` #f4f2e4 / #0b0d1b with the lavender, pink and peach washes),
 already painted behind every screen by the fixed pseudo-element.
 
-Tokens, light then dark:
+Tokens, light then dark (in `app.css` every name carries the `--fr-` prefix,
+`--fr-surface`, `--fr-acc`, …, so no bare name on `:root` changes an existing
+`var(--x, fallback)`; the table keeps the short names):
 
 | token | light | dark |
 |---|---|---|

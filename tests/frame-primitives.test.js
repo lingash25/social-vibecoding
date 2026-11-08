@@ -32,7 +32,7 @@ test('PageFrame draws title, purpose and one primary action in that order', () =
   const body = html.indexOf('body');
   assert.ok(h1 > -1 && h1 < purpose && purpose < primary && primary < body, html);
   assert.match(html, /<h1[^>]*class="[^"]*text-\[28px\] md:text-\[36px\][^"]*font-bold[^"]*tracking-\[-0\.035em\]/);
-  assert.match(html, /<p[^>]*class="[^"]*text-\[17px\][^"]*text-\[color:var\(--mut\)\]/);
+  assert.match(html, /<p[^>]*class="[^"]*text-\[17px\][^"]*text-\[color:var\(--fr-mut\)\]/);
 });
 
 test('PageFrame without a purpose or a primary action draws neither', () => {
@@ -59,28 +59,28 @@ test('Group is a label over one glass surface', () => {
   const html = renderComponent(FRAME, 'Group', { label: 'Needs you', children: 'rows', id: 'g1' });
   assert.match(html, /<h2[^>]*>Needs you<\/h2>/);
   assert.match(html, /id="g1"/);
-  assert.match(html, /rounded-\[24px\] bg-\[color:var\(--surface\)\] \[backdrop-filter:var\(--glass-blur\)\] shadow-\[inset_0_0_0_1px_var\(--ring\),var\(--glow\)\]/);
+  assert.match(html, /rounded-\[24px\] bg-\[color:var\(--fr-surface\)\] \[backdrop-filter:var\(--fr-blur\)\] \[box-shadow:inset_0_0_0_1px_var\(--fr-ring\),var\(--fr-glow\)\]/);
   assert.ok(html.indexOf('Needs you') < html.indexOf('rows'));
 });
 
 test('PrimaryButton is the accent, QuietButton the surface', () => {
   assert.match(renderComponent(FRAME, 'PrimaryButton', { children: 'Vote' }),
-    /<button type="button" class="[^"]*rounded-full bg-\[color:var\(--acc\)\] text-\[color:var\(--acc-ink\)\]/);
+    /<button type="button" class="[^"]*rounded-full bg-\[color:var\(--fr-acc\)\] text-\[color:var\(--fr-acc-ink\)\]/);
   assert.match(renderComponent(FRAME, 'QuietButton', { children: 'Join' }),
-    /<button type="button" class="[^"]*bg-\[color:var\(--surface\)\] text-\[color:var\(--ink\)\] shadow-\[inset_0_0_0_1px_var\(--ring\)\]/);
+    /<button type="button" class="[^"]*bg-\[color:var\(--fr-surface\)\] text-\[color:var\(--fr-ink\)\] \[box-shadow:inset_0_0_0_1px_var\(--fr-ring\)\]/);
 });
 
 // ── status.tsx ───────────────────────────────────────────────────────────
 
 test('StatusPill colours by tone', () => {
   assert.match(renderComponent(STATUS, 'StatusPill', { tone: 'you', children: 'Vote' }),
-    /data-tone="you"[^>]*class="[^"]*bg-\[color:var\(--acc\)\] text-\[color:var\(--acc-ink\)\]/);
+    /data-tone="you"[^>]*class="[^"]*bg-\[color:var\(--fr-acc\)\] text-\[color:var\(--fr-acc-ink\)\]/);
   assert.match(renderComponent(STATUS, 'StatusPill', { tone: 'done', children: 'Live' }),
-    /data-tone="done"[^>]*class="[^"]*bg-\[color:var\(--ok-t\)\] text-\[color:var\(--ok\)\]/);
+    /data-tone="done"[^>]*class="[^"]*bg-\[color:var\(--fr-ok-t\)\] text-\[color:var\(--fr-ok\)\]/);
   assert.match(renderComponent(STATUS, 'StatusPill', { tone: 'waiting', children: 'Checks' }),
-    /data-tone="waiting"[^>]*class="[^"]*bg-\[color:var\(--wait-t\)\] text-\[color:var\(--wait\)\]/);
+    /data-tone="waiting"[^>]*class="[^"]*bg-\[color:var\(--fr-wait-t\)\] text-\[color:var\(--fr-wait\)\]/);
   assert.match(renderComponent(STATUS, 'StatusPill', { tone: 'problem', children: 'Failed' }),
-    /data-tone="problem"[^>]*class="[^"]*bg-\[color:var\(--bad-t\)\] text-\[color:var\(--bad\)\]/);
+    /data-tone="problem"[^>]*class="[^"]*bg-\[color:var\(--fr-bad-t\)\] text-\[color:var\(--fr-bad\)\]/);
   const none = renderComponent(STATUS, 'StatusPill', { tone: 'none', children: 'Joined' });
   assert.match(none, /data-tone="none"/);
   assert.doesNotMatch(none, /bg-\[/, 'a settled thing gets no fill');
@@ -130,4 +130,21 @@ test('the track words are catalog text', () => {
   for (const k of ['track.plan', 'track.build', 'track.checks', 'track.vote', 'track.live']) {
     assert.ok(en[k] && typeof en[k].text === 'string' && en[k].description, k);
   }
+});
+
+test('the pane and button shadows compile to box-shadow rules, never to a shadow colour', async () => {
+  // Tailwind 3.4 types `shadow-[inset_…,var(--x)]` as a COLOUR (the bare
+  // var() is not a parseable shadow) and emits no box-shadow at all, so the
+  // primitives use the arbitrary property, which is emitted verbatim.
+  const postcss = require('postcss');
+  const tailwind = require('tailwindcss');
+  const config = require('../tailwind.config.js');
+  const raw = read('frontend', '@', 'components', 'ui', 'frame.tsx') + read('frontend', '@', 'components', 'ui', 'status.tsx');
+  const css = (await postcss([tailwind({ ...config, content: [{ raw, extension: 'tsx' }] })])
+    .process('@tailwind utilities;', { from: undefined })).css;
+  assert.match(css, /box-shadow: inset 0 0 0 1px var\(--fr-ring\),var\(--fr-glow\)/);
+  assert.match(css, /box-shadow: inset 0 0 0 1px var\(--fr-ring\)(?!,)/, 'the quiet button: ring alone');
+  assert.doesNotMatch(css, /--tw-shadow-color: inset/, 'a shadow class read as a colour');
+  assert.match(css, /backdrop-filter: var\(--fr-blur\)/);
+  assert.match(css, /\[data-state="done"\]::?before/, 'the track\'s state variants compile');
 });

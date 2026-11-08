@@ -187,8 +187,8 @@ test('without backdrop-filter the surface is opaque', () => {
   const at = block.indexOf('@supports not (backdrop-filter: blur(1px))');
   assert.ok(at > 0, 'a fallback for browsers without backdrop-filter');
   const fallback = block.slice(at);
-  assert.match(fallback, /html\[data-skin="glass"\]\s*\{[^}]*--surface:\s*#fbfbfd/);
-  assert.match(fallback, /html\[data-skin="glass"\]\.dark\s*\{[^}]*--surface:\s*#171a2b/);
+  assert.match(fallback, /html\[data-skin="glass"\]\s*\{[^}]*--fr-surface:\s*#fbfbfd/);
+  assert.match(fallback, /html\[data-skin="glass"\]\.dark\s*\{[^}]*--fr-surface:\s*#171a2b/);
 });
 
 test('the token defaults come first, then the glass block, then the brand block last', () => {
@@ -198,10 +198,11 @@ test('the token defaults come first, then the glass block, then the brand block 
   const b = css.indexOf(BRAND_MARK);
   assert.ok(d > 0 && d < g && g < b, 'defaults < glass < brand');
   const defaults = css.slice(d, g);
-  for (const token of ['--surface:', '--ink:', '--mut:', '--acc:', '--acc-ink:', '--lit:', '--lit-t:', '--ok:', '--ok-t:', '--wait:', '--wait-t:', '--bad:', '--bad-t:', '--ring:', '--glow:', '--glass-blur:']) {
+  for (const token of ['--fr-surface:', '--fr-ink:', '--fr-mut:', '--fr-acc:', '--fr-acc-ink:', '--fr-lit:', '--fr-lit-t:', '--fr-ok:', '--fr-ok-t:', '--fr-wait:', '--fr-wait-t:', '--fr-bad:', '--fr-bad-t:', '--fr-ring:', '--fr-glow:', '--fr-blur:']) {
     assert.ok(defaults.includes(token), `${token} has a default for the standard look`);
   }
   assert.match(defaults, /\n\.dark\s*\{/, 'and dark defaults');
+  assert.match(defaults, /--fr-glow: 0 0 #0000;/, 'a no-op shadow, not `none`: `none` inside a comma list voids the whole box-shadow');
 });
 
 test('the glass look sets the typeface on the root, with a system fallback', () => {
@@ -238,4 +239,27 @@ test('useSkin subscribes through window.Skin.onChange after mount', () => {
   assert.match(src, /useEffect\(/);
   assert.match(src, /window\.Skin\?\.onChange\?\.\(/);
   assert.match(src, /useState<Skin>\('standard'\)/);
+});
+
+test('the frame tokens are namespaced, so no existing var(--x, fallback) changes meaning', () => {
+  // `--ring` was read as `var(--ring, currentColor)` by .platform-tab-ring:
+  // a bare name on :root would have silently replaced that fallback. Every
+  // token the frame declares carries the --fr- prefix, nothing else in the
+  // sheet declares one, and nothing reads one with a fallback.
+  const css = appCss();
+  const d = css.indexOf(DEFAULTS_MARK);
+  const b = css.indexOf(BRAND_MARK);
+  const mine = css.slice(d, b);
+  const declared = [...mine.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gm)].map((m) => m[1]);
+  const newOnes = declared.filter((t) => !/^--(text-|border|accent|lit-|dc-|app-sheet)/.test(t));
+  assert.ok(newOnes.length >= 16, 'the frame declares its tokens here');
+  for (const token of newOnes) assert.match(token, /^--fr-/, `${token} must be namespaced`);
+  const elsewhere = css.slice(0, d) + css.slice(b);
+  assert.doesNotMatch(elsewhere, /^\s*--fr-[a-z-]+\s*:/m, 'no --fr- token is declared outside the frame\'s own sections');
+  assert.doesNotMatch(css, /var\(--fr-[a-z-]+\s*,/, 'no reader relies on a fallback for a frame token');
+  for (const f of ['frontend/@/components/ui/frame.tsx', 'frontend/@/components/ui/status.tsx', 'frontend/src/features/home/glass/home-glass.tsx']) {
+    const src = read(...f.split('/'));
+    const bare = src.match(/var\(--(surface|sunk|ink|mut|faint|line|acc|acc-ink|acc-t|lit|lit-t|ok|ok-t|wait|wait-t|bad|bad-t|ring|glow|glass-blur)\)/g);
+    assert.equal(bare, null, `${f} reads an un-namespaced token: ${bare}`);
+  }
 });
