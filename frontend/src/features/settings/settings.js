@@ -3542,10 +3542,13 @@
     // applied the mask either, so the live value still reflects the
     // server truth. `??` (not `||`) so an explicit `false` from a
     // current-cache app.js wins over the fallback.
+    //
+    // The Glass look row in Experimental is gated the same way: an admin's
+    // preview of a look drawn screen by screen, hidden from everyone else
+    // until it is whole (the `?skin=glass` pin in the address stays open).
     _renderAdminSection() {
       const section = document.getElementById('settings-admin-section');
       const toggle = document.getElementById('view-as-non-admin');
-      if (!section || !toggle) return;
       // Read the bare `App` identifier rather than `window.App` —
       // app.js declares `App` with `const`, which does NOT write to
       // `window` in non-module browser scripts, so `window.App` is
@@ -3558,6 +3561,9 @@
       // app.js wins over the fallback.
       const realAdmin = (typeof App !== 'undefined' ? App._realIsAdmin : undefined)
         ?? (typeof App !== 'undefined' && !!App.user?.isAdmin);
+      const glassRow = document.getElementById('settings-glass-look-section');
+      if (glassRow) glassRow.classList.toggle('hidden', !realAdmin);
+      if (!section || !toggle) return;
       if (!realAdmin) {
         section.classList.add('hidden');
         return;

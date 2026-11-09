@@ -1348,8 +1348,8 @@
     "description": "Label of a switch in Settings, Experimental. When on, Homeroom is drawn as frosted glass panels floating on its wallpaper, with the Albert Sans typeface."
   },
   "experimental.glassLook.description": {
-    "text": "Try the glass look: translucent panels on Homeroom's wallpaper, the Albert Sans typeface, and one blue that only marks what waits for you. Light and dark. On for this browser.",
-    "description": "Explanation under the Glass look switch in Settings, Experimental. Albert Sans is the name of a typeface; keep it as is. Homeroom is the product name."
+    "text": "Try the glass look: translucent panels on Homeroom's wallpaper, the Albert Sans typeface, and one blue that only marks what waits for you. Light and dark. On for this browser. Only Home is drawn in it so far; admins see this switch while the rest is drawn.",
+    "description": "Explanation under the Glass look switch in Settings, Experimental, which only admins see while the look is being drawn. Albert Sans is the name of a typeface; keep it as is. Homeroom is the product name."
   },
   "experimental.localAgents.title": {
     "text": "Local coding agent",

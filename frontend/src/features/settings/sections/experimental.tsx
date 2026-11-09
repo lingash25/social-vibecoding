@@ -47,6 +47,13 @@ import { LocalAgentsList } from '../local-agents-list';
  * The look is "Baseplate" (request #6278): white cards on a light warm grey
  * plate, sun yellow for what needs you, ink for where you are.
  *
+ * Glass look (default OFF, the same device store, data-skin="glass") is an
+ * admin's preview while the look is drawn screen by screen: its row
+ * #settings-glass-look-section ships hidden and settings.js
+ * _renderAdminSection lifts the class only for a REAL admin
+ * (App._realIsAdmin), as it does for the admin-preview section. The
+ * `?skin=glass` pin in the address still works for anyone who knows it.
+ *
  * #907 Local coding agent lives in the same pane (not the CLI section) because
  * it is a preview of the same feature the dev chat's "Run on" selector
  * exposes, and because a lease is NOT a credential: revoking a CLI token is a
@@ -91,7 +98,7 @@ export function ExperimentalSection() {
             {t('settings:experimental.newLook.description')}
           </p>
         </div>
-        <div className="mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
+        <div id="settings-glass-look-section" className="hidden mt-6 pt-6 border-t border-zinc-200 dark:border-zinc-800">
           <SwitchRow id="glass-look-enabled">
             {t('settings:experimental.glassLook.label')}
           </SwitchRow>

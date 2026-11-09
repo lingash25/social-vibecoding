@@ -102,6 +102,27 @@ test('Settings › Experimental carries the Glass look switch under New look', (
   assert.match(src, /settings:experimental\.glassLook\.description/);
 });
 
+// An admin's preview while the look is drawn screen by screen: the row
+// ships hidden and settings.js lifts the class only for a REAL admin, from
+// the same reading of App._realIsAdmin that shows "view as non-admin".
+test('the Glass look row ships hidden, for the admin gate to lift', () => {
+  const src = experimentalSrc();
+  const row = src.match(/<div id="settings-glass-look-section"[^>]*>/);
+  assert.ok(row, 'the glass switch has its own gated wrapper');
+  assert.match(row[0], /className="hidden /);
+  assert.ok(src.indexOf('settings-glass-look-section') < src.indexOf('id="glass-look-enabled"'), 'the wrapper holds the switch');
+});
+
+test('settings.js shows the Glass look row only to a real admin', () => {
+  const src = settingsJs();
+  const start = src.indexOf('_renderAdminSection() {');
+  assert.ok(start > 0);
+  const body = src.slice(start, src.indexOf('\n    },', start));
+  assert.match(body, /getElementById\('settings-glass-look-section'\)/);
+  assert.match(body, /App\._realIsAdmin/, 'the un-masked value, as the admin preview reads it');
+  assert.match(body, /classList\.toggle\('hidden', !realAdmin\)/, 'hidden unless the viewer is really an admin');
+});
+
 test('settings.js saves and paints the glass switch through window.Skin', () => {
   const src = settingsJs();
   assert.match(src, /getElementById\('glass-look-enabled'\)/);
