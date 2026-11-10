@@ -40,14 +40,22 @@ const { SCREEN_USAGE_EVENT_TYPES } = leftOut;
 
 /**
  * Whether this account's screen usage data is recorded: true unless the
- * person objected. An unreadable list answers as journey-left-out's
- * hasObjected does; a bad id is never recorded.
+ * person objected. This is the one gate between an objection and a write,
+ * so it fails closed: a list that cannot be read (journey-left-out's
+ * idsByReason answers null, or throws) records nobody until the next read,
+ * which costs a few seconds of optional data and never records an objector.
+ * A bad id is never recorded.
  */
 async function recordsUsage(pool, userId) {
   const id = Number(userId);
   if (!Number.isSafeInteger(id) || id <= 0) return false;
   try {
-    return !(await leftOut.hasObjected(pool, id));
+    const ids = await leftOut.idsByReason(pool);
+    if (!ids) {
+      log.warn('usage-analytics', 'The left-out list could not be read: recording nothing', { userId: id });
+      return false;
+    }
+    return !ids.objected.has(id);
   } catch (err) {
     log.warn('usage-analytics', 'Could not read whether the person objected', { userId: id, err: err && err.message });
     return false;

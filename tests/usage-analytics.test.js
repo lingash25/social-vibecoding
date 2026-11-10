@@ -62,6 +62,10 @@ test('screen usage data is recorded for everyone but who objected', async () => 
   assert.equal(await usageAnalytics.recordsUsage(pool, 3), true, 'a test account on the list is still recorded');
   assert.equal(await usageAnalytics.recordsUsage(pool, null), false, 'signed out');
   assert.equal(await usageAnalytics.recordsUsage(pool, 'x'), false);
+  // The one gate between an objection and a write fails closed: a list that
+  // cannot be read records nobody, rather than recording an objector.
+  const down = { calls: [], async query() { throw new Error('connection refused'); } };
+  assert.equal(await usageAnalytics.recordsUsage(down, 1), false, 'an unreadable list records nobody');
   const src = read('src/services/usage-analytics.js');
   assert.doesNotMatch(src, /usage_analytics FROM users|usage_left_out_at/, "no per-person switch is read: #5593's column is not");
   assert.equal(exists('src/db/migrations/usage-left-out.sql'), false, 'and no column for one is added');
