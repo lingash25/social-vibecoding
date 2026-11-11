@@ -167,7 +167,7 @@ export function GrantsListView({ phase, grants }: GrantsState) {
   if (phase === 'loading') return <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('core:common.loading')}</p>;
   if (phase === 'error') return <p className="text-xs text-red-700 dark:text-red-400">{t('settings:grants.loadFailed')}</p>;
   if (!grants.length) {
-    return <p className="text-xs text-zinc-500 dark:text-zinc-500">{t('settings:grants.empty')}</p>;
+    return <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('settings:grants.empty')}</p>;
   }
   return (
     <>

@@ -2194,7 +2194,31 @@ test('the permissions list renders its host states, and idle draws nothing', () 
     true, 'and the prerendered document agrees');
   assert.match(grantRows({ phase: 'loading', grants: [] }), /Loading…/);
   assert.match(grantRows({ phase: 'error', grants: [] }), /Failed to load app permissions\./);
-  assert.match(grantRows({ phase: 'ready', grants: [] }), /No apps have asked to use AI yet\./);
+  assert.match(grantRows({ phase: 'ready', grants: [] }), /No apps can use AI on your behalf yet\. When you let an app use AI, it appears here with its spending cap, and you can revoke it at any time\./);
+});
+
+test('App permissions reads in the muted ink and its empty lists say what will appear (#6512)', () => {
+  // zinc-500 on the dark page is 3.5:1; a list row's subtitle and the privacy
+  // blurbs already step to zinc-400 in dark, and this privacy page does too.
+  for (const [file, key] of [
+    ['frontend/src/features/settings/sections/app-permissions.tsx', 'appPermissions'],
+    ['frontend/src/features/settings/sections/app-ai.tsx', 'grants'],
+    ['frontend/src/features/settings/sections/blocked-apps.tsx', 'blockedApps'],
+  ]) {
+    assert.ok(read(file).includes(`<SectionHeading title={t('settings:${key}.title')} blurbClassName="dark:text-zinc-400">`),
+      `${key}'s explanation is the muted ink, not the faint one`);
+  }
+  const lists = {
+    appPermissions: read('frontend/src/features/settings/app-permissions-list.tsx'),
+    grants: read('frontend/src/features/settings/grants-list.tsx'),
+    blockedApps: read('frontend/src/features/settings/sections/blocked-apps.tsx'),
+  };
+  for (const [key, src] of Object.entries(lists)) {
+    assert.match(src, new RegExp(`<p className="text-sm text-zinc-500 dark:text-zinc-400">\\s*\\{t\\('settings:${key}\\.empty'\\)\\}`),
+      `${key}'s empty line is one style across the page`);
+    assert.match(message(`settings:${key}.empty`), /appears here.*(revoke|unblock) it at any time\./,
+      `${key}'s empty line says what will appear and that it can be undone`);
+  }
 });
 
 test('a revoked app permission offers Re-enable; an active one offers Revoke (#1957)', () => {

@@ -25,7 +25,7 @@ export function AppPermissionsSection() {
   return (
     <div data-settings-section="app-permissions" className="hidden">
       <div id="app-permissions-section">
-        <SectionHeading title={t('settings:appPermissions.title')}>
+        <SectionHeading title={t('settings:appPermissions.title')} blurbClassName="dark:text-zinc-400">
           {t('settings:appPermissions.intro')}
         </SectionHeading>
         <div id="app-permissions-list" className="space-y-2">

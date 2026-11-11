@@ -656,8 +656,8 @@
     "description": "Error shown in place of the list in Settings > App AI permissions when it could not be loaded."
   },
   "grants.empty": {
-    "text": "No apps have asked to use AI yet.",
-    "description": "Shown in place of the list in Settings > App AI permissions when no app has ever asked for permission."
+    "text": "No apps can use AI on your behalf yet. When you let an app use AI, it appears here with its spending cap, and you can revoke it at any time.",
+    "description": "Shown in place of the list in Settings > App AI permissions when no app has ever been allowed to use AI: says what will appear here and that it can be revoked."
   },
   "grants.revoked": {
     "text": "Revoked",
@@ -1936,8 +1936,8 @@
     "description": "Error in Settings > App device permissions when the list could not be fetched."
   },
   "appPermissions.empty": {
-    "text": "No app has asked for your camera, microphone, location or devices yet.",
-    "description": "Shown in Settings > App device permissions when no app has been granted anything."
+    "text": "No apps can use your camera, microphone, location, screen or devices yet. When you allow an app one of these, it appears here and you can revoke it at any time.",
+    "description": "Shown in Settings > App device permissions when no app has been granted anything: says what will appear here and that it can be revoked."
   },
   "appPermissions.reEnable": {
     "text": "Re-enable",
@@ -1964,8 +1964,8 @@
     "description": "Error in Settings > Blocked apps when the list could not be fetched and the server gave no reason."
   },
   "blockedApps.empty": {
-    "text": "You haven’t blocked any apps.",
-    "description": "Shown in Settings > Blocked apps when the list is empty."
+    "text": "You haven’t blocked any apps. An app you block appears here, and you can unblock it at any time.",
+    "description": "Shown in Settings > Blocked apps when the list is empty: says what will appear here and that it can be undone."
   },
   "blockedApps.unblock": {
     "text": "Unblock",
@@ -2000,8 +2000,36 @@
     "description": "Heading of the page in Settings that explains the places in Homeroom and how a change gets voted in."
   },
   "guide.intro": {
-    "text": "Where things are in Homeroom, and how a change goes live.",
+    "text": "How to start, where things are in Homeroom, and how a change goes live.",
     "description": "Explanation under the User guide heading in Settings."
+  },
+  "guide.start.heading": {
+    "text": "Start here",
+    "description": "Small label over the first card of Settings > User guide: the first steps for someone new to Homeroom, in order."
+  },
+  "guide.start.join.title": {
+    "text": "Join or make a community",
+    "description": "Row title in Settings > User guide: the first step for someone new."
+  },
+  "guide.start.join.body": {
+    "text": "On Home, Communities to join lists the public ones: open one and join it. To make your own, select New community under Pinned communities.",
+    "description": "Paragraph in Settings > User guide. \"Communities to join\", \"New community\" and \"Pinned communities\" are names shown on the Home screen."
+  },
+  "guide.start.open.title": {
+    "text": "Open an app and its Homeroom menu",
+    "description": "Row title in Settings > User guide: the second step for someone new."
+  },
+  "guide.start.open.body": {
+    "text": "Open a community's hub and select Open app, or select an app under Pinned apps on Home. Inside it, select the Homeroom logo to open its menu.",
+    "description": "Paragraph in Settings > User guide. \"Open app\" is a button on a community's hub; \"Pinned apps\" is the name of a section of the Home screen."
+  },
+  "guide.start.suggest.title": {
+    "text": "Suggest your first improvement",
+    "description": "Row title in Settings > User guide: the third step for someone new."
+  },
+  "guide.start.suggest.body": {
+    "text": "In that menu, select Suggest an improvement. Tap the part of the page you mean and say what should change. It is posted as a request on the project's Workshop.",
+    "description": "Paragraph in Settings > User guide. \"Suggest an improvement\" is the name of the button in the Homeroom menu."
   },
   "guide.places.heading": {
     "text": "Where things are",
@@ -2009,19 +2037,19 @@
   },
   "guide.place.communities.title": {
     "text": "Communities",
-    "description": "Row title in Settings > User guide, about communities and the Communities tab. Same word as the tab."
+    "description": "Row title in Settings > User guide, about communities."
   },
   "guide.place.communities.body": {
-    "text": "A community is the people behind a project. It shows as Just you, Private community or Public community, depending on who it is for. The Communities tab takes you to yours, each with a hub, a Workshop for the work going on, and channels to talk in. Joining a community is what lets you propose changes, vote and post there.",
-    "description": "Paragraph in Settings > User guide. \"Just you\", \"Private community\" and \"Public community\" are the names shown on screen for who a community is for. \"Workshop\" is the name of a place on a project's page."
+    "text": "A community is the people behind a project. It shows as Just you, Private community or Public community, depending on who can open it. Yours are on Home, under Pinned communities and All communities. Each has a hub, a Workshop for the work going on, and channels to talk in. You need to join a community to suggest changes, vote and post there.",
+    "description": "Paragraph in Settings > User guide. \"Just you\", \"Private community\" and \"Public community\" are the names shown on screen for who a community is for. \"Pinned communities\" and \"All communities\" are names shown on the Home screen. \"Workshop\" is the name of a place on a project's page."
   },
   "guide.place.apps.title": {
     "text": "Pinned apps",
     "description": "Row title in Settings > User guide, about the Pinned apps section of the home screen. Same words as that section's heading."
   },
   "guide.place.apps.body": {
-    "text": "Home lists the apps from your communities under Pinned apps. Select one to open it. + New project starts your own: it asks what the app should do and what to call it, then makes a private community you can invite people to.",
-    "description": "Paragraph in Settings > User guide. \"+ New project\" is the tile on the home screen that starts a project."
+    "text": "Pinned apps on Home holds the apps you pin and the ones you help build. Select one to open it. To start your own project, select New community: it asks what the app should do and what to call it, then makes it, just for you until you invite people.",
+    "description": "Paragraph in Settings > User guide. \"Pinned apps\" is a section of the Home screen; \"New community\" is the tile on Home that starts a project."
   },
   "guide.place.appMenu.title": {
     "text": "The Homeroom menu",
@@ -2036,15 +2064,15 @@
     "description": "Row title in Settings > User guide. Same words as the button in the Homeroom menu."
   },
   "guide.place.suggest.body": {
-    "text": "Use this button in the Homeroom menu to ask for a change to any of your apps or to Homeroom itself. You can start building it, or share a request for someone in the community to pick up.",
-    "description": "Paragraph in Settings > User guide. \"This button\" is Suggest an improvement, named by the row title above it."
+    "text": "Select it in the Homeroom menu to ask for a change to the app or to Homeroom itself. Tap the spot on the page you mean and say what should change, or switch to the form. It is posted as a request on the project's Workshop.",
+    "description": "Paragraph in Settings > User guide. \"It\" is Suggest an improvement, named by the row title above it. \"The form\" is the written form the button can switch to."
   },
   "guide.place.bot.title": {
     "text": "Homeroom bot",
     "description": "Row title in Settings > User guide, about the AI assistant. The bot's own name."
   },
   "guide.place.bot.body": {
-    "text": "Homeroom bot is your AI assistant: ask it to build a change, file an idea or fix a bug. It has its own tab, with Main Chat as the first row. Messages is a separate tab, for your conversations with people.",
+    "text": "Homeroom bot is your AI assistant: ask it a question, have it build a change, file an idea or fix a bug. It has its own tab. Main Chat is the first row there, and under it is the work you are part of across your projects. Messages is a separate tab, for your conversations with people.",
     "description": "Paragraph in Settings > User guide. \"Main Chat\" is the name of the person's main chat with the bot. \"Messages\" is the name of a tab."
   },
   "guide.place.you.title": {
@@ -2056,8 +2084,16 @@
     "description": "Paragraph in Settings > User guide. \"You\" is the name of a tab."
   },
   "guide.vote.heading": {
-    "text": "How a change gets voted in",
-    "description": "Small label over the card of Settings > User guide that explains, in four rows, how a change to an app goes live."
+    "text": "How a change goes live",
+    "description": "Small label over the card of Settings > User guide that explains, in five rows, how a change to an app goes live."
+  },
+  "guide.vote.request.title": {
+    "text": "It starts as a request",
+    "description": "Row title in Settings > User guide: the first step of how a change goes live."
+  },
+  "guide.vote.request.body": {
+    "text": "A member asks for a change, with Suggest an improvement or by telling Homeroom bot. The request goes on the project's Workshop, where people can see it.",
+    "description": "Paragraph in Settings > User guide. \"Workshop\" is the name of a place on a project's page."
   },
   "guide.vote.build.title": {
     "text": "Someone builds it",
@@ -2072,8 +2108,8 @@
     "description": "Row title in Settings > User guide: the second step of how a change goes live."
   },
   "guide.vote.up.body": {
-    "text": "When it is ready, the change goes up for a vote with a preview you can try. If it is waiting on you, it shows under Needs you in the Communities tab.",
-    "description": "Paragraph in Settings > User guide. \"Needs you\" is the name of a list on the Communities tab of decisions waiting on the person."
+    "text": "When it is ready, the change goes up for a vote with a preview you can try. If it is waiting on you, it is listed under Needs you.",
+    "description": "Paragraph in Settings > User guide. \"Needs you\" is the name of the list of things waiting on the person."
   },
   "guide.vote.checks.title": {
     "text": "Checks test it",
@@ -2090,6 +2126,138 @@
   "guide.vote.rule.body": {
     "text": "Each project has its own rule for who has to say yes: one person's yes can be enough, or it can take most of the group. Whoever manages a project can propose a new rule from Settings & rules in its ⋯ menu, and that goes to a vote under the current rule. Once the rule is met and the checks pass, the change goes live.",
     "description": "Paragraph in Settings > User guide. \"Settings & rules\" is the name of a row in a project's ⋯ menu."
+  },
+  "guide.compare.heading": {
+    "text": "Suggest, or ask Homeroom bot?",
+    "description": "Small label over a card of Settings > User guide that says when to use Suggest an improvement and when to ask Homeroom bot."
+  },
+  "guide.compare.suggest.title": {
+    "text": "When you can point at it",
+    "description": "Row title in Settings > User guide: the case for Suggest an improvement."
+  },
+  "guide.compare.suggest.body": {
+    "text": "Use Suggest an improvement when you can see what should change. Tap it on the page and say how. It goes straight to the project as a request.",
+    "description": "Paragraph in Settings > User guide. \"Suggest an improvement\" is the name of the button in the Homeroom menu."
+  },
+  "guide.compare.bot.title": {
+    "text": "When you want to talk it through",
+    "description": "Row title in Settings > User guide: the case for asking Homeroom bot."
+  },
+  "guide.compare.bot.body": {
+    "text": "Ask Homeroom bot when you have a question, want a change built, or are not sure yet what to ask for. It can file the request for you.",
+    "description": "Paragraph in Settings > User guide. \"Homeroom bot\" is the AI assistant's name."
+  },
+  "guide.terms.heading": {
+    "text": "Key terms",
+    "description": "Small label over the card of Settings > User guide that explains words Homeroom uses, one per row."
+  },
+  "guide.term.hub.title": {
+    "text": "Hub",
+    "description": "Row title in Settings > User guide: the name of a community's front page. Same word as on screen."
+  },
+  "guide.term.hub.body": {
+    "text": "A community's front page: who it is for, who was active this week, what needs you and what went live lately.",
+    "description": "Paragraph in Settings > User guide, explaining the word \"Hub\"."
+  },
+  "guide.term.workshop.title": {
+    "text": "Workshop",
+    "description": "Row title in Settings > User guide: the name of a place on a project's page. Same word as on screen."
+  },
+  "guide.term.workshop.body": {
+    "text": "Where a project's work is: the requests, the changes being built and the ones waiting for a vote.",
+    "description": "Paragraph in Settings > User guide, explaining the word \"Workshop\"."
+  },
+  "guide.term.channels.title": {
+    "text": "Channels",
+    "description": "Row title in Settings > User guide: the places on a project's page where members talk. Same word as on screen."
+  },
+  "guide.term.channels.body": {
+    "text": "Where a community's members talk: #general, plus one for each topic the project has.",
+    "description": "Paragraph in Settings > User guide, explaining the word \"Channels\". \"#general\" is the name of a channel; keep it as it is."
+  },
+  "guide.term.needsYou.title": {
+    "text": "Needs you",
+    "description": "Row title in Settings > User guide: the name of the list of decisions waiting on the person. Same words as on screen."
+  },
+  "guide.term.needsYou.body": {
+    "text": "Everything waiting on you, such as a vote or a question from Homeroom bot. Home shows a shortcut to it while a vote waits, and each project's page has its own.",
+    "description": "Paragraph in Settings > User guide, explaining \"Needs you\"."
+  },
+  "guide.term.mainChat.title": {
+    "text": "Main Chat",
+    "description": "Row title in Settings > User guide: the name of the person's main chat with Homeroom bot. Same words as on screen."
+  },
+  "guide.term.mainChat.body": {
+    "text": "Your own chat with Homeroom bot, the first row of its tab. News about a request is on the request's page instead.",
+    "description": "Paragraph in Settings > User guide, explaining \"Main Chat\"."
+  },
+  "guide.term.justYou.title": {
+    "text": "Just you",
+    "description": "Row title in Settings > User guide: the name shown for a project only its maker is in. Same words as on screen."
+  },
+  "guide.term.justYou.body": {
+    "text": "A project only you are in. Once someone you invite joins, it becomes a Private community.",
+    "description": "Paragraph in Settings > User guide, explaining \"Just you\". \"Private community\" is a name shown on screen."
+  },
+  "guide.term.private.title": {
+    "text": "Private community",
+    "description": "Row title in Settings > User guide: the name shown for a community only its members can open. Same words as on screen."
+  },
+  "guide.term.private.body": {
+    "text": "Only its members can open it. People join when they are invited.",
+    "description": "Paragraph in Settings > User guide, explaining \"Private community\"."
+  },
+  "guide.term.public.title": {
+    "text": "Public community",
+    "description": "Row title in Settings > User guide: the name shown for a community anyone can open. Same words as on screen."
+  },
+  "guide.term.public.body": {
+    "text": "Anyone can open it and join it.",
+    "description": "Paragraph in Settings > User guide, explaining \"Public community\". \"Open\" and \"join\" are verbs."
+  },
+  "guide.faq.heading": {
+    "text": "Questions",
+    "description": "Small label over the card of Settings > User guide that answers common questions, one per row."
+  },
+  "guide.faq.findApp.title": {
+    "text": "I can't find my app",
+    "description": "Row title in Settings > User guide: a question a person might ask."
+  },
+  "guide.faq.findApp.body": {
+    "text": "Pinned apps holds the apps you pin or help build. For any other app, open its community from Home, under Pinned communities or All communities, and select Open app on its hub. To keep it on Home, open the About entry in its Homeroom menu and choose Pin to Home.",
+    "description": "Paragraph in Settings > User guide. \"Pinned apps\", \"Pinned communities\" and \"All communities\" are names on the Home screen; \"Open app\" and \"Pin to Home\" are the names of buttons. \"The About entry\" is the row of the Homeroom menu that tells about the app."
+  },
+  "guide.faq.suggestion.title": {
+    "text": "My suggestion isn't showing",
+    "description": "Row title in Settings > User guide: a question a person might ask about a request they posted."
+  },
+  "guide.faq.suggestion.body": {
+    "text": "Your requests are listed in the Homeroom bot tab. A request is posted only once you are online and send it. A private request can be seen only by platform admins.",
+    "description": "Paragraph in Settings > User guide. \"Homeroom bot\" is the name of a tab."
+  },
+  "guide.faq.whoCan.title": {
+    "text": "Who can suggest, vote and post",
+    "description": "Row title in Settings > User guide: a question about who may take part in a community."
+  },
+  "guide.faq.whoCan.body": {
+    "text": "You need to be a member of the community, and a project can ask for more: some let only invited people build, and a vote on a public project may need a verified account. Anyone can read a public community. A private community is joined by invitation. Which yeses a change needs is the project's own rule.",
+    "description": "Paragraph in Settings > User guide. \"Yeses\" are approving votes."
+  },
+  "guide.faq.shortcuts.title": {
+    "text": "Keyboard shortcuts",
+    "description": "Row title in Settings > User guide."
+  },
+  "guide.faq.shortcuts.body": {
+    "text": "On a computer, press C on most screens, or inside an app, to comment on what you see. Your comments are posted as requests, each pinned to the spot you chose. Press C again to stop. In Settings, press / or Ctrl+K (⌘K on a Mac) to find a setting.",
+    "description": "Paragraph in Settings > User guide. C, /, Ctrl+K and ⌘K are keys; keep them as they are."
+  },
+  "guide.faq.problem.title": {
+    "text": "Something is broken",
+    "description": "Row title in Settings > User guide: how to report a problem."
+  },
+  "guide.faq.problem.body": {
+    "text": "Use Suggest an improvement and say what went wrong. Its form asks where it should go: this app, or the platform itself. You can also tell Homeroom bot.",
+    "description": "Paragraph in Settings > User guide. \"Suggest an improvement\" is the name of the button in the Homeroom menu."
   },
   "about.title": {
     "text": "About",

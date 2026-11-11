@@ -47,7 +47,7 @@ function BlockedAppsList() {
   }
   return <div ref={host} className="mt-4 space-y-3">
     {apps === null && !error ? <p className="text-sm text-zinc-500">{t('settings:blockedApps.loading')}</p> : null}
-    {apps?.length === 0 ? <p className="text-sm text-zinc-500">{t('settings:blockedApps.empty')}</p> : null}
+    {apps?.length === 0 ? <p className="text-sm text-zinc-500 dark:text-zinc-400">{t('settings:blockedApps.empty')}</p> : null}
     {apps?.map(app => <div key={app.slug} className="flex items-center justify-between gap-3 rounded-lg bg-zinc-500/5 p-3">
       <span className="min-w-0 break-words">{app.name}</span>
       <Button type="button" layout="shrink" disabled={!!busy} onClick={() => void unblock(app)}>{busy === app.slug ? t('settings:blockedApps.unblocking') : t('settings:blockedApps.unblock')}</Button>
@@ -59,7 +59,7 @@ function BlockedAppsList() {
 export function BlockedAppsSection() {
   const t = useMessages('settings');
   return <div data-settings-section="blocked-apps" className="hidden">
-    <SectionHeading title={t('settings:blockedApps.title')}>{t('settings:blockedApps.intro')}</SectionHeading>
+    <SectionHeading title={t('settings:blockedApps.title')} blurbClassName="dark:text-zinc-400">{t('settings:blockedApps.intro')}</SectionHeading>
     <BlockedAppsList />
   </div>;
 }

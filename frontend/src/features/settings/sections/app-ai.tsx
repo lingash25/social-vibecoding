@@ -20,7 +20,7 @@ export function AppAiSection() {
   return (
     <div data-settings-section="app-ai" className="hidden">
       <div id="llm-grants-section">
-        <SectionHeading title={t('settings:grants.title')}>
+        <SectionHeading title={t('settings:grants.title')} blurbClassName="dark:text-zinc-400">
           {t('settings:grants.intro')}
         </SectionHeading>
         <div id="llm-grants-list" className="space-y-2">
