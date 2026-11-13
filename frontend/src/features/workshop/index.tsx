@@ -42,6 +42,7 @@ import { useRef } from 'react';
 import { flushSync } from 'react-dom';
 
 import { useStoreState } from '../../lib/use-store-state';
+import { sharedJson } from '../../lib/shared-read';
 import { useVisibilityHiddenClass } from '../../lib/visibility-store';
 import { withoutClosedVote } from '../../lib/work-state';
 import { WORK_CHANGED_EVENT } from '../messages/bot-shared';
@@ -212,7 +213,11 @@ function demoQuery(): string {
 /** The counts read: handed to the one count of votes waiting (#5296). */
 async function takeCountsFrom(res: Response | null): Promise<void> {
   if (!res || !res.ok) return;
-  const data = await res.json().catch(() => null);
+  takeCountsBody(await res.json().catch(() => null));
+}
+
+/** The same, from an answer already parsed. Read only: it may be shared. */
+function takeCountsBody(data: any): void {
   if (data && data.counts && typeof data.counts === 'object') takeCounts(data.counts);
 }
 
@@ -320,11 +325,23 @@ export const workshopController = {
     const opts = fresh ? { cache: 'no-cache' as const } : undefined;
     let read: { feed: NeedsFeedItem[]; capped: boolean } | null = null;
     try {
-      const [countsRes, feedRes] = await Promise.all([
-        fetch(`/api/workshop/counts${demo}`, opts).catch(() => null),
+      // THE FIRST ENTRY'S COUNTS ARE THE COMMUNITY LIST'S READ TOO (#6591).
+      // On a page load that lands here the scope asks the same address in
+      // the same moment (./community-scope.ts loadCommunities, from the
+      // sidebar and the tab bar), and each sent its own. This read says
+      // nothing new happened, so it takes a request already on its way, or
+      // lends its own (lib/shared-read.ts: in flight only, nothing kept).
+      // A re-entry may follow a vote, so it asks the server itself, as
+      // refreshNeeds() does, and so does the feed either way.
+      const countsRead: Promise<unknown> = fresh
+        ? fetch(`/api/workshop/counts${demo}`, opts)
+          .then((res) => (res.ok ? res.json() : null))
+        : sharedJson(`/api/workshop/counts${demo}`);
+      const [countsBody, feedRes] = await Promise.all([
+        countsRead.catch(() => null),
         fetch(`/api/workshop/needs-feed${demo}`, opts).catch(() => null),
       ]);
-      await takeCountsFrom(countsRes);
+      takeCountsBody(countsBody);
       read = await feedFrom(feedRes);
     } catch {
       // The feed says it could not load, and offers the read again.
