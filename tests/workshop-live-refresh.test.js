@@ -63,8 +63,13 @@ test('#5164, #5462: the quiet reads and re-entry ask for the current answer, not
     'the conditional is the one spelling, shared by both reads');
   // The FIRST paint stays a boot read: opts is undefined there, so the fast
   // lane #5164 kept for the cold start is untouched.
-  assert.match(workshopTsx, /fetch\(`\/api\/workshop\/counts\$\{demo\}`, opts\)\.catch/,
-    'reload() passes the conditional mode to the counts read');
+  // #6591: the first entry's counts read shares a request already on its
+  // way (lib/shared-read.ts), which keeps the boot lane; a re-entry sends
+  // its own with the conditional mode.
+  assert.match(workshopTsx, /const countsRead: Promise<unknown> = fresh\s*\? fetch\(`\/api\/workshop\/counts\$\{demo\}`, opts\)/,
+    'reload() passes the conditional mode to a re-entry\'s counts read');
+  assert.match(workshopTsx, /: sharedJson\(`\/api\/workshop\/counts\$\{demo\}`\);/,
+    'and the first entry shares the read, asking for no fresh copy');
   assert.match(workshopTsx, /fetch\(`\/api\/workshop\/needs-feed\$\{demo\}`, opts\)\.catch/,
     'and to the Needs you feed with it');
 });
