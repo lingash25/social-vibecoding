@@ -20,7 +20,8 @@
 // or whose diff could not be loaded. It used to hold, and nearly every time
 // the reason was a rebuilt bundle committed beside a few lines of source, so
 // an admin was put in front of changes that carried nothing. The admins are
-// still told, once, by the same bell row and mail, which say it is not held;
+// still told, once for each version, by the same bell row and mail, which
+// say it is not held;
 // the change goes live on its votes and checks like any other. Such a change
 // has a 'notice' row, which no gate reads. When a rule that holds trips on
 // the same change, it is held as before and `unread` is one of its reasons.
@@ -345,12 +346,16 @@ async function apply(pool, { sessionId, appId, commitHash, rules }) {
       return { state: rowCount ? 'fixed' : 'clear', rules: [] };
     }
     // Only rules that tell: one 'notice' row per change, which no gate
-    // reads. A later version keeps the row, so the admins are told once.
+    // reads. A later version keeps the row and is told about again: being
+    // told of one version says nothing about the next, which nobody read
+    // in full either.
     const { rows: [notice] } = await pool.query(
       `INSERT INTO release_holds (app_id, session_id, head_sha, rules, status)
        VALUES ($1, $2, $3, $4::text[], 'notice')
        ON CONFLICT (session_id) WHERE status = 'notice'
-       DO UPDATE SET head_sha = EXCLUDED.head_sha, rules = EXCLUDED.rules
+       DO UPDATE SET head_sha = EXCLUDED.head_sha, rules = EXCLUDED.rules,
+                     notified_at = CASE WHEN release_holds.head_sha IS DISTINCT FROM EXCLUDED.head_sha
+                                        THEN NULL ELSE release_holds.notified_at END
        RETURNING id, (xmax = 0) AS opened`, [appId, sessionId, head, rules]);
     if (notice?.opened) log.info('release-holds', 'Admins will be told about a change, which is not held', { sessionId, rules });
     return { state: 'notice', rules, id: notice ? Number(notice.id) : null, opened: !!notice?.opened };

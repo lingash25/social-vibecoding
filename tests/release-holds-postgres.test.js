@@ -141,6 +141,12 @@ test('a held change against the full schema', async (t) => {
   assert.deepEqual([sameNotice.id, sameNotice.opened], [noticed.id, false], 'one notice per change');
   assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 2 });
   assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 0 }, 'told once');
+  // The same version read again tells nobody; a new one that is still not
+  // read in full does, since being told of one says nothing about the next.
+  await holds.apply(pool, { sessionId: big, appId, commitHash: 'f'.repeat(40), rules: ['unread'] });
+  assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 0 });
+  await holds.apply(pool, { sessionId: big, appId, commitHash: '9'.repeat(40), rules: ['unread'] });
+  assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 2 }, 'a new version is told about again');
   const told = (await pool.query(
     `SELECT DISTINCT detail FROM notifications WHERE kind = 'release_hold' AND session_id = $1`, [big])).rows;
   assert.deepEqual(told, [{ detail: 'notice:unread' }]);
