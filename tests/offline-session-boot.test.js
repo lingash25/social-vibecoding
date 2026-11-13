@@ -422,12 +422,73 @@ test('every boot path settles the published read', () => {
 test('Settings no longer opens the boot read a second time', () => {
   // The whole point: exactly one place in settings.js may reach for
   // /api/auth/me at boot, and it is the fallback inside _readMe.
+  // Any quote: the CLI-credentials gate's own read was spelled with a plain
+  // one, which the backtick this looked for let through (#6591).
   const body = SETTINGS.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  const reads = body.match(/fetch\(`?\/api\/auth\/me/g) || [];
+  const reads = body.match(/fetch\([`'"]?\/api\/auth\/me/g) || [];
   assert.equal(reads.length, 1,
     `settings.js reaches for /api/auth/me ${reads.length} times; only _readMe's fallback may`);
   assert.match(body, /const j = await this\._readMe\(meDemoQ\);/,
     'refresh() goes through the join rather than fetching directly');
+});
+
+// ── Opening Settings asks nobody who the viewer is (#6591) ───────────────
+//
+// _renderAllSections reaches the CLI-credentials gate in the same tick as
+// init()'s refresh(), before refresh() has primed the gate's memo. The gate
+// sent its own GET /api/auth/me then: a second one beside the boot's on a
+// page load that opens Settings, and two at once where the boot read never
+// landed.
+
+test('the CLI gate takes the boot session\'s answer and sends no request', async () => {
+  const s = loadSettings({ boot: { user: { cliAuthEnabled: false } } });
+  // The order Settings.open() runs them in: refresh() first, the gate before
+  // refresh() has resumed.
+  const refreshed = s.Settings.refresh();
+  const gate = s.Settings._cliAuthAvailable();
+  assert.equal(await gate, false, 'the surface is off where the session says so');
+  await refreshed;
+  assert.deepEqual(s.calls, [], 'opening Settings does not read /api/auth/me again');
+  assert.equal(await s.Settings._cliAuthAvailable(), false);
+  assert.deepEqual(s.calls, []);
+});
+
+test('the CLI gate still answers true when nobody is signed in or the flag is absent', async () => {
+  const out = loadSettings({ boot: { signedOut: true } });
+  assert.equal(await out.Settings._cliAuthAvailable(), true);
+  assert.deepEqual(out.calls, []);
+  const old = loadSettings({ boot: { user: {} } });
+  assert.equal(await old.Settings._cliAuthAvailable(), true, 'only an explicit false turns it off');
+  assert.deepEqual(old.calls, []);
+});
+
+test('where the boot read never landed, refresh() and the CLI gate share one request', async () => {
+  let answer;
+  const s = loadSettings({
+    boot: { unknown: true },
+    fetchImpl: () => new Promise((resolve) => { answer = resolve; }),
+  });
+  const refreshed = s.Settings.refresh();
+  const gate = s.Settings._cliAuthAvailable();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(s.calls, ['/api/auth/me'], 'one request on its way serves both');
+  answer({ ok: true, json: () => Promise.resolve({ user: { hasApiKey: true, cliAuthEnabled: false } }) });
+  await refreshed;
+  assert.equal(await gate, false);
+  assert.equal(s.Settings.state.hasApiKey, true);
+
+  // In flight only: nothing is kept, so a read after it landed asks again.
+  const later = s.Settings._readMe('');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(s.calls, ['/api/auth/me', '/api/auth/me']);
+  answer({ ok: false });
+  assert.equal(await later, null);
+});
+
+test('a failed shared read leaves the CLI gate open, as a failed read always did', async () => {
+  const s = loadSettings({ boot: { unknown: true }, fetchImpl: () => Promise.reject(new Error('offline')) });
+  assert.equal(await s.Settings._cliAuthAvailable(), true);
+  assert.deepEqual(s.calls, ['/api/auth/me']);
 });
 
 test('reconnecting reconciles the snapshot against the real session', () => {

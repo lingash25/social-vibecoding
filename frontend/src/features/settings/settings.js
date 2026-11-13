@@ -964,10 +964,10 @@
         this.state.aiProgressEstimate = !!j.user?.aiProgressEstimate;
         this.state.sessionBridgeEnabled = !!j.user?.sessionBridgeEnabled;
         this.state.locale = j.user?.locale || null;
-        // Same payload the CLI-credentials gate needs, so prime its memo
-        // rather than let it issue a second /api/auth/me. (It still
-        // fetches on its own when it runs first — the two orders both
-        // resolve to the same deployment-constant answer.)
+        // Same payload the CLI-credentials gate needs, so prime its memo.
+        // When the gate runs first it takes its answer from _readMe too
+        // (_cliAuthAvailable), so neither order sends a second
+        // /api/auth/me; both resolve to the same deployment-constant answer.
         this._cliAuthPromise = Promise.resolve(j.user?.cliAuthEnabled !== false);
         this._renderIndicator();
         // `walletLinkEnabled` decides whether the Homeroom Wallet row is in
@@ -1008,9 +1008,28 @@
         // snapshot, which carries none of these fields. Read for ourselves;
         // offline the worker answers it from cache, as it always has.
       }
-      const r = await fetch(`/api/auth/me${meDemoQ}`, { credentials: 'same-origin' });
-      if (!r.ok) return null;
-      return await r.json();
+      return this._fetchMe(meDemoQ);
+    },
+
+    // The read itself, shared while it is on its way (#6591): refresh() and
+    // the CLI-credentials gate ask in the same tick when Settings opens, and
+    // each sent its own. Nothing is kept: once the answer lands the next
+    // caller asks the server again. The parsed body is shared, so read it
+    // and do not write to it.
+    _meReads: {},
+
+    _fetchMe(meDemoQ) {
+      const running = this._meReads[meDemoQ];
+      if (running) return running;
+      const read = (async () => {
+        const r = await fetch(`/api/auth/me${meDemoQ}`, { credentials: 'same-origin' });
+        if (!r.ok) return null;
+        return await r.json();
+      })();
+      this._meReads[meDemoQ] = read;
+      const done = () => { if (this._meReads[meDemoQ] === read) delete this._meReads[meDemoQ]; };
+      read.then(done, done);
+      return read;
     },
 
     _renderIndicator() {
@@ -2118,13 +2137,18 @@
     // explicit `false` from the server suppresses the request.
     _cliAuthPromise: null,
 
+    // The answer is a field of the session user, which the shell's boot read
+    // already carries, so the gate joins that read (_readMe) and never sends
+    // its own (#6591). Opening Settings from a page load ran this before
+    // refresh() had primed the memo, and asked /api/auth/me a second time
+    // beside the boot's. No answer (signed out, or a failed read) is TRUE,
+    // as a status that was not ok always was.
     _cliAuthAvailable() {
       if (!this._cliAuthPromise) {
         this._cliAuthPromise = (async () => {
           try {
-            const r = await fetch('/api/auth/me', { credentials: 'same-origin' });
-            if (!r.ok) return true;
-            const j = await r.json();
+            const j = await this._readMe('');
+            if (!j) return true;
             return j.user?.cliAuthEnabled !== false;
           } catch { return true; }
         })();
