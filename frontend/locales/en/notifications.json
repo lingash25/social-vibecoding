@@ -731,6 +731,14 @@
     "text": "Held until an admin votes yes",
     "description": "Second line of the \"Needs your approval\" notification when the held change has no name to show."
   },
+  "row.releaseHold.noticeLabel": {
+    "text": "Not read in full",
+    "description": "First line of a notification sent to platform administrators: Homeroom's risk rules could read only part of a proposed change, usually because it is very large. The change is not held and nothing is asked of the reader. The change's name is on the line below."
+  },
+  "row.releaseHold.noticeBody": {
+    "text": "A change was too large to check in full",
+    "description": "Second line of the \"Not read in full\" notification when the change has no name to show."
+  },
   "row.limit.unknown.body": {
     "text": "the server is nearing one of its limits",
     "description": "Second line of the \"Platform limit\" notification to an administrator, when its details cannot be read. Lower case, as a note under the heading."

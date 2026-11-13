@@ -798,5 +798,17 @@
   "releaseHold.body.plain": {
     "text": "It is held until an admin votes yes",
     "description": "Phone notification text under the title, sent to platform administrators, when the held change has no name."
+  },
+  "releaseHold.notice.title": {
+    "text": "A change was not read in full",
+    "description": "Phone notification title, sent to platform administrators: Homeroom's risk rules could read only part of a proposed change. The change is not held."
+  },
+  "releaseHold.notice.body.named": {
+    "text": "“{{title}}” is not held, and you can look at it",
+    "description": "Phone notification text under the title, sent to platform administrators. {{title}} is the name of the change, kept as written, in quotation marks of the language."
+  },
+  "releaseHold.notice.body.plain": {
+    "text": "It is not held, and you can look at it",
+    "description": "Phone notification text under the title, sent to platform administrators, when the change has no name."
   }
 }

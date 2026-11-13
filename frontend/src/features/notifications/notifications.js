@@ -3527,6 +3527,17 @@ function rowWords(n) {
   // holds.js), for full admins. The warning sign is the point of the row: it
   // is the one ask in the bell that something risky waits on this reader.
   if (n.kind === 'release_hold') {
+    // A detail that starts "notice:" is a change the rules could not read
+    // in full: the admins are told, and it is not held, so the row asks for
+    // nothing and carries no warning sign.
+    if (/^notice:/.test(String(n.detail || ''))) {
+      return {
+        ...base,
+        icon: '\u2139\uFE0F',
+        by: n.sourceUsername || null,
+        ...headline(t('notifications:row.releaseHold.noticeLabel'), prLabel || n.sessionTitle || t('notifications:row.releaseHold.noticeBody')),
+      };
+    }
     return {
       ...base,
       needsYou: true,

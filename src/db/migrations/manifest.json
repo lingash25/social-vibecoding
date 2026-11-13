@@ -355,6 +355,11 @@
       "id": "release-holds",
       "sha256": "8a3cd4c3bd9da7b25c9f3efd85471c5fa9c1797c2c059e479627615ac72b7038",
       "schemaSha256": "342b4e500204d177606226ca31d64e4a3030231959d896cfa84c82b5b8cd16b8"
+    },
+    {
+      "id": "release-hold-notices",
+      "sha256": "787953b2ba2b54988c0ef53422acf44366e98d0ebd8d4be7daf148f36e84dbc4",
+      "schemaSha256": "025a3702a827c62429e965fa3c9c9b820fa0fa7203d45f672073a7141e7126c1"
     }
   ]
 }

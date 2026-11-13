@@ -400,7 +400,9 @@ const ACTIONS = {
 
   // #6643: a change held for an admin's approval, to each full admin
   // (services/release-holds.js). The reasons are that module's own English
-  // sentences, one per rule the change tripped.
+  // sentences, one per rule the change tripped. The same mail, with `held`
+  // false, tells them about a change that is not held: one the rules could
+  // not read in full.
   release_hold: {
     label: 'Change held for approval',
     placeholders: {
@@ -409,7 +411,8 @@ const ACTIONS = {
       title: text('The change\'s name, at most 160 characters'),
       author: text('Who made the change, as @username, when known'),
       hasAuthor: flag('True when the author is known'),
-      reasons: text('Why it is held: one sentence per reason, joined by spaces', { fromCode: true }),
+      reasons: text('Why it is held, or why the admins are told: one sentence per reason, joined by spaces', { fromCode: true }),
+      held: flag('True when the change waits for an admin\'s yes; false when the admins are only told about it'),
       url: link('Opens the change, where an admin votes'),
     },
     required: BOTH('url'),
@@ -428,6 +431,9 @@ const ACTIONS = {
         author,
         hasAuthor: !!author,
         reasons: reasons || 'It tripped a rule that needs an admin.',
+        // Held unless the sender says otherwise (services/release-holds.js
+        // sends false for a change the admins are only told about).
+        held: payload.held !== false,
         url: url(payload.url) || PRODUCTION_ORIGIN,
       };
     },

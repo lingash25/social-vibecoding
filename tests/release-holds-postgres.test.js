@@ -130,6 +130,42 @@ test('a held change against the full schema', async (t) => {
   assert.deepEqual(swept, { due: 1, notified: 1 });
   assert.deepEqual(await holds.sweep(pool, { config: {}, deps }), { due: 0, notified: 0 });
 
+  // ── A change the rules could not read in full is told about, not held ──
+  const big = await change(maya);
+  const noticed = await holds.apply(pool, { sessionId: big, appId, commitHash: 'e'.repeat(40), rules: ['unread'] });
+  assert.deepEqual([noticed.state, noticed.opened], ['notice', true]);
+  assert.equal(await holds.gateFor(pool, big), null, 'no admin step');
+  assert.deepEqual(pick(await readClaimFacts(pool, big)), { held: false, holdAdminYes: false }, 'and the merge claim reads no hold');
+  assert.equal((await holds.forSessions(pool, [big])).has(big), false, 'nor does the card');
+  const sameNotice = await holds.apply(pool, { sessionId: big, appId, commitHash: 'f'.repeat(40), rules: ['unread'] });
+  assert.deepEqual([sameNotice.id, sameNotice.opened], [noticed.id, false], 'one notice per change');
+  assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 2 });
+  assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 0 }, 'told once');
+  const told = (await pool.query(
+    `SELECT DISTINCT detail FROM notifications WHERE kind = 'release_hold' AND session_id = $1`, [big])).rows;
+  assert.deepEqual(told, [{ detail: 'notice:unread' }]);
+  assert.equal(mails[mails.length - 1].held, false);
+  assert.equal((await holds.listForAdmin(pool, { viewerId: boss })).history.find((h) => h.sessionId === big).outcome, 'notice',
+    'the console lists it as told, never as waiting');
+  // An admin's no on it is an ordinary vote: nothing is declined or closed.
+  assert.equal(await holds.onVote({ pool, session: { id: big, user_id: maya, status: 'promoted' }, user: { id: boss }, vote: 'no', reason: 'too big' }), null);
+  // The next version trips a rule that holds: it is held, with both reasons,
+  // and its admins are told again, as a hold.
+  const nowHeld = await holds.apply(pool, { sessionId: big, appId, commitHash: 'a'.repeat(40), rules: ['wallet', 'unread'] });
+  assert.equal(nowHeld.state, 'held');
+  assert.deepEqual((await holds.gateFor(pool, big)).rules, ['wallet', 'unread']);
+  assert.deepEqual((await pool.query(
+    `SELECT status FROM release_holds WHERE session_id = $1 ORDER BY id`, [big])).rows.map((r) => r.status), ['fixed', 'waiting']);
+  assert.deepEqual(await holds.notifyIfDue({ pool, sessionId: big, deps }), { notified: 2 });
+  // And one read whole after that owes nobody anything.
+  assert.deepEqual(await holds.apply(pool, { sessionId: big, appId, commitHash: 'b'.repeat(40), rules: [] }), { state: 'fixed', rules: [] });
+  const quiet = await change(maya, 'active');
+  await holds.apply(pool, { sessionId: quiet, appId, commitHash: 'c'.repeat(40), rules: ['unread'] });
+  await holds.apply(pool, { sessionId: quiet, appId, commitHash: 'd'.repeat(40), rules: [] });
+  await pool.query(`UPDATE chat_sessions SET status = 'promoted' WHERE id = $1`, [quiet]);
+  assert.deepEqual(await holds.sweep(pool, { config: {}, deps }), { due: 0, notified: 0 }, 'a notice about a version that is gone is never sent');
+  await pool.query('DELETE FROM release_holds WHERE session_id = ANY($1::int[])', [[big, quiet]]);
+
   // ── What the console lists ─────────────────────────────────────────────
   let lists = await holds.listForAdmin(pool, { viewerId: boss });
   assert.deepEqual(lists.waiting.map((h) => h.sessionId), [tips, draft], 'oldest first; the approved one is not waiting');

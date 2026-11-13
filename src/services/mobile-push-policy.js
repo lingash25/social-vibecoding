@@ -821,6 +821,14 @@ function buildCopy(kind, context, now, t) {
     // #6643: a change held for an admin's approval, for full admins
     // (services/release-holds.js). The change's own name says which.
     case 'release_hold':
+      // A detail that starts "notice:" is a change the rules could not read
+      // in full: it is not held, and the push says so.
+      if (/^notice:/.test(String(detail || ''))) {
+        return {
+          title: withApp(t('push:releaseHold.notice.title')),
+          body: label ? t('push:releaseHold.notice.body.named', { title: label }) : t('push:releaseHold.notice.body.plain'),
+        };
+      }
       return {
         title: withApp(t('push:releaseHold.title')),
         body: label ? t('push:releaseHold.body.named', { title: label }) : t('push:releaseHold.body.plain'),

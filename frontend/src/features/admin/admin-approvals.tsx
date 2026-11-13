@@ -19,7 +19,7 @@ import { changeHref } from '../../lib/change-href';
 // closes the change and its request. So the screen is read only and open to
 // every admin, and each row is a link to the change.
 
-type Outcome = 'waiting' | 'approved' | 'declined' | 'fixed' | 'closed';
+type Outcome = 'waiting' | 'approved' | 'declined' | 'fixed' | 'closed' | 'notice';
 
 interface Hold {
   id: number;
@@ -51,6 +51,7 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
   declined: 'Declined',
   fixed: 'No longer needed',
   closed: 'Closed first',
+  notice: 'Told, not held',
 };
 
 const OUTCOME_BADGE: Record<Outcome, string> = {
@@ -59,6 +60,7 @@ const OUTCOME_BADGE: Record<Outcome, string> = {
   declined: AdminUI.badge.outline,
   fixed: AdminUI.badge.secondary,
   closed: AdminUI.badge.secondary,
+  notice: AdminUI.badge.secondary,
 };
 
 function when(iso: string | null): string {

@@ -106,7 +106,7 @@ function pool(routes) {
   };
 }
 
-test('the platform\'s own app is never read, and a diff that cannot be read whole holds the change', async () => {
+test('the platform\'s own app is never read, and a diff that cannot be read whole tells the admins without holding', async () => {
   const db = pool([[/INSERT INTO release_holds/, { rows: [{ id: 3, opened: true }], rowCount: 1 }]]);
   assert.equal(await holds.evaluate({
     pool: db, session: { id: 1 }, app: { id: 2, self_hosted: true }, repoOwner: 'o', repoName: 'r', commitHash: 'a'.repeat(40),
@@ -121,14 +121,40 @@ test('the platform\'s own app is never read, and a diff that cannot be read whol
     pool: db, session: { id: 1 }, app: { id: 2 }, repoOwner: 'o', repoName: 'r', commitHash: 'b'.repeat(40),
     deps: { isFirstVersion: async () => false, notify: async () => {}, github: { getProposalDiff: async () => { throw new Error('down'); } } },
   });
-  assert.equal(out.state, 'held', 'a change that could not be read is held, not waved through');
+  assert.equal(out.state, 'notice', 'a change that could not be read is not held: the admins are told');
   assert.deepEqual(out.rules, ['unread']);
+  const notice = db.seen.filter((q) => /INSERT INTO release_holds/.test(q.sql)).pop();
+  assert.match(notice.sql, /VALUES \(\$1, \$2, \$3, \$4::text\[\], 'notice'\)/, 'a row no gate reads');
+  assert.match(notice.sql, /ON CONFLICT \(session_id\) WHERE status = 'notice'/, 'one per change');
+  assert.ok(db.seen.some((q) => /SET status = 'fixed'[\s\S]*status = 'waiting'/.test(q.sql)), 'and a hold it had for that reason alone ends');
   holds._resetCache();
   const cut = await holds.evaluate({
     pool: db, session: { id: 1 }, app: { id: 2 }, repoOwner: 'o', repoName: 'r', commitHash: 'e'.repeat(40),
     deps: { isFirstVersion: async () => false, notify: async () => {}, github: { getProposalDiff: async () => ({ diff: file('README.md', ['+hello']), truncated: true }) } },
   });
-  assert.deepEqual(cut.rules, ['unread'], 'a diff cut off at the budget never ends a hold or avoids one');
+  assert.deepEqual([cut.state, cut.rules], ['notice', ['unread']], 'a diff cut off at the budget is told about too');
+  assert.equal(holds.holds(['unread']), false);
+  assert.equal(holds.holds(['unread', 'wallet']), true);
+  assert.equal(holds.holds([]), false);
+});
+
+test('a cut-off diff whose read part trips a rule is held, with both reasons, and no notice is left to send', async () => {
+  holds._resetCache();
+  const told = [];
+  const db = pool([[/INSERT INTO release_holds/, { rows: [{ id: 9, opened: true }], rowCount: 1 }]]);
+  const out = await holds.evaluate({
+    pool: db, session: { id: 12 }, app: { id: 2 }, repoOwner: 'o', repoName: 'r', commitHash: 'f'.repeat(40),
+    deps: {
+      isFirstVersion: async () => false, notify: async (args) => { told.push(args.sessionId); },
+      github: { getProposalDiff: async () => ({ diff: file('public/app.js', ['+usernode.sendTransaction(a, b);']), truncated: true }) },
+    },
+  });
+  assert.deepEqual(out, { state: 'held', rules: ['wallet', 'unread'], id: 9, opened: true });
+  assert.deepEqual(told, [12]);
+  const insert = db.seen.find((q) => /INSERT INTO release_holds/.test(q.sql));
+  assert.match(insert.sql, /ON CONFLICT \(session_id\) WHERE status = 'waiting'/);
+  const ended = db.seen.findIndex((q) => /SET status = 'fixed'[\s\S]*status = 'notice'/.test(q.sql));
+  assert.ok(ended >= 0 && ended < db.seen.indexOf(insert), 'the notice row ends before the hold opens');
 });
 
 test('a head that trips a rule opens a hold and tells the admins; one that trips none ends it', async () => {
@@ -190,8 +216,35 @@ test('the admins are told once, never the author, and only for a change up for a
   assert.deepEqual(mails[0].reasons, ['It lets the app send tokens', 'It starts keeping data about people']);
   assert.equal(mails[0].url, holds.changeUrl('recipe-box', 11));
 
+  assert.equal(mails[0].held, true);
+
   const none = await holds.notifyIfDue({ pool: pool([]), sessionId: 11 });
   assert.deepEqual(none, { notified: 0 }, 'already told, or not up for a vote: nothing is sent');
+});
+
+test('a change that is only told about says so in the bell row and the mail', async () => {
+  const mails = [];
+  const db = pool([
+    [/UPDATE release_holds rh SET notified_at = NOW\(\)/, (params, sql) => {
+      assert.match(sql, /due\.status IN \('waiting', 'notice'\)/, 'a notice is claimed like a hold');
+      assert.match(sql, /ORDER BY \(due\.status = 'waiting'\) DESC/, 'a hold first, when a change has both');
+      return { rows: [{ id: 8, rules: ['unread'], status: 'notice', session_id: params[0], author_id: 5, app_id: 2, app_slug: 'calc', app_name: 'Calc', title: 'Add a search field' }] };
+    }],
+    [/INSERT INTO notifications/, (params) => {
+      assert.equal(params[3], 'notice:unread', 'the detail says it is a notice');
+      return { rows: [{ id: 100, user_id: 8 }] };
+    }],
+    [/SELECT id, email, locale FROM users/, { rows: [{ id: 8, email: 'a@example.com', locale: null }] }],
+    [/SELECT username FROM users/, { rows: [{ username: 'maya' }] }],
+  ]);
+  const out = await holds.notifyIfDue({
+    pool: db, sessionId: 21,
+    deps: { notifications: { hydrateAndPush: async () => {} }, sendMail: async (_config, mail) => { mails.push(mail); } },
+  });
+  assert.deepEqual(out, { notified: 1 });
+  assert.equal(mails[0].held, false);
+  assert.deepEqual(mails[0].reasons, ['It could not be read in full']);
+  assert.equal(holds.NOTICE_DETAIL, 'notice:');
 });
 
 test('the mail names the change, why it is held and where to vote', () => {
@@ -203,7 +256,25 @@ test('the mail names the change, why it is held and where to vote', () => {
   assert.equal(action.values({ url: 'javascript:alert(1)' }).url, require('../src/services/cli-auth-constants').PRODUCTION_ORIGIN);
   assert.equal(action.values({}).title, 'A change');
   const seed = read('src', 'db', 'email-template-seeds.js');
-  assert.match(seed, /release_hold: \{[\s\S]*?subject: `⚠️ Approval needed: \{\{title\}\}`/, 'the subject carries the warning sign');
+  assert.match(seed, /release_hold: \{[\s\S]*?subject: `\{\{#if held\}\}⚠️ Approval needed: \{\{title\}\}\{\{else\}\}/, 'a held change\'s subject carries the warning sign');
+  assert.equal(v.held, true, 'held unless the sender says otherwise');
+  assert.equal(action.values({ held: false }).held, false);
+});
+
+test('the same mail, for a change that is only told about, says it is not held and asks for nothing', () => {
+  const { englishTemplate } = require('../src/db/email-template-seeds');
+  const { render } = require('../src/services/mail/template-language');
+  const template = englishTemplate('release_hold');
+  const values = (held) => ACTIONS.release_hold.values({ appName: 'Calc', title: 'Add a search field', author: 'maya', reasons: ['It could not be read in full'], held, url: 'https://app.onhomeroom.com/#app/calc/dev/proposals/1' });
+  const told = render(template.text, values(false));
+  assert.match(told, /^For your information\n\nAdd a search field in Calc, by @maya, is not held\./);
+  assert.match(told, /Why you are told: It could not be read in full\./);
+  assert.doesNotMatch(told, /Vote yes|cannot go live|Held for an admin/);
+  assert.equal(render(template.subject, values(false)), 'Not read in full: Add a search field');
+  const held = render(template.text, values(true));
+  assert.match(held, /^Held for an admin\n\nAdd a search field in Calc, by @maya, cannot go live until an administrator approves it\./);
+  assert.doesNotMatch(held, /For your information|is not held/);
+  assert.equal(render(template.subject, values(true)), '⚠️ Approval needed: Add a search field');
 });
 
 function voteDeps(calls) {
@@ -317,9 +388,17 @@ test('the bell row is an admin\'s only, settles with the change, and wears the w
   }
   assert.ok(require('../src/workflow/rules/change-notifications.ts').DECIDED_ASK_KINDS.includes('release_hold'));
   const client = read('frontend', 'src', 'features', 'notifications', 'notifications.js');
-  assert.match(client, /n\.kind === 'release_hold'[\s\S]{0,200}icon: '\\u26A0\\uFE0F'/);
+  assert.match(client, /n\.kind === 'release_hold'[\s\S]{0,900}needsYou: true,\s+icon: '\\u26A0\\uFE0F'/);
   assert.equal(message('notifications:row.releaseHold.label'), 'Needs your approval');
   assert.equal(message('push:releaseHold.title'), 'A change needs your approval');
+  // A change that is only told about: no warning sign, and no ask.
+  const notice = /if \(\/\^notice:\/\.test\(String\(n\.detail \|\| ''\)\)\) \{\s+return \{([\s\S]*?)\};/.exec(client);
+  assert.ok(notice, 'the row reads the detail the server wrote');
+  assert.doesNotMatch(notice[1], /needsYou|26A0/);
+  assert.match(notice[1], /notifications:row\.releaseHold\.noticeLabel/);
+  assert.equal(message('notifications:row.releaseHold.noticeLabel'), 'Not read in full');
+  assert.match(read('src', 'services', 'mobile-push-policy.js'), /\/\^notice:\/\.test\(String\(detail \|\| ''\)\)[\s\S]{0,200}push:releaseHold\.notice\.title/);
+  assert.equal(message('push:releaseHold.notice.title'), 'A change was not read in full');
 });
 
 test('the clock tells admins about a change proposed after it was held', () => {
