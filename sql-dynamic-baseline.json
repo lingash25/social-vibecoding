@@ -579,6 +579,13 @@
     {
       "source": "src/routes/sessions.js",
       "kind": "structural-template",
+      "fingerprint": "01ea67c0264cf9373942",
+      "count": 1,
+      "preview": "`SELECT cs.id, cs.app_id, cs.pr_number, cs.pr_url, cs.pr_title, cs.pr_title_fallback, cs.pr_summary_md, cs.pr_summary_stale, cs.pr_body, cs.branch_name, cs.stag"
+    },
+    {
+      "source": "src/routes/sessions.js",
+      "kind": "structural-template",
       "fingerprint": "1c821d7ef624ede242e9",
       "count": 1,
       "preview": "`SELECT version, built_at, commit_sha, pr_number, shared_to_group_at, LENGTH(content) AS char_count, content, content_html FROM chat_session_specs s WHERE s.ses"
@@ -589,13 +596,6 @@
       "fingerprint": "2bde029ab4c2dc90ff7a",
       "count": 1,
       "preview": "`SELECT cs.id, cs.session_title, cs.pr_title, cs.pr_number, cs.pr_url, cs.branch_name, cs.status, cs.staging_url, -- #2069, as above: a shared draft has neither"
-    },
-    {
-      "source": "src/routes/sessions.js",
-      "kind": "structural-template",
-      "fingerprint": "2ed058156ad3706d17f7",
-      "count": 1,
-      "preview": "`SELECT cs.id, cs.user_id, cs.branch_name, cs.pr_number, cs.pr_url, cs.pr_title, cs.session_title, cs.proposed_pr_title, cs.status, cs.linked_issues, cs.shared_"
     },
     {
       "source": "src/routes/sessions.js",
@@ -621,9 +621,23 @@
     {
       "source": "src/routes/sessions.js",
       "kind": "structural-template",
+      "fingerprint": "b34b87a74ed74ad996e0",
+      "count": 1,
+      "preview": "`SELECT cs.id, cs.user_id, cs.branch_name, cs.pr_number, cs.pr_url, cs.pr_title, cs.session_title, cs.proposed_pr_title, cs.status, cs.linked_issues, cs.shared_"
+    },
+    {
+      "source": "src/routes/sessions.js",
+      "kind": "structural-template",
       "fingerprint": "ba8110c429c6037d85c2",
       "count": 1,
       "preview": "`SELECT s.version, s.built_at FROM chat_session_specs s WHERE s.session_id = $1 AND ($2::int = $3::int OR ${specVersionSharedVisibilitySql('s', '$3')}) ORDER BY"
+    },
+    {
+      "source": "src/routes/shots.js",
+      "kind": "structural-template",
+      "fingerprint": "5c6ea493e39956c8a307",
+      "count": 1,
+      "preview": "`SELECT ${columns} FROM chat_sessions cs WHERE cs.id = $1 AND cs.app_id = $2`"
     },
     {
       "source": "src/routes/status.js",
@@ -908,13 +922,6 @@
     {
       "source": "src/routes/votes.js",
       "kind": "structural-template",
-      "fingerprint": "06cdc1594753c76a99bd",
-      "count": 1,
-      "preview": "`${mergedRowSelect()} WHERE cs.app_id = $1 AND cs.status = 'merged' ${noNewerMergedTwin()} ${prCursorSql} ORDER BY COALESCE(cs.merged_at, cs.created_at) DESC, c"
-    },
-    {
-      "source": "src/routes/votes.js",
-      "kind": "structural-template",
       "fingerprint": "3474bc02c4800e84c12b",
       "count": 1,
       "preview": "`SELECT pv.vote, pv.reason, u.username, pv.user_id, ${currentVotePredicateSql('pv', 'cs')} AS current FROM pr_votes pv JOIN users u ON pv.user_id = u.id JOIN ch"
@@ -929,6 +936,13 @@
     {
       "source": "src/routes/votes.js",
       "kind": "structural-template",
+      "fingerprint": "6680d598eeaa15786ba8",
+      "count": 1,
+      "preview": "`SELECT cs.id, cs.pr_number, cs.pr_url, cs.pr_title, cs.pr_title_fallback, cs.pr_summary_md, cs.pr_summary_stale, cs.pr_body, cs.staging_url, cs.testing_md, cs."
+    },
+    {
+      "source": "src/routes/votes.js",
+      "kind": "structural-template",
       "fingerprint": "7465ad937edb1a34afe0",
       "count": 1,
       "preview": "`WITH current_session AS ( SELECT id, approval_epoch FROM chat_sessions WHERE id = $1 AND status IN ('promoted', 'merging') FOR UPDATE ), v AS ( INSERT INTO pr_"
@@ -936,16 +950,16 @@
     {
       "source": "src/routes/votes.js",
       "kind": "structural-template",
-      "fingerprint": "7fd330324b2641e1a416",
+      "fingerprint": "9933dac1a7d146f5f7b1",
       "count": 1,
-      "preview": "`SELECT cs.id, cs.pr_number, cs.pr_url, cs.pr_title, cs.pr_title_fallback, cs.pr_summary_md, cs.pr_summary_stale, cs.pr_body, cs.staging_url, cs.testing_md, cs."
+      "preview": "`SELECT COUNT(*) FILTER (WHERE t >= $2::timestamptz)::int AS shipped_week, COUNT(*) FILTER (WHERE t < $2::timestamptz AND t >= $2::timestamptz - interval '7 day"
     },
     {
       "source": "src/routes/votes.js",
       "kind": "structural-template",
-      "fingerprint": "9933dac1a7d146f5f7b1",
+      "fingerprint": "b2ed355d959f6c51a29c",
       "count": 1,
-      "preview": "`SELECT COUNT(*) FILTER (WHERE t >= $2::timestamptz)::int AS shipped_week, COUNT(*) FILTER (WHERE t < $2::timestamptz AND t >= $2::timestamptz - interval '7 day"
+      "preview": "`${mergedRowSelect({ results: listTestResults.resultsSelect(req, 'cs') })} WHERE cs.app_id = $1 AND cs.status = 'merged' ${noNewerMergedTwin()} ${prCursorSql} O"
     },
     {
       "source": "src/routes/votes.js",
