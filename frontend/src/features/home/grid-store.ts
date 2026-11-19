@@ -98,6 +98,8 @@ export interface HomeAppView {
   description?: string;
   /** How many people have contributed to it (GET /api/apps `contributor_count`); zero says nothing. */
   contributors?: number;
+  /** How many people are in its community (GET /api/apps `member_count`); zero says nothing. */
+  members?: number;
 }
 
 /**

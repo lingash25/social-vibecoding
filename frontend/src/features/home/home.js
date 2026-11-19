@@ -1224,6 +1224,8 @@ const Home = {
       // it: dapp.json's own sentence, and the list's contributor count.
       description: String(app.manifest_snapshot?.description || '').trim(),
       contributors: Math.max(0, Number(app.contributor_count) || 0),
+      // And how many people are in its community (the list's member_count).
+      members: Math.max(0, Number(app.member_count) || 0),
     };
   },
 

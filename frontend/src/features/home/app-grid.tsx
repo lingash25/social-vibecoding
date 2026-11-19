@@ -60,7 +60,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { CopyIcon, LockIcon, UserGroupIcon } from '@/components/ui/icons';
+import { CopyIcon, LockIcon, UserGroupIcon, UserPenIcon } from '@/components/ui/icons';
 
 import { useMessages } from '../../lib/i18n/react';
 import { listText } from '../../lib/i18n/runtime';
@@ -436,9 +436,15 @@ function AppCardTile({ app, style, yours, live, editing, rich = false, openedAt 
         {rich && !app.statusLabel ? (
           <>
             {app.description ? <p className="app-card-desc" title={app.description}>{app.description}</p> : null}
-            {app.contributors ? (
+            {app.members ? (
               <p className="app-card-people">
                 <UserGroupIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{t('home:grid.tile.members', { count: app.members, formatted: app.members.toLocaleString() })}</span>
+              </p>
+            ) : null}
+            {app.contributors ? (
+              <p className="app-card-people">
+                <UserPenIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
                 <span className="truncate">{t('home:discover.card.contributors', { count: app.contributors })}</span>
               </p>
             ) : null}

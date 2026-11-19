@@ -5850,8 +5850,12 @@ html[data-skin-wip] {
   --wip-ink-muted: var(--text-muted);
   --wip-ink-action: var(--accent);
   /* A project's tile */
-  --wip-tile-h: 6.25rem;       /* p-3 12 + icon 72 + p-3 12, and the text's 94 */
-  --wip-tile-h-stacked: 8.25rem; /* under 1024px: p 12 + icon 56 + gap 6 + two lines of the name 38 + p 12, and a breath */
+  --wip-tile-h: 6rem;          /* p-3 12 + icon 72 + p-3 12: the tile's own 96px */
+  --wip-title-size-phone: 0.6875rem; /* a project's name under its icon on a phone */
+  --wip-title-size-mid: 0.75rem;    /* and on a tablet, where it is still under the icon */
+  --wip-title-gap-stacked: 0.375rem; /* the air between the icon and the name under it */
+  --wip-tile-h-stacked: 7.625rem; /* under 1024px: the tile's own 122px (icon, gap, two lines of the name, its padding), nothing spare */
+  --wip-tile-h-phone: 6.875rem;  /* and on a phone, where the name is a size down: 110px */
   --wip-tile-gap: 0.75rem;
   --wip-icon: 4.5rem;
   --wip-icon-radius: 1.125rem;  /* 18px: an icon is rounder than the things beside it, a quarter of its side, as a phone's app icon is */
@@ -6451,15 +6455,27 @@ html[data-skin-wip] #app-list .app-card-title {
   line-height: 1.25;
   font-weight: var(--wip-title-weight);
 }
+/* The pinned grid keeps the same air on its four sides (asked 19 Nov 2026): the column's own padding all round. */
+html[data-skin-wip] #app-list { padding: var(--wip-cell-pad); }
+/* A recent thread is its title, its project and when: not what kind of thread it is, nor its number (asked 19 Nov 2026). */
+html[data-skin-wip] #home-needs-card .wip-item-kind { display: none; }
+/* Its two lines of facts sit close: members, then contributors. */
+html[data-skin-wip] #app-list .app-card-people + .app-card-people { margin-top: 0.125rem; }
+/* A pinned project says its name and how many use it and made it, not its sentence (asked 19 Nov 2026). */
+html[data-skin-wip] #app-list .app-card-desc { display: none; }
 @media (max-width: 1023.98px) {
-  html[data-skin-wip] #app-list :is(.app-card-desc, .app-card-people) { display: none; }
+  html[data-skin-wip] #app-list .app-card-people { display: none; }
   html[data-skin-wip] { --home-cell-h: var(--wip-tile-h-stacked); }
-  html[data-skin-wip] #app-list .app-card-title { min-height: 2.5em; }
+  html[data-skin-wip] #app-list .app-card-title { margin-top: var(--wip-title-gap-stacked); font-size: var(--wip-title-size-mid); min-height: 2.5em; }
 }
 /* On a phone the tile gives its side padding to the name: at this size a
    name needs every pixel of its quarter of the screen. */
 @media (max-width: 639.98px) {
   html[data-skin-wip] #app-list > .app-card { padding-inline: 2px; }
+  html[data-skin-wip] { --home-cell-h: var(--wip-tile-h-phone); }
+  /* And the name is a size down there (four across leaves each about 85px):
+     at the row's size a long name broke in the middle of a word. */
+  html[data-skin-wip] #app-list .app-card-title { font-size: var(--wip-title-size-phone); line-height: 1.2; min-height: 2.4em; }
 }
 @media (min-width: 1024px) {
   html[data-skin-wip] { --home-cell-h: var(--wip-tile-h); }
@@ -7757,6 +7773,237 @@ html[data-skin-wip] body > :is(.dev-ws-side) {
   border-radius: var(--wip-card-radius);
   background-color: var(--wip-card-bg);
   box-shadow: inset 0 0 0 1px var(--wip-card-line), var(--wip-menu-shadow);
+}
+/* THE LEFT MENU AND THE TOP BAR, AS THE MOSAIC LOOK DRAWS THEM (from 768px,
+   where the menu is a sidebar; a phone's bar is untouched).
+   The sidebar is a panel of its own: the look's card, standing a little in
+   from the window's edges at its full height, with round corners and a soft
+   drop. The top bar is clear, on every page (a project's page too, which
+   paints it in the community's colour elsewhere): its words and buttons are
+   the page's ink. The bar's own logo, at its start, falls inside the top of
+   the panel, which leaves room for it, so the panel is headed by the logo
+   as Mosaic's is. The place you are on is a filled row, in the ink with the
+   card's colour for its words; a row under the pointer wears the look's
+   soft ground. */
+html[data-skin-wip] {
+  --wip-nav-bg: #18181b;                 /* the panel: the shell's own dark; a token set names its own below */
+  --wip-nav-ink: rgb(255 255 255 / 0.82);
+  --wip-nav-ink-strong: #ffffff;
+  --wip-nav-mut: rgb(255 255 255 / 0.6);
+  --wip-nav-faint: rgb(255 255 255 / 0.3);
+  --wip-nav-hover: rgb(255 255 255 / 0.1);
+  --wip-nav-line: transparent;
+  --wip-nav-on-bg: var(--accent);        /* the row of the place you are on */
+  --wip-nav-on-ink: #ffffff;
+  --wip-nav-count-bg: #ffffff;           /* a count on a row, and on the lit row */
+  --wip-nav-count-ink: #18181b;
+  --wip-nav-on-count-bg: #ffffff;
+  --wip-nav-on-count-ink: #18181b;
+  --wip-nav-row-h: 2.5rem;
+  --wip-nav-row-radius: 0.75rem;
+  /* Sunrise's own glyphs (the kit's 24px strokes, @/components/ui/kit-icons.ts), as masks the row's ink fills. */
+  --wip-nav-ic-home: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z'/%3E%3C/svg%3E");
+  --wip-nav-ic-spark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m11 3 1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.900z'/%3E%3Cpath d='M19 15v4M17 17h4'/%3E%3C/svg%3E");
+  --wip-nav-ic-chat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.600A8 8 0 1 1 21 12z'/%3E%3C/svg%3E");
+  --wip-nav-ic-users: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.5'/%3E%3Cpath d='M2.5 20a6.5 6.5 0 0 1 13 0M16 4.600a3.5 3.5 0 0 1 0 6.800M18 14.500a6.5 6.5 0 0 1 3.5 5.5'/%3E%3C/svg%3E");
+  --wip-nav-ic-user: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21a8 8 0 0 1 16 0'/%3E%3C/svg%3E");
+  --wip-nav-ic-sliders: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0'/%3E%3Ccircle cx='15' cy='6' r='2.2'/%3E%3Ccircle cx='9' cy='12' r='2.2'/%3E%3Ccircle cx='17' cy='18' r='2.2'/%3E%3C/svg%3E");
+  --wip-nav-ic-fold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m15 6-6 6 6 6'/%3E%3C/svg%3E");
+  --wip-nav-ic-unfold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E");
+  --wip-nav-fold: 24px;                  /* the fold arrow pinned to the panel's edge */
+  --wip-nav-fold-top: 14px;
+  --wip-nav-fold-shadow: 0 1px 3px rgb(0 0 0 / 0.16);
+  --wip-nav-ic: none;                    /* the row's own glyph, named on the row */
+  --wip-nav-ic-size: 20px;
+  --wip-nav-ic-size-small: 18px;
+  --wip-nav-tile: 22px;
+  --wip-nav-tile-radius: 6.16px;
+  --wip-nav-count: 20px;
+  --wip-nav-brand-top: 12px;
+  --wip-nav-foot-line: rgb(255 255 255 / 0.14);
+  --wip-nav-brand-tile: 28px;
+  --wip-nav-brand-h: 60px;               /* the brand's band at the panel's top */
+  --wip-nav-brand-logo: url('/brand/homeroom-logotype-black.png'); /* the logotype, as a mask the panel's ink fills */
+  --wip-nav-brand-w: 124px;
+  --wip-nav-w: 244px;                    /* Sunrise's own measures and face */
+  --wip-nav-pad: 10px;
+  --wip-nav-row-pad: 12px;
+  --wip-nav-row-gap: 12px;
+  --wip-nav-size: 15px;
+  --wip-nav-head-size: 12.5px;
+  --wip-nav-font: var(--wip-font);
+}
+html[data-skin-wip].dark {
+  --wip-nav-bg: #111113;
+  --wip-nav-line: rgb(255 255 255 / 0.11);
+}
+/* The brand's sets: the brand's own deep sky (as its look's sidebar, --bl-side), white words,
+   and the place you are on in the sun (V1) or in cream (V2, the calmer one). */
+html[data-skin-wip][data-wip-tokens="brand"] {
+  --wip-nav-bg: #3c7bd8;
+  --wip-nav-ink: rgb(255 255 255 / 0.88);
+  --wip-nav-ink-strong: #ffffff;
+  --wip-nav-mut: rgb(255 255 255 / 0.72);
+  --wip-nav-faint: rgb(255 255 255 / 0.32);
+  --wip-nav-hover: rgb(255 255 255 / 0.16);
+  --wip-nav-foot-line: rgb(255 255 255 / 0.22);
+  --wip-nav-on-bg: #ffee6f;
+  --wip-nav-on-ink: #121a0e;
+  --wip-nav-count-bg: #ffffff;
+  --wip-nav-count-ink: #121a0e;
+  --wip-nav-on-count-bg: #121a0e;
+  --wip-nav-on-count-ink: #ffffff;
+}
+html[data-skin-wip][data-wip-tokens="brand2"] {
+  --wip-nav-bg: #3c7bd8;
+  --wip-nav-ink: rgb(255 255 255 / 0.88);
+  --wip-nav-ink-strong: #ffffff;
+  --wip-nav-mut: rgb(255 255 255 / 0.72);
+  --wip-nav-faint: rgb(255 255 255 / 0.32);
+  --wip-nav-hover: rgb(255 255 255 / 0.16);
+  --wip-nav-foot-line: rgb(255 255 255 / 0.22);
+  --wip-nav-on-bg: #fffeea;
+  --wip-nav-on-ink: #121a0e;
+  --wip-nav-count-bg: #ffffff;
+  --wip-nav-count-ink: #121a0e;
+  --wip-nav-on-count-bg: #121a0e;
+  --wip-nav-on-count-ink: #ffffff;
+}
+html[data-skin-wip][data-wip-tokens="brand"].dark {
+  --wip-nav-bg: #122a52;
+}
+html[data-skin-wip][data-wip-tokens="brand2"].dark {
+  --wip-nav-bg: #122a52;
+}
+/* Every size: the phone's bottom bar is the same night panel. */
+html[data-skin-wip] #platform-tabs {
+  --text-primary: var(--wip-nav-ink-strong);
+  --text-secondary: var(--wip-nav-ink);
+  --text-muted: var(--wip-nav-ink);
+  --text-faint: var(--wip-nav-faint);
+  --accent: var(--wip-nav-ink-strong);
+  --lit-tint: var(--wip-nav-hover);
+  --lit-ink: var(--wip-nav-ink-strong);
+  --lit-line: transparent;
+  border: 0;
+  background: var(--wip-nav-bg);
+  color: var(--wip-nav-ink);
+  font-family: var(--wip-nav-font);
+}
+html[data-skin-wip] #platform-tabs::before { content: none; }
+html[data-skin-wip] #platform-tabs .platform-tab { border-radius: var(--wip-nav-row-radius); font-weight: 600; }
+html[data-skin-wip] #platform-tabs :is(.platform-tab-glyph, .dev-ws-place-glyph, .platform-rail-sub-glyph, .platform-rail-settings) { color: inherit; }
+html[data-skin-wip] #platform-tabs :is(.platform-tab, .platform-rail-settings, .platform-rail-community, .dev-ws-place, .platform-rail-sub):not([aria-current="page"]):hover {
+  background: var(--wip-nav-hover);
+  box-shadow: none;
+  color: var(--wip-nav-ink-strong);
+}
+html[data-skin-wip] #platform-tabs :is(.platform-tab, .platform-rail-settings, .platform-rail-community:not([data-rail-open]), .dev-ws-place, .platform-rail-sub)[aria-current="page"] {
+  background: var(--wip-nav-on-bg);
+  box-shadow: none;
+  color: var(--wip-nav-on-ink);
+  font-weight: 700;
+}
+html[data-skin-wip] #platform-tabs :is(.platform-tab, .platform-rail-settings, .platform-rail-community:not([data-rail-open]), .dev-ws-place, .platform-rail-sub)[aria-current="page"] :is(.platform-tab-glyph, .platform-tab-label, .dev-ws-place-glyph, .dev-ws-place-label, .platform-rail-sub-glyph, .platform-rail-sub-name, .platform-rail-settings-glyph) {
+  color: var(--wip-nav-on-ink);
+}
+html[data-skin-wip] #platform-tabs :is(.platform-rail-votes, .platform-tab-votes, .dev-ws-place-count, .platform-rail-sub-count) {
+  background: var(--wip-nav-count-bg);
+  color: var(--wip-nav-count-ink);
+}
+html[data-skin-wip] #platform-tabs [aria-current="page"] :is(.platform-rail-votes, .platform-tab-votes, .dev-ws-place-count, .platform-rail-sub-count) {
+  background: var(--wip-nav-on-count-bg);
+  color: var(--wip-nav-on-count-ink);
+}
+html[data-skin-wip] #platform-tabs :is(.platform-rail-head, .platform-rail-head-label, .platform-side-apps-head, .dev-ws-places-head) { color: var(--wip-nav-mut); }
+html[data-skin-wip] #platform-tab-home { --wip-nav-ic: var(--wip-nav-ic-home); }
+html[data-skin-wip] #platform-tab-ai { --wip-nav-ic: var(--wip-nav-ic-spark); }
+html[data-skin-wip] #platform-tab-messages { --wip-nav-ic: var(--wip-nav-ic-chat); }
+html[data-skin-wip] #platform-tab-workshop { --wip-nav-ic: var(--wip-nav-ic-users); }
+html[data-skin-wip] #platform-tab-me { --wip-nav-ic: var(--wip-nav-ic-user); }
+html[data-skin-wip] #platform-tabs .platform-rail-settings { --wip-nav-ic: var(--wip-nav-ic-sliders); }
+html[data-skin-wip] #platform-tabs :is(#platform-tab-home, #platform-tab-ai, #platform-tab-messages, #platform-tab-workshop, #platform-tab-me) .platform-tab-glyph,
+html[data-skin-wip] #platform-tabs .platform-rail-settings-glyph {
+  background-color: currentColor;
+  -webkit-mask: var(--wip-nav-ic) center / contain no-repeat;
+  mask: var(--wip-nav-ic) center / contain no-repeat;
+}
+html[data-skin-wip] #platform-tabs :is(#platform-tab-home, #platform-tab-ai, #platform-tab-messages, #platform-tab-workshop, #platform-tab-me) .platform-tab-glyph > *,
+html[data-skin-wip] #platform-tabs .platform-rail-settings-glyph > * { opacity: 0; }
+html[data-skin-wip] #platform-tabs :is(.platform-rail-votes, .platform-tab-votes, .platform-tab-badge) { min-width: var(--wip-nav-count); height: var(--wip-nav-count); padding: 0 6px; font-size: 11px; font-weight: 700; }
+@media (min-width: 768px) {
+  html[data-skin-wip] #platform-tabs {
+    top: 0;
+    padding-top: var(--wip-nav-brand-h);
+    z-index: 9; /* over the page, under the top bar (10), whose logo it frames */
+    box-shadow: inset -1px 0 0 var(--wip-nav-line);
+  }
+  html[data-skin-wip] body { --platform-rail-full: var(--wip-nav-w); }
+  html[data-skin-wip] #platform-tabs .platform-tab-glyph { width: var(--wip-nav-ic-size); height: var(--wip-nav-ic-size); }
+  html[data-skin-wip] #platform-tabs .platform-rail-settings-glyph { width: var(--wip-nav-ic-size-small); height: var(--wip-nav-ic-size-small); }
+  html[data-skin-wip] #platform-tabs.platform-tabs { padding-inline: var(--wip-nav-pad); gap: 2px; }
+  html[data-skin-wip] #platform-tabs :is(.platform-tab, .platform-rail-community, .platform-rail-settings) { min-height: var(--wip-nav-row-h); padding-inline-start: var(--wip-nav-row-pad); gap: var(--wip-nav-row-gap); border-radius: var(--wip-nav-row-radius); font-size: var(--wip-nav-size); font-weight: 600; }
+  html[data-skin-wip] #platform-tabs .platform-tab { padding-inline-end: var(--wip-nav-row-pad); }
+  html[data-skin-wip] #platform-tabs :is(.platform-tab-label, .platform-rail-community-name) { font-size: var(--wip-nav-size); }
+  html[data-skin-wip] #platform-tabs :is(.platform-rail-head, .platform-rail-head-label, .platform-side-apps-head, .dev-ws-places-head) { text-transform: none; letter-spacing: 0; font-size: var(--wip-nav-head-size); font-weight: 600; }
+  /* THE BRAND: Homeroom's logotype at the panel's top, the same on
+     every page. The top bar (fold button, then the page's own title) starts beside the panel. */
+  html[data-skin-wip] #platform-tabs::before {
+    content: "";
+    position: absolute;
+    inset-block-start: var(--wip-nav-brand-top);
+    inset-inline-start: calc(var(--wip-nav-pad) + 8px);
+    width: var(--wip-nav-brand-w);
+    height: var(--wip-nav-brand-tile);
+    background-color: var(--wip-nav-ink-strong);
+    -webkit-mask: var(--wip-nav-brand-logo) left center / contain no-repeat;
+    mask: var(--wip-nav-brand-logo) left center / contain no-repeat;
+  }
+  /* The line over "You", as Sunrise's foot has. */
+  html[data-skin-wip] #platform-tabs::after { background: var(--wip-nav-foot-line); }
+  html[data-skin-wip] body:has(> #platform-tabs:not(.hidden):not(.platform-tabs-route-hidden):not(.platform-tabs-folded)) #platform-header { padding-inline-start: calc(var(--wip-nav-w) + 1rem); }
+  /* Homeroom's own mark and logotype are the panel's brand already: the top bar does not say them again. */
+  html[data-skin-wip] body:has(> #platform-tabs:not(.hidden):not(.platform-tabs-route-hidden):not(.platform-tabs-folded)) #platform-header #header-title > span:has(> span > #header-title-name > svg) { display: none; }
+  /* THE FOLD BUTTON IS AN ARROW: pinned on the panel's edge while it is open, and at the
+     top bar's start, pointing the other way, once it is folded. */
+  html[data-skin-wip] #platform-header #sidebar-toggle {
+    width: var(--wip-nav-fold);
+    height: var(--wip-nav-fold);
+    border: 0;
+    border-radius: var(--wip-radius-pill);
+    background: var(--wip-card-bg);
+    box-shadow: inset 0 0 0 1px var(--wip-card-line), var(--wip-nav-fold-shadow);
+    color: var(--wip-ink);
+  }
+  html[data-skin-wip] #platform-header #sidebar-toggle > svg {
+    width: 14px;
+    height: 14px;
+    background-color: currentColor;
+    -webkit-mask: var(--wip-nav-ic-unfold) center / contain no-repeat;
+    mask: var(--wip-nav-ic-unfold) center / contain no-repeat;
+  }
+  html[data-skin-wip] #platform-header #sidebar-toggle > svg > * { opacity: 0; }
+  html[data-skin-wip] body:has(> #platform-tabs:not(.hidden):not(.platform-tabs-route-hidden):not(.platform-tabs-folded)) #platform-header #sidebar-toggle {
+    position: absolute;
+    inset-block-start: var(--wip-nav-fold-top);
+    inset-inline-start: calc(var(--wip-nav-w) - var(--wip-nav-fold) / 2);
+  }
+  html[data-skin-wip] body:has(> #platform-tabs:not(.hidden):not(.platform-tabs-route-hidden):not(.platform-tabs-folded)) #platform-header #sidebar-toggle > svg {
+    -webkit-mask-image: var(--wip-nav-ic-fold);
+    mask-image: var(--wip-nav-ic-fold);
+  }
+  html[data-skin-wip] #platform-header,
+  html[data-skin-wip][data-community-tint] body:has(#app-view:not(.hidden)) #platform-header {
+    --fake-glass-tint: transparent;
+    --brand-ink: var(--wip-ink);
+    --brand-tint: var(--wip-ghost);
+    --brand-line: var(--wip-card-line);
+    background-color: transparent;
+    color: var(--wip-ink);
+  }
+  /* (!important: the bar's fill is set per page by rules that out-rank any one selector here.) */
+  html[data-skin-wip] body #platform-header#platform-header::before { content: none !important; }
+  html[data-skin-wip][data-community-tint] body:has(#app-view:not(.hidden)) #platform-header #header-app-tile:not(:focus-visible) { outline-color: var(--wip-card-line); }
 }
 /* A pinned app's tile does not say when it was opened under the look: its
    tiles say less. */

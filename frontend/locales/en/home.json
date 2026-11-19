@@ -727,6 +727,14 @@
     "text": "Add {{app}} to Pinned apps",
     "description": "Accessible name of the Add pill in the corner of an app's card in Home's Discover communities rail, shown when the viewer is already a member. {{app}} is the app's name; \"Pinned apps\" is the name of the grid on Home."
   },
+  "grid.tile.members_one": {
+    "text": "{{formatted}} member",
+    "description": "First small line under a project's name on its tile in Pinned projects on Home (the Standard (WIP) look, wide screens), after a people glyph: how many people are in the project's community. {{formatted}} is that number written with digit grouping, for example 1,284; {{count}} is the same number and only selects the plural form."
+  },
+  "grid.tile.members_other": {
+    "text": "{{formatted}} members",
+    "description": "First small line under a project's name on its tile in Pinned projects on Home (the Standard (WIP) look, wide screens), after a people glyph: how many people are in the project's community. {{formatted}} is that number written with digit grouping, for example 1,284; {{count}} is the same number and only selects the plural form."
+  },
   "discover.card.contributors_one": {
     "text": "{{count}} contributor",
     "description": "Small line at the bottom of an app's card in Home's Discover communities rail. {{count}} is how many people have contributed to the app."

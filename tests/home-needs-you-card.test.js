@@ -214,6 +214,8 @@ test('the brand kit V2 tokens use yellow and green as marks, never as a row\'s g
   assert.match(css, /--wip-ink-soft: var\(--wip-ask-ink\);/);
   // One size at every width, outside any media query.
   assert.match(css, /\nhtml\[data-skin-wip\] #app-list \.app-card-title \{\s*font-size: var\(--wip-title-size\);/, 'at the start of a line: not inside a media query');
+  // On a phone alone it is a size down: four across leaves a name about 85px.
+  assert.match(css, /@media \(max-width: 639\.98px\) \{[^@]*html\[data-skin-wip\] #app-list \.app-card-title \{ font-size: var\(--wip-title-size-phone\);/);
 });
 
 test('Standard (WIP): a project\'s hub folds Invite and Make it public into its hero, and keeps Needs you in For you\'s row', () => {
@@ -290,4 +292,27 @@ test('Standard (WIP): the board ties a request to the changes made for it, and o
   // Advanced mode is on <html> for the look's one detail kept for it.
   assert.match(read('frontend/src/head.html'), /root\.setAttribute\('data-interface-mode', basic \? 'basic' : 'advanced'\);/);
   assert.match(read('public/css/app.css'), /html\[data-skin-wip\]\[data-interface-mode="basic"\] #dev-kanban \[data-attr-field="category"\] \{ display: none; \}/);
+});
+
+test('Standard (WIP): the menu is the token set\'s own panel, and a pinned project says who is in it', () => {
+  const css = read('public/css/app.css');
+  // The sidebar and the phone's bar are one panel, drawn from the menu's tokens at every width.
+  assert.match(css, /html\[data-skin-wip\] #platform-tabs \{[^}]*background: var\(--wip-nav-bg\);[^}]*font-family: var\(--wip-nav-font\);/);
+  assert.match(css, /html\[data-skin-wip\]\[data-wip-tokens="brand"\] \{\s*--wip-nav-bg: #3c7bd8;/, 'the brand sets wear the brand\'s own sky');
+  assert.match(css, /\[aria-current="page"\] \{\s*background: var\(--wip-nav-on-bg\);\s*box-shadow: none;\s*color: var\(--wip-nav-on-ink\);/);
+  // The brand is the logotype at the panel's top, and the top bar starts beside the panel.
+  assert.match(css, /html\[data-skin-wip\] #platform-tabs::before \{[^}]*mask: var\(--wip-nav-brand-logo\) left center \/ contain no-repeat;/);
+  assert.match(css, /#platform-header \{ padding-inline-start: calc\(var\(--wip-nav-w\) \+ 1rem\); \}/);
+  // A folded sidebar opens from its arrow alone.
+  assert.match(read('frontend/src/features/nav/rail-peek.ts'),
+    /export function enterPeek\(\): void \{\s*clearPeekTimer\(\);[^}]*hasAttribute\('data-skin-wip'\)\) return;/);
+  // A pinned project: members, then contributors, each on its line; no sentence; the same air on four sides.
+  const grid = read('frontend/src/features/home/app-grid.tsx');
+  assert.match(grid, /t\('home:grid\.tile\.members', \{ count: app\.members, formatted: app\.members\.toLocaleString\(\) \}\)/);
+  assert.equal(message('home:grid.tile.members_other', { formatted: '1,284', count: 1284 }), '1,284 members');
+  assert.match(read('frontend/src/features/home/home.js'), /members: Math\.max\(0, Number\(app\.member_count\) \|\| 0\),/);
+  assert.match(css, /html\[data-skin-wip\] #app-list \.app-card-desc \{ display: none; \}/);
+  assert.match(css, /html\[data-skin-wip\] #app-list \{ padding: var\(--wip-cell-pad\); \}/);
+  // A recent thread is its title, its project and when.
+  assert.match(css, /html\[data-skin-wip\] #home-needs-card \.wip-item-kind \{ display: none; \}/);
 });
