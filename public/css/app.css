@@ -7612,7 +7612,8 @@ html:not([data-skin]) #dev-workshop .rf-page-wrap[data-rf-beside] .rf-bar-toggle
    its dark edge and shadow, and beside the change what it does sits on a very soft panel in place of a divider. */
 /* The flow's own page colour is the card's, so its bar and the stage behind the picture are the card's colour too. */
 html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-page-wrap { --rf-page: var(--wip-card-bg); }
-html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-page { border-radius: var(--wip-card-radius); background: var(--wip-card-bg); box-shadow: inset 0 0 0 1px var(--wip-card-line); }
+/* The hairline is drawn outside the card: inside, the bar and the stage (the card's own colour) would paint over it on their sides. */
+html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-page { border-radius: var(--wip-card-radius); background: var(--wip-card-bg); box-shadow: 0 0 0 1px var(--wip-card-line); }
 html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-sheet { background: none; box-shadow: none; }
 html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-plate-btn { box-shadow: 0 0 0 1px var(--wip-card-line); }
 html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="needs"] .rf-page-wrap[data-rf-beside] .rf-desc-wrap { border-inline-start: 0; padding: 0.75rem; padding-inline-start: 0; }
