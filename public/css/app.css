@@ -7737,6 +7737,21 @@ html:not([data-skin]) #dev-workshop .dev-ws[data-ws-tab="bot"] [data-ws-bot-slot
   }
 }
 
+/* ── A running app is a card ────────────────────────────────── */
+/* From 768px the app's frame is one of the look's cards, with the page's
+   gutter on three sides and all four corners: it was a phone's sheet (round
+   at the top only, with a lifted edge, running off the right and the foot
+   of the window), which beside the sidebar read as a panel cut off by the
+   screen. Not while the app has the whole window (the header is hidden). */
+@media (min-width: 768px) {
+  html:not([data-skin]) body:not(:has(#platform-header.hidden)) #app-frame-host {
+    margin: 0.25rem var(--wip-gutter) var(--wip-gutter);
+    border: 1px solid var(--wip-card-line);
+    border-radius: var(--wip-card-radius);
+    box-shadow: var(--wip-card-shadow);
+  }
+}
+
 /* ── A place's name is in the top bar ───────────────────────── */
 /* From 768px the bar that holds the look, the theme, the bell and the
    account names the page too, as a phone's header always did: the place's
