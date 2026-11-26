@@ -293,7 +293,7 @@ test('a project’s card wears the project’s own icon when it is known', () =>
   // The viewer's tracks (./bot-work.tsx), which carry each project's artwork.
   const job = (patch) => ({ appSlug: 'todo-list-b91765', appName: 'Todo List', iconUrl: null, iconEmoji: null, work: { stage: 'building' }, ...patch });
   work = { tracks: [job({ iconUrl: '/app-icons/a1b2c3' })] };
-  assert.match(drawn(), /<span class="messages-object-icon overflow-hidden" data-object-icon="image"><img src="\/app-icons\/a1b2c3" alt="" class="h-full w-full object-cover" loading="lazy" draggable="false"\/><\/span>/);
+  assert.match(drawn(), /<span class="messages-object-icon overflow-hidden" data-object-icon="image"><img src="\/app-icons\/a1b2c3" alt="" class="h-full w-full object-cover" loading="lazy" decoding="async" draggable="false"\/><\/span>/);
   assert.doesNotMatch(drawn(), /◆/);
   work = { tracks: [job({ iconEmoji: '🗳️', work: { stage: 'live' } })] };
   assert.match(drawn(), /<span class="messages-object-icon text-\[22px\] leading-none" data-object-icon="emoji" aria-hidden="true">🗳️<\/span>/);
